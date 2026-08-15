@@ -218,7 +218,34 @@ let
             }
           );
           default = { };
-          description = "Header name → secret file. Injected; never exposed to the MCP client.";
+          description = "Header name → secret file. Used when auth.mode is inject (or auto and this set is non-empty).";
+        };
+        auth = mkOption {
+          type = types.submodule {
+            options = {
+              mode = mkOption {
+                type = types.enum [
+                  "auto"
+                  "inject"
+                  "passthrough"
+                ];
+                default = "auto";
+                description = ''
+                  auto: inject secrets when any are set, otherwise forward the client's auth headers.
+                  inject: always use secrets.* (filters + host-held keys).
+                  passthrough: forward client Authorization/headers; ignore secrets. Use this to keep
+                  filters while the MCP client owns OAuth.
+                '';
+              };
+              tag = mkOption {
+                type = types.nullOr types.str;
+                default = "[auth via proxy] ";
+                description = "tools/list description prefix when injecting. Empty or null disables the tag.";
+              };
+            };
+          };
+          default = { };
+          description = "Whether this backend injects host secrets or passes client auth through.";
         };
         tools = mkOption {
           type = types.submodule {
@@ -242,7 +269,7 @@ let
               prepend = mkOption {
                 type = types.nullOr types.str;
                 default = null;
-                description = "Prepended to every tools/list description. Avoid this — Hermes tool_search uses the first sentence as the per-turn blurb.";
+                description = "Extra prefix after the inject tag (if any). Prefer auth.tag for the short global stamp.";
               };
               append = mkOption {
                 type = types.nullOr types.str;
@@ -326,6 +353,10 @@ let
         credential = credName bname header;
         prefix = secret.prefix;
       }) b.secrets;
+      auth = {
+        mode = b.auth.mode;
+        tag = b.auth.tag;
+      };
       tools = {
         allow = b.tools.allow;
         deny = b.tools.deny;

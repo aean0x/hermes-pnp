@@ -4,7 +4,30 @@ import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.request import Request, urlopen
 
-from http_proxy import apply_rpc_request, backend_for_path, serve
+from http_proxy import apply_rpc_request, backend_for_path, resolve_headers, serve
+
+
+class AuthHeaders(unittest.TestCase):
+    def test_inject_loads_secret(self):
+        headers = resolve_headers(
+            {
+                "secrets": {"Authorization": {"value": "ck_host", "prefix": "Bearer "}},
+            },
+            None,
+        )
+        self.assertEqual(headers["Authorization"], "Bearer ck_host")
+
+    def test_passthrough_skips_secrets(self):
+        headers = resolve_headers(
+            {
+                "auth": {"mode": "passthrough"},
+                "secrets": {"Authorization": {"value": "ck_host", "prefix": "Bearer "}},
+                "headers": {"X-Static": "1"},
+            },
+            None,
+        )
+        self.assertNotIn("Authorization", headers)
+        self.assertEqual(headers["X-Static"], "1")
 
 
 class PathMatch(unittest.TestCase):
@@ -164,6 +187,36 @@ class EndToEnd(unittest.TestCase):
             q = echo["params"]["arguments"]["tools"][0]["arguments"]["query"]
             self.assertEqual(q, "is:unread -label:old")
             self.assertEqual(out["result"]["auth"], "Bearer ck_test")
+        finally:
+            proxy.shutdown()
+            upstream.shutdown()
+
+    def test_passthrough_forwards_client_authorization(self):
+        upstream = HTTPServer(("127.0.0.1", 0), EchoUpstream)
+        threading.Thread(target=upstream.serve_forever, daemon=True).start()
+        backend = {
+            "path": "/composio",
+            "upstream": f"http://127.0.0.1:{upstream.server_address[1]}/mcp",
+            "auth": {"mode": "passthrough"},
+            "secrets": {"Authorization": {"value": "ck_host", "prefix": "Bearer "}},
+        }
+        proxy = serve("127.0.0.1:0", {"composio": backend}, None)
+        threading.Thread(target=proxy.serve_forever, daemon=True).start()
+        try:
+            req = Request(
+                f"http://127.0.0.1:{proxy.server_address[1]}/composio",
+                data=json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}
+                ).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer client-token",
+                },
+                method="POST",
+            )
+            with urlopen(req, timeout=5) as resp:
+                out = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(out["result"]["auth"], "Bearer client-token")
         finally:
             proxy.shutdown()
             upstream.shutdown()

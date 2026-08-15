@@ -265,6 +265,33 @@ def apply_call(mcp_name: str, arguments: Any, backend: dict[str, Any]) -> Decisi
     return Decision(arguments=args, notes=notes)
 
 
+AUTH_INJECT_TAG = "[auth via proxy] "
+
+
+def auth_mode(backend: dict[str, Any]) -> str:
+    """Resolved mode: inject | passthrough."""
+    explicit = ((backend.get("auth") or {}).get("mode") or "auto").lower()
+    has_secrets = bool(backend.get("secrets"))
+    if explicit == "passthrough":
+        return "passthrough"
+    if explicit == "inject":
+        return "inject"
+    return "inject" if has_secrets else "passthrough"
+
+
+def is_injecting(backend: dict[str, Any]) -> bool:
+    return auth_mode(backend) == "inject" and bool(backend.get("secrets"))
+
+
+def inject_tag(backend: dict[str, Any]) -> str:
+    if not is_injecting(backend):
+        return ""
+    auth = backend.get("auth") or {}
+    if "tag" in auth:
+        return auth.get("tag") or ""
+    return AUTH_INJECT_TAG
+
+
 def _apply_description(tool: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
     if not spec:
         return tool
@@ -290,20 +317,31 @@ def annotate_listed_tools(tools: list[dict[str, Any]], backend: dict[str, Any]) 
     """Rewrite advertised tool descriptions (tools/list).
 
     Hermes tool_search's per-turn blurb is the first ~60 chars / first
-    sentence of each description. Prepend only on the tools that should
-    carry a host note; a global prepend makes every listing line identical.
+    sentence of each description. A short inject tag is prepended only
+    when this backend is actually injecting secrets.
     """
     adv = backend.get("advertise") or {}
-    if not adv:
+    tag = inject_tag(backend)
+    user_pre = adv.get("prepend") or ""
+    if tag and user_pre.startswith(tag):
+        tag = ""
+    prepend = f"{tag}{user_pre}" if (tag or user_pre) else None
+    shared = {k: adv[k] for k in ("append", "set") if adv.get(k)}
+    if prepend:
+        shared["prepend"] = prepend
+    if not shared and not (adv.get("byTool")):
         return tools
-    shared = {k: adv[k] for k in ("prepend", "append", "set") if adv.get(k)}
     by_tool = adv.get("byTool") or {}
     out = []
     for tool in tools:
         name = tool.get("name") if isinstance(tool, dict) else None
         spec = dict(shared)
         if isinstance(name, str) and name in by_tool:
-            spec.update({k: v for k, v in (by_tool[name] or {}).items() if v})
+            extra = {k: v for k, v in (by_tool[name] or {}).items() if v}
+            extra_pre = extra.pop("prepend", None)
+            spec.update(extra)
+            if extra_pre:
+                spec["prepend"] = (spec.get("prepend") or "") + extra_pre
         out.append(_apply_description(tool, spec))
     return out
 

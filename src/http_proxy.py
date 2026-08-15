@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlparse
 
-from filters import Denied, apply_call, filter_listed_tools
+from filters import Denied, apply_call, auth_mode, filter_listed_tools
 
 log = logging.getLogger("mcp-proxy")
 
@@ -45,6 +45,8 @@ def load_header_value(spec: dict[str, Any], credentials_dir: str | None) -> str:
 
 def resolve_headers(backend: dict[str, Any], credentials_dir: str | None) -> dict[str, str]:
     out = dict(backend.get("headers") or {})
+    if auth_mode(backend) == "passthrough":
+        return out
     for name, spec in (backend.get("secrets") or {}).items():
         out[name] = load_header_value(spec, credentials_dir)
     return out

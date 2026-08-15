@@ -1,6 +1,13 @@
 import unittest
 
-from filters import Denied, apply_call, filter_listed_tools, rewrite_tokens
+from filters import (
+    AUTH_INJECT_TAG,
+    Denied,
+    apply_call,
+    auth_mode,
+    filter_listed_tools,
+    rewrite_tokens,
+)
 
 
 GMAIL_EXCLUDE = "-label:archive"
@@ -83,6 +90,41 @@ class SurfaceTools(unittest.TestCase):
         )
         self.assertTrue(out[0]["description"].startswith("Host MCP auth is already injected."))
         self.assertEqual(out[1]["description"], "Run tools.")
+
+    def test_inject_tag_when_secrets_configured(self):
+        tools = [
+            {"name": "A", "description": "Find tools."},
+            {"name": "B", "description": "Run tools."},
+        ]
+        out = filter_listed_tools(
+            tools,
+            {"secrets": {"Authorization": {"file": "/run/cred"}}},
+        )
+        self.assertTrue(out[0]["description"].startswith(AUTH_INJECT_TAG))
+        self.assertTrue(out[1]["description"].startswith(AUTH_INJECT_TAG))
+        self.assertIn("Find tools.", out[0]["description"])
+
+    def test_no_tag_on_passthrough_even_with_secrets(self):
+        tools = [{"name": "A", "description": "Find tools."}]
+        out = filter_listed_tools(
+            tools,
+            {
+                "secrets": {"Authorization": {"file": "/run/cred"}},
+                "auth": {"mode": "passthrough"},
+            },
+        )
+        self.assertEqual(out[0]["description"], "Find tools.")
+
+    def test_no_tag_when_no_secrets(self):
+        tools = [{"name": "A", "description": "Find tools."}]
+        out = filter_listed_tools(tools, {})
+        self.assertEqual(out[0]["description"], "Find tools.")
+        self.assertEqual(auth_mode({}), "passthrough")
+        self.assertEqual(auth_mode({"secrets": {"Authorization": {}}}), "inject")
+        self.assertEqual(
+            auth_mode({"secrets": {"Authorization": {}}, "auth": {"mode": "passthrough"}}),
+            "passthrough",
+        )
 
 
 class ToolkitGmail(unittest.TestCase):
