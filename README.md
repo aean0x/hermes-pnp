@@ -66,7 +66,7 @@ auth.mode = "auto";         # default: inject if secrets ≠ {}, else passthroug
 ```
 
 When **injecting**, every `tools/list` description is prefixed with
-`[auth via proxy] ` (override or disable via `auth.tag`). Hermes
+`[authed via proxy] ` (override or disable via `auth.tag`). Hermes
 `tool_search` shows the first ~60 characters, so the tag stays visible
 and the original first sentence still fits. No tag in passthrough mode.
 

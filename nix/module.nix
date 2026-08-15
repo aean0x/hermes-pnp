@@ -239,7 +239,7 @@ let
               };
               tag = mkOption {
                 type = types.nullOr types.str;
-                default = "[auth via proxy] ";
+                default = "[authed via proxy] ";
                 description = "tools/list description prefix when injecting. Empty or null disables the tag.";
               };
             };
