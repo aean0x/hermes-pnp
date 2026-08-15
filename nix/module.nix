@@ -236,6 +236,46 @@ let
           default = { };
           description = "Surface MCP tool allow/deny (globs). Empty allow = all except deny.";
         };
+        advertise = mkOption {
+          type = types.submodule {
+            options = {
+              prepend = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = "Prepended to every tools/list description. Avoid this — Hermes tool_search uses the first sentence as the per-turn blurb.";
+              };
+              append = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = "Appended to every tools/list description (full schema only; does not change the short blurb).";
+              };
+              byTool = mkOption {
+                type = types.attrsOf (
+                  types.submodule {
+                    options = {
+                      prepend = mkOption {
+                        type = types.nullOr types.str;
+                        default = null;
+                      };
+                      append = mkOption {
+                        type = types.nullOr types.str;
+                        default = null;
+                      };
+                      set = mkOption {
+                        type = types.nullOr types.str;
+                        default = null;
+                      };
+                    };
+                  }
+                );
+                default = { };
+                description = "Per-tool description rewrite. Prepend here to change the tool_search blurb.";
+              };
+            };
+          };
+          default = { };
+          description = "Rewrite advertised tool descriptions (the text the agent sees).";
+        };
         unwrap = mkOption {
           type = types.listOf (
             types.submodule {
@@ -290,6 +330,17 @@ let
         allow = b.tools.allow;
         deny = b.tools.deny;
       };
+      advertise =
+        lib.filterAttrs (_: v: v != null && v != { }) {
+          prepend = b.advertise.prepend;
+          append = b.advertise.append;
+          byTool = lib.mapAttrs (
+            _: spec:
+            lib.filterAttrs (_: v: v != null) {
+              inherit (spec) prepend append set;
+            }
+          ) b.advertise.byTool;
+        };
       unwrap = map (
         u:
         {

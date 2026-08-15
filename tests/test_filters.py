@@ -64,6 +64,26 @@ class SurfaceTools(unittest.TestCase):
         out = filter_listed_tools(tools, {"tools": {"deny": ["drop_*"]}})
         self.assertEqual([t["name"] for t in out], ["keep"])
 
+    def test_advertise_by_tool_prepend(self):
+        tools = [
+            {"name": "COMPOSIO_SEARCH_TOOLS", "description": "Find tools across apps."},
+            {"name": "COMPOSIO_MULTI_EXECUTE_TOOL", "description": "Run tools."},
+        ]
+        out = filter_listed_tools(
+            tools,
+            {
+                "advertise": {
+                    "byTool": {
+                        "COMPOSIO_SEARCH_TOOLS": {
+                            "prepend": "Host MCP auth is already injected. "
+                        }
+                    }
+                }
+            },
+        )
+        self.assertTrue(out[0]["description"].startswith("Host MCP auth is already injected."))
+        self.assertEqual(out[1]["description"], "Run tools.")
+
 
 class ToolkitGmail(unittest.TestCase):
     def _exec(self, slug: str, arguments: dict) -> dict:

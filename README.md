@@ -56,6 +56,19 @@ services.mcpProxy = {
 #   url = "http://127.0.0.1:3140/example";
 ```
 
+Hermes does **not** take a server-level blurb. Per turn the model sees
+`tool_search`'s catalog: each deferred tool as `name: first sentence` of the
+MCP `tools/list` description (clipped ~60 chars). Rewrite that text here:
+
+```nix
+advertise.byTool.SEARCH_TOOLS.prepend =
+  "Host MCP auth is already injected. Do not OAuth or ask for API keys. ";
+```
+
+Prepend only the tools whose listing line should carry the note. A global
+prepend makes every catalog line identical. `append` is for the full schema
+(after `tool_describe`) and does not change the short blurb.
+
 Site-specific labels, account names, and other private tokens belong in the
 **consumer** flake. This repo only ships the engine and generic examples.
 

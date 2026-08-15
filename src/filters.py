@@ -265,6 +265,49 @@ def apply_call(mcp_name: str, arguments: Any, backend: dict[str, Any]) -> Decisi
     return Decision(arguments=args, notes=notes)
 
 
+def _apply_description(tool: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
+    if not spec:
+        return tool
+    current = tool.get("description") or ""
+    if not isinstance(current, str):
+        current = ""
+    if "set" in spec and spec["set"] is not None:
+        new = spec["set"]
+    else:
+        new = current
+        if spec.get("prepend"):
+            new = spec["prepend"] + new
+        if spec.get("append"):
+            new = new + spec["append"]
+    if new == current:
+        return tool
+    out = dict(tool)
+    out["description"] = new
+    return out
+
+
+def annotate_listed_tools(tools: list[dict[str, Any]], backend: dict[str, Any]) -> list[dict[str, Any]]:
+    """Rewrite advertised tool descriptions (tools/list).
+
+    Hermes tool_search's per-turn blurb is the first ~60 chars / first
+    sentence of each description. Prepend only on the tools that should
+    carry a host note; a global prepend makes every listing line identical.
+    """
+    adv = backend.get("advertise") or {}
+    if not adv:
+        return tools
+    shared = {k: adv[k] for k in ("prepend", "append", "set") if adv.get(k)}
+    by_tool = adv.get("byTool") or {}
+    out = []
+    for tool in tools:
+        name = tool.get("name") if isinstance(tool, dict) else None
+        spec = dict(shared)
+        if isinstance(name, str) and name in by_tool:
+            spec.update({k: v for k, v in (by_tool[name] or {}).items() if v})
+        out.append(_apply_description(tool, spec))
+    return out
+
+
 def filter_listed_tools(tools: list[dict[str, Any]], backend: dict[str, Any]) -> list[dict[str, Any]]:
     tools_cfg = backend.get("tools") or {}
     allow = tools_cfg.get("allow") or []
@@ -279,4 +322,4 @@ def filter_listed_tools(tools: list[dict[str, Any]], backend: dict[str, Any]) ->
         if allow and not _listed(name, allow):
             continue
         out.append(tool)
-    return out
+    return annotate_listed_tools(out, backend)
