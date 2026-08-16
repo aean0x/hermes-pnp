@@ -60,6 +60,31 @@ class SurfaceTools(unittest.TestCase):
         with self.assertRaises(Denied):
             apply_call("COMPOSIO_REMOTE_BASH_TOOL", {"command": "id"}, backend)
 
+    def test_deny_unwrapped_inner_slug(self):
+        backend = {
+            **COMPOSIO,
+            "tools": {"deny": ["GMAIL_LIST_LABELS", "GMAIL_GET_ATTACHMENT"]},
+        }
+        with self.assertRaises(Denied) as ctx:
+            apply_call(
+                "COMPOSIO_MULTI_EXECUTE_TOOL",
+                {"tools": [{"tool_slug": "GMAIL_LIST_LABELS", "arguments": {}}]},
+                backend,
+            )
+        self.assertIn("GMAIL_LIST_LABELS", str(ctx.exception))
+        apply_call(
+            "COMPOSIO_MULTI_EXECUTE_TOOL",
+            {
+                "tools": [
+                    {
+                        "tool_slug": "GMAIL_FETCH_EMAILS",
+                        "arguments": {"query": "is:unread"},
+                    }
+                ]
+            },
+            backend,
+        )
+
     def test_allowlist(self):
         backend = {"tools": {"allow": ["COMPOSIO_MULTI_EXECUTE_TOOL"]}}
         apply_call("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": []}, {**backend, "unwrap": []})
@@ -200,6 +225,63 @@ class ToolkitGmail(unittest.TestCase):
             apply_call(
                 "COMPOSIO_MULTI_EXECUTE_TOOL",
                 {"tools": [{"tool_slug": "GMAIL_DELETE_MESSAGE", "arguments": {}}]},
+                backend,
+            )
+
+    def test_mail_surface_query_rewrite(self):
+        backend = {
+            **COMPOSIO,
+            "toolkits": {
+                "gmail": {
+                    "match": {"names": ["GMAIL_FETCH_EMAILS", "GMAIL_LIST_THREADS"]},
+                    "args": {
+                        "query": {
+                            "prepend": "(in:inbox OR in:sent OR in:drafts) ",
+                            "requireTokens": ["-label:agent-blocked"],
+                            "denyTokens": [
+                                "label:agent-blocked",
+                                "in:anywhere",
+                                "in:spam",
+                            ],
+                        },
+                        "label_ids": {"unset": True},
+                        "include_spam_trash": {"denyValues": [True]},
+                    },
+                }
+            },
+        }
+        decision = apply_call(
+            "COMPOSIO_MULTI_EXECUTE_TOOL",
+            {
+                "tools": [
+                    {
+                        "tool_slug": "GMAIL_FETCH_EMAILS",
+                        "arguments": {
+                            "query": "in:anywhere label:agent-blocked is:unread",
+                            "label_ids": ["Label_16"],
+                        },
+                    }
+                ]
+            },
+            backend,
+        )
+        args = decision.arguments["tools"][0]["arguments"]
+        self.assertEqual(
+            args["query"],
+            "(in:inbox OR in:sent OR in:drafts) is:unread -label:agent-blocked",
+        )
+        self.assertNotIn("label_ids", args)
+        with self.assertRaises(Denied):
+            apply_call(
+                "COMPOSIO_MULTI_EXECUTE_TOOL",
+                {
+                    "tools": [
+                        {
+                            "tool_slug": "GMAIL_FETCH_EMAILS",
+                            "arguments": {"include_spam_trash": True},
+                        }
+                    ]
+                },
                 backend,
             )
 

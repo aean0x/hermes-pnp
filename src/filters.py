@@ -257,10 +257,17 @@ def apply_call(mcp_name: str, arguments: Any, backend: dict[str, Any]) -> Decisi
         raise Denied("tools/call is missing a tool name")
     args = _ensure_args(arguments)
     notes: list[str] = []
-    _surface_allowed(mcp_name, backend.get("tools"))
+    tools_cfg = backend.get("tools")
+    _surface_allowed(mcp_name, tools_cfg)
     effective = iter_effective_calls(mcp_name, args, backend.get("unwrap") or [])
     toolkits = backend.get("toolkits") or {}
+    deny = (tools_cfg or {}).get("deny") or []
     for inner_name, inner_args in effective:
+        # tools.deny applies to unwrapped inner slugs (GMAIL_*, …) as well as
+        # the surface MCP name. tools.allow stays surface-only so an allowlist
+        # of COMPOSIO_MULTI_EXECUTE_TOOL does not block every nested call.
+        if inner_name != mcp_name and deny and _listed(inner_name, deny):
+            raise Denied(f"tool {inner_name} is denied")
         apply_tool_args(inner_name, inner_args, toolkits, notes)
     return Decision(arguments=args, notes=notes)
 

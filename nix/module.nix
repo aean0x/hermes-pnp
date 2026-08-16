@@ -261,7 +261,11 @@ let
             };
           };
           default = { };
-          description = "Surface MCP tool allow/deny (globs). Empty allow = all except deny.";
+          description = ''
+            allow: surface MCP tool names only (e.g. COMPOSIO_MULTI_EXECUTE_TOOL).
+            deny: surface names and unwrapped inner slugs (e.g. GMAIL_LIST_LABELS).
+            Empty allow = all except deny.
+          '';
         };
         advertise = mkOption {
           type = types.submodule {
