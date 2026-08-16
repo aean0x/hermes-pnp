@@ -11,11 +11,11 @@
   };
 
   outputs =
-    {
-      self,
-      nixpkgs,
-      hermes-agent,
-      hermes-webui,
+    { self
+    , nixpkgs
+    , hermes-agent
+    , hermes-webui
+    ,
     }:
     let
       inherit (nixpkgs) lib;
@@ -44,7 +44,12 @@
       nixosModules.default = composer;
       nixosModules.agent = hermes-agent.nixosModules.default;
       nixosModules.webui = hermes-webui.nixosModules.default;
-      nixosModules.plugins = import ./nix/modules/plugins.nix;
+      nixosModules.plugins = {
+        imports = [
+          ./nix/modules/options.nix
+          ./nix/modules/plugins.nix
+        ];
+      };
       nixosModules.mcp-proxy = import ./services/mcp-proxy/nix/module.nix;
       nixosModules.toolbox = {
         imports = [
@@ -86,9 +91,10 @@
             python3 -m unittest discover -s ${./services/mcp-proxy/tests} -v
             touch $out
           '';
-          plugins = pkgs.runCommand "hermes-pnp-plugin-tests" {
-            nativeBuildInputs = [ pkgs.python3 ];
-          } ''
+          plugins = pkgs.runCommand "hermes-pnp-plugin-tests"
+            {
+              nativeBuildInputs = [ pkgs.python3 ];
+            } ''
             ( cd ${./plugins/secret-handoff} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
             ( cd ${./plugins/model-router} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
             touch $out

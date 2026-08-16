@@ -9,45 +9,71 @@ IDs, mail routing, browser CDP, RAM caps, or SOUL.md.
 
 ## Drop-in
 
-A native Hermes NixOS setup:
-
 ```nix
-# flake.nix
-inputs.hermes-pnp.url = "github:aean0x/hermes-pnp";
+{
+  imports = [ inputs.hermes-pnp.nixosModules.default ];
 
-# configuration
-imports = [ inputs.hermes-pnp.nixosModules.default ];
+  services.hermes-agent = {
+    enable = true;
+    environmentFiles = [ config.sops.secrets.hermes-env.path ];
+    # Official settings still work. PnP only seeds via the composer.
+  };
 
-services.hermes-agent = {
-  enable = true;
-  settings.model.default = "xai/grok-4";
-  environmentFiles = [ config.sops.secrets.hermes-env.path ];
-};
+  services.hermesPnP = {
+    enable = true;
 
-services.hermesPnP.enable = true;
+    models.low    = { provider = "deepseek";  model = "deepseek-v4-flash"; };
+    models.medium = { provider = "deepseek";  model = "deepseek-v4-pro"; };
+    models.high   = { provider = "xai-oauth"; model = "grok-4.6"; };
+
+    plugins = [
+      "model-router"
+      "tool-call-coherency"
+      "secret-handoff"
+      # "gbrain-retrieval-reflex"
+      # "gbrain-memory-flush"
+      # "projects-auto-commit"
+    ];
+
+    extraPlugins = {
+      # my-plugin = ./plugins/my-plugin;
+    };
+
+    # webui.enable = true;     # default on when composer is on
+    # toolbox.enable = true;
+    # gbrain.enable = false;
+    # mcpProxy.enable = false;
+  };
+}
 ```
 
-That enables agent + WebUI pairing + first-party plugin installer +
-toolbox + the option to turn on the MCP proxy. Official
+Comment a line to drop a customisation. Official
 `services.hermes-agent.*` and `services.hermes-webui.*` still work as
 documented.
-
-```nix
-services.hermesPnP.plugins.enable = [
-  "model-router"
-  "tool-call-coherency"
-  "secret-handoff"
-];
-```
 
 `settings.*` does not move. Secrets do not move. Delete hand-rolled
 WebUI pairing, plugin symlink scripts, and bundled-share env once the
 composer is on.
 
-`services.hermesPnP.enable = false` (the default) keeps today's library
-behavior: plugins and `services.mcpProxy` only.
+`services.hermesPnP.enable = false` (the default) keeps the library
+path: plugins and `services.mcpProxy` only.
 
-## What the composer sets (`mkDefault`, overridable)
+## Three models
+
+One block seeds every place a model must be named. Plugin, WebUI, and
+slash commands use the same names.
+
+| name   | role                      | seeds                                      |
+| ------ | ------------------------- | ------------------------------------------ |
+| low    | cheap helper              | every auxiliary slot + unpinned cron       |
+| medium | workhorse                 | delegation (`delegate_task` children)      |
+| high   | session identity + voice  | `model.default`, `fallback_model`, rest    |
+
+When the composer is on, those values are written into official
+`services.hermes-agent.settings.*`. Override any seed with the official
+option. Do not seed STT / TTS / vision.
+
+## What the composer sets (overridable)
 
 When `services.hermesPnP.enable = true`:
 
@@ -59,6 +85,9 @@ When `services.hermesPnP.enable = true`:
   (`packageFixes.silenceMarkers`, default true)
 - Small toolbox: git, curl, jq, ripgrep, file, unzip, gnused,
   coreutils, findutils
+- Default `plugins` = model-router, tool-call-coherency, secret-handoff
+- Official model / fallback / delegation / cron / auxiliary slots from
+  `models.*`
 
 Escape hatches:
 
@@ -88,17 +117,17 @@ Double-import of the official modules is fine: they merge.
 ## Plugins
 
 ```nix
-services.hermesPnP.plugins = {
-  enable = [
-    "model-router"
-    "tool-call-coherency"
-    "gbrain-retrieval-reflex"
-    "gbrain-memory-flush"
-    "secret-handoff"
-    "projects-auto-commit"
-  ];
-  # Host pins stay in the consumer:
-  # extraPlugins.my-plugin = ./local;
+services.hermesPnP.plugins = [
+  "model-router"
+  "tool-call-coherency"
+  "secret-handoff"
+  # "gbrain-retrieval-reflex"
+  # "gbrain-memory-flush"
+  # "projects-auto-commit"
+];
+
+services.hermesPnP.extraPlugins = {
+  # my-plugin = ./local;
 };
 ```
 
@@ -109,7 +138,7 @@ through official `extraPlugins`.
 
 | Plugin | Role | Common knobs |
 | --- | --- | --- |
-| `model-router` | Per-turn cheap / work / voice routing | `config.json` or `MODEL_ROUTER_T{n}_MODEL`, `MODEL_ROUTER_FINAL_VOICE` |
+| `model-router` | Per-turn low / medium / high routing | `hermesPnP.models`, or `MODEL_ROUTER_LOW_MODEL` / `_PROVIDER` (and medium/high) |
 | `tool-call-coherency` | Heal double-wrapped / cold MCP tool calls | none |
 | `gbrain-retrieval-reflex` | Ambient GBrain pointers over HTTP MCP | `GBRAIN_MCP_URL`, `GBRAIN_TOKEN_FILE`, `GBRAIN_RETRIEVAL_REFLEX_*` |
 | `gbrain-memory-flush` | Nudge durable facts out of MEMORY.md | `GBRAIN_MEMORY_BUDGET_CHARS`, `HERMES_MEMORY_PATH` |
@@ -118,19 +147,18 @@ through official `extraPlugins`.
 
 ### model-router
 
-```nix
-services.hermesPnP.plugins.modelRouter.settings = {
-  tiers."3" = { model = "grok-4"; provider = "xai-oauth"; label = "T3 Voice"; };
-  final_voice = true;
-  rest_on_final_tier = true;
-};
-```
+Slash commands: `/low` `/medium` `/high` `/auto`. WebUI labels: Low /
+Medium / High. Classifier replies with one of those three words.
 
-WebUI extension dir: `config.services.hermesPnP.plugins.webuiExtensionDir`
+When `model-router` is in `plugins`, Nix writes `config.json` and
+`webui/config.js` from `hermesPnP.models`.
+
+WebUI extension dir: `config.services.hermesPnP.pluginInstall.webuiExtensionDir`
 
 ## GBrain (optional, thin)
 
-Does not start `gbrain serve`. Sets a default MCP URL and plugin env:
+Does not start `gbrain serve`. Sets a default MCP URL and plugin env,
+and appends the two gbrain plugins if they are missing:
 
 ```nix
 services.hermesPnP.gbrain = {
@@ -140,11 +168,12 @@ services.hermesPnP.gbrain = {
 };
 ```
 
-Enabling the GBrain *plugins* does not require this hook.
+Listing the GBrain plugins does not require this hook.
 
 ## MCP proxy
 
-Unchanged. Composer does not auto-enable it.
+Composer does not auto-enable it. `services.hermesPnP.mcpProxy.enable = true`
+turns on `services.mcpProxy`.
 
 ```nix
 services.mcpProxy = {
@@ -204,5 +233,5 @@ python3 -m unittest discover -s plugins/model-router/tests -v
 
 - [open-world-project/model-router](https://github.com/open-world-project/model-router)
   — inspiration for the per-turn cheap/work/voice router. Our
-  implementation is a rewrite (native providers, configurable tiers,
+  implementation is a rewrite (native providers, named models,
   no SOUL.md writes).

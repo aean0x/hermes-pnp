@@ -1,22 +1,23 @@
 # Eval-only composer checks. Dummy packages — do not realize official
 # hermes-agent / hermes-webui builds.
-{
-  self,
-  nixpkgs,
-  system,
-  pkgs,
+{ self
+, nixpkgs
+, system
+, pkgs
+,
 }:
 
 let
   inherit (nixpkgs) lib;
 
-  dummyAgent = pkgs.runCommand "dummy-hermes-agent" {
-    passthru.hermesVenv = pkgs.runCommand "dummy-hermes-venv" { } ''
-      mkdir -p "$out/bin"
-      touch "$out/bin/python3"
-      chmod +x "$out/bin/python3"
-    '';
-  } ''
+  dummyAgent = pkgs.runCommand "dummy-hermes-agent"
+    {
+      passthru.hermesVenv = pkgs.runCommand "dummy-hermes-venv" { } ''
+        mkdir -p "$out/bin"
+        touch "$out/bin/python3"
+        chmod +x "$out/bin/python3"
+      '';
+    } ''
     mkdir -p "$out/bin" \
       "$out/share/hermes-agent/plugins" \
       "$out/share/hermes-agent/skills" \
@@ -66,7 +67,6 @@ let
   modulesConfig = eval [
     {
       services.hermes-agent.enable = true;
-      services.hermes-agent.settings.model.default = "xai/grok-4";
       services.hermesPnP.enable = true;
     }
   ];
@@ -76,7 +76,7 @@ let
       services.hermes-agent.enable = true;
       services.hermes-agent.settings.model.default = "xai/grok-4";
       services.hermesPnP.enable = false;
-      services.hermesPnP.plugins.enable = [ "model-router" ];
+      services.hermesPnP.plugins = [ "model-router" ];
     }
   ];
 
@@ -89,6 +89,11 @@ let
   ];
 
   optionsEval = evalSystem [ ];
+
+  dropAux = (dropInConfig.services.hermes-agent.settings.auxiliary or { }).triage_specifier or { };
+
+  # plugins is listOf, not a submodule — these children must not exist.
+  pluginsOpt = optionsEval.options.services.hermesPnP.plugins;
 in
 {
   modules = pkgs.runCommand "hermes-pnp-modules-eval" { } ''
@@ -104,6 +109,14 @@ in
     test "${toString (modulesConfig.systemd.services ? gbrain-mcp-http)}" = ""
     test "${gbrainConfig.services.hermes-agent.mcpServers.gbrain.url}" = "http://127.0.0.1:3131/mcp"
     test "${toString (gbrainConfig.systemd.services ? gbrain-mcp-http)}" = ""
+    test "${toString (builtins.elem "model-router" modulesConfig.services.hermesPnP.plugins)}" = "1"
+    test "${toString (builtins.elem "gbrain-retrieval-reflex" gbrainConfig.services.hermesPnP.plugins)}" = "1"
+    test "${toString (builtins.elem "gbrain-memory-flush" gbrainConfig.services.hermesPnP.plugins)}" = "1"
+    test "${modulesConfig.services.hermes-agent.settings.model.default}" = "${modulesConfig.services.hermesPnP.models.high.model}"
+    test "${modulesConfig.services.hermes-agent.settings.model.provider}" = "${modulesConfig.services.hermesPnP.models.high.provider}"
+    test "${modulesConfig.services.hermes-agent.settings.auxiliary.triage_specifier.model}" = "${modulesConfig.services.hermesPnP.models.low.model}"
+    test "${modulesConfig.services.hermes-agent.settings.delegation.model}" = "${modulesConfig.services.hermesPnP.models.medium.model}"
+    test "${modulesConfig.services.hermes-agent.settings.cron.model}" = "${modulesConfig.services.hermesPnP.models.low.model}"
     touch "$out"
   '';
 
@@ -111,11 +124,21 @@ in
     test "${toString dropInConfig.services.hermesPnP.enable}" = ""
     test "${toString dropInConfig.services.hermes-webui.enable}" = ""
     test "${toString (builtins.elem "model-router" dropInConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
+    test "${dropInConfig.services.hermes-agent.settings.model.default}" = "xai/grok-4"
+    test "${dropAux.model or ""}" = ""
     touch "$out"
   '';
 
   options = pkgs.runCommand "hermes-pnp-options-assert" { } ''
-    test "${toString (optionsEval.options.services.hermesPnP.plugins.enable.isDefined or true)}" = "1"
+    test "${pluginsOpt.type.name}" = "listOf"
+    test "${toString (pluginsOpt ? enable)}" = ""
+    test "${toString (pluginsOpt ? modelRouter)}" = ""
+    test "${toString (optionsEval.options.services.hermesPnP ? models)}" = "1"
+    test "${optionsEval.config.services.hermesPnP.models.low.model}" = "deepseek-v4-flash"
+    test "${optionsEval.config.services.hermesPnP.models.medium.model}" = "deepseek-v4-pro"
+    test "${optionsEval.config.services.hermesPnP.models.high.model}" = "grok-4.6"
+    test "${toString (optionsEval.options.services.hermesPnP ? extraPlugins)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP ? pluginInstall)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.webui.enable.isDefined or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.toolbox.enable.isDefined or true)}" = "1"
     test "${optionsEval.options.services.hermesPnP.runtime.mode.default}" = "upstream"

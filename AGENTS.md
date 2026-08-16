@@ -45,13 +45,19 @@ SOUL.md / USER.md / MEMORY.md stay in the consumer.
 
 ```
 nix/modules/default.nix   # composer imports
-nix/modules/plugins.nix   # services.hermesPnP.plugins.*
+nix/modules/options.nix   # enable, models, plugins, extraPlugins, quiet toggles
+nix/modules/models.nix    # seed official settings from models.*
+nix/modules/plugins.nix   # plugins list + extraPlugins + pluginInstall
 nix/catalog.nix           # plugin name → path
 services/mcp-proxy/       # services.mcpProxy.*
 plugins/                  # first-party plugin trees
 ```
 
 Adding a plugin: drop `plugins/<name>/` and add one catalog line.
+
+Three models, named: `models.low` / `models.medium` / `models.high`.
+No T1/T2/T3 in Nix options, README, plugin.yaml, WebUI, or slash
+commands. Hidden load-time aliases for leftover configs are allowed.
 
 ## Checks
 
