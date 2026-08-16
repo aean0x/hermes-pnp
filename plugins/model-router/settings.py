@@ -9,7 +9,6 @@ Resolution order (later wins per key):
   2. plugin-adjacent config.json
   3. MODEL_ROUTER_CONFIG path (JSON)
   4. MODEL_ROUTER_{LOW,MEDIUM,HIGH}_{MODEL,PROVIDER,LABEL}
-     (load-time alias: MODEL_ROUTER_T{1,2,3}_*)
      MODEL_ROUTER_FINAL / FINAL_VOICE / REST_ON_HIGH
 """
 
@@ -25,18 +24,6 @@ _PLUGIN_DIR = Path(__file__).resolve().parent
 
 NAMES: tuple[str, ...] = ("low", "medium", "high")
 RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
-
-_ALIAS_TO_NAME: dict[str, str] = {
-    "low": "low",
-    "medium": "medium",
-    "high": "high",
-    "1": "low",
-    "2": "medium",
-    "3": "high",
-    "t1": "low",
-    "t2": "medium",
-    "t3": "high",
-}
 
 DEFAULT_MODELS: dict[str, dict[str, Any]] = {
     "low": {
@@ -108,7 +95,8 @@ def as_name(raw: Any) -> str | None:
     """Map a config/env/classifier token onto low|medium|high, or None."""
     if raw is None:
         return None
-    return _ALIAS_TO_NAME.get(str(raw).strip().lower())
+    name = str(raw).strip().lower()
+    return name if name in RANK else None
 
 
 def _truthy(raw: str | None, default: bool) -> bool:
@@ -202,11 +190,6 @@ def _generated_final_voice(models: dict[str, dict[str, Any]], final: str) -> str
 
 
 def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> None:
-    # Leftover numbered `tiers` first; named `models` wins on overlap.
-    if "tiers" in data:
-        state["models"] = _deep_merge(
-            state["models"], _coerce_models_map(data["tiers"], origin=f"{origin}.tiers")
-        )
     if "models" in data:
         state["models"] = _deep_merge(
             state["models"], _coerce_models_map(data["models"], origin=f"{origin}.models")
@@ -222,16 +205,10 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         name = as_name(data["final"])
         if name:
             state["final"] = name
-    elif "final_tier" in data:
-        name = as_name(data["final_tier"])
-        if name:
-            state["final"] = name
     if "final_voice" in data:
         state["final_voice"] = bool(data["final_voice"])
     if "rest_on_high" in data:
         state["rest_on_high"] = bool(data["rest_on_high"])
-    elif "rest_on_final_tier" in data:
-        state["rest_on_high"] = bool(data["rest_on_final_tier"])
     if "escalate_max" in data:
         name = as_name(data["escalate_max"])
         if name:
@@ -257,14 +234,6 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         state["classifier_system"] = str(data["classifier_system"])
     if data.get("final_voice_system"):
         state["final_voice_system"] = str(data["final_voice_system"])
-
-
-def _env_first(*keys: str) -> str | None:
-    for key in keys:
-        val = os.environ.get(key)
-        if val:
-            return val
-    return None
 
 
 def load_settings() -> dict[str, Any]:
@@ -304,14 +273,14 @@ def load_settings() -> dict[str, Any]:
         raise SettingsError("model-router: a fourth model is not allowed")
 
     env_slots = (
-        ("low", "MODEL_ROUTER_LOW_", "MODEL_ROUTER_T1_"),
-        ("medium", "MODEL_ROUTER_MEDIUM_", "MODEL_ROUTER_T2_"),
-        ("high", "MODEL_ROUTER_HIGH_", "MODEL_ROUTER_T3_"),
+        ("low", "MODEL_ROUTER_LOW_"),
+        ("medium", "MODEL_ROUTER_MEDIUM_"),
+        ("high", "MODEL_ROUTER_HIGH_"),
     )
-    for name, primary, alias in env_slots:
-        model = _env_first(primary + "MODEL", alias + "MODEL")
-        provider = _env_first(primary + "PROVIDER", alias + "PROVIDER")
-        label = _env_first(primary + "LABEL", alias + "LABEL")
+    for name, prefix in env_slots:
+        model = os.environ.get(prefix + "MODEL")
+        provider = os.environ.get(prefix + "PROVIDER")
+        label = os.environ.get(prefix + "LABEL")
         if model:
             models[name]["model"] = model.strip()
         if provider:
@@ -320,7 +289,7 @@ def load_settings() -> dict[str, Any]:
             models[name]["label"] = label.strip()
             models[name].setdefault("short", label.strip().split()[0])
 
-    env_final = _env_first("MODEL_ROUTER_FINAL", "MODEL_ROUTER_FINAL_TIER")
+    env_final = os.environ.get("MODEL_ROUTER_FINAL")
     if env_final:
         name = as_name(env_final)
         if name:
@@ -328,8 +297,6 @@ def load_settings() -> dict[str, Any]:
     state["final_voice"] = _truthy(os.environ.get("MODEL_ROUTER_FINAL_VOICE"), state["final_voice"])
     if os.environ.get("MODEL_ROUTER_REST_ON_HIGH") is not None:
         state["rest_on_high"] = _truthy(os.environ.get("MODEL_ROUTER_REST_ON_HIGH"), state["rest_on_high"])
-    elif os.environ.get("MODEL_ROUTER_REST_ON_FINAL") is not None:
-        state["rest_on_high"] = _truthy(os.environ.get("MODEL_ROUTER_REST_ON_FINAL"), state["rest_on_high"])
 
     if state["final"] not in models:
         state["final"] = "high" if "high" in models else next(iter(models))

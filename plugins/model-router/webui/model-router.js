@@ -8,7 +8,7 @@
     { cmd: "/high", label: "High", short: "High", model: "grok-4.6", title: "Pin High" },
   ];
   const cfg = window.__MODEL_ROUTER_CONFIG;
-  const fromCfg = (cfg && (cfg.models || cfg.tiers)) || [];
+  const fromCfg = (cfg && cfg.models) || [];
   const listed = Array.isArray(fromCfg) ? fromCfg.filter((row) => row && row.cmd !== "/auto") : [];
   const MODELS = listed.length ? listed : DEFAULT_MODELS;
 

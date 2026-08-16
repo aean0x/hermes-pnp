@@ -57,7 +57,7 @@ Adding a plugin: drop `plugins/<name>/` and add one catalog line.
 
 Three models, named: `models.low` / `models.medium` / `models.high`.
 No T1/T2/T3 in Nix options, README, plugin.yaml, WebUI, or slash
-commands. Hidden load-time aliases for leftover configs are allowed.
+commands.
 
 ## Checks
 
