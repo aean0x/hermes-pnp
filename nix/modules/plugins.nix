@@ -64,8 +64,6 @@ let
   hermesHomePlugins = "${cfg.stateDir}/.hermes/plugins";
   materializeRoot = "${cfg.stateDir}/plugins";
   enabledPluginsJson = builtins.toJSON enabledNames;
-
-  hasHermesAgent = config.services ? hermes-agent;
 in
 {
   options.services.hermesPnP.plugins = {
@@ -118,8 +116,7 @@ in
     };
   };
 
-  config = mkIf (enabledNames != [ ]) (
-    {
+  config = mkIf (enabledNames != [ ]) {
     assertions = [
       {
         assertion = missing == [ ];
@@ -130,6 +127,9 @@ in
     services.hermesPnP.plugins.webuiExtensionDir = lib.mkIf (
       resolvedSources ? model-router
     ) "${resolvedSources.model-router}/webui";
+
+    # Requires the official hermes-agent module. Installer is a no-op without enable.
+    services.hermes-agent.settings.plugins.enabled = enabledNames;
 
     system.activationScripts.hermes-pnp-plugins = lib.stringAfter [
       "users"
@@ -200,9 +200,5 @@ PY
         chown ${cfg.user}:${cfg.group} "$cfg" 2>/dev/null || true
       fi
     '';
-    }
-    // lib.optionalAttrs hasHermesAgent {
-      services.hermes-agent.settings.plugins.enabled = enabledNames;
-    }
-  );
+  };
 }
