@@ -435,3 +435,19 @@ composer.
 - Composio policy module
 - Home-manager module
 - darwin / Nix-on-Linux non-NixOS
+
+## Implementation notes (v1, feat/pnp-composer)
+
+Shipped as `feat(nix): implement v1 PnP composer`. Eval checks built and
+passed: modules, drop-in, options, plugin tests, mcp-proxy tests.
+
+Deltas from this document vs live upstream at implement time:
+
+- Official module has no `container.extraPackages`. Toolbox writes
+  `services.hermes-agent.extraPackages` and also
+  `environment.systemPackages` when `container.enable` is false.
+- GBrain URL is `mkDefault` on `services.hermes-agent.mcpServers.gbrain.url`,
+  not inside `settings.mcp_servers`. `settings` is `deepConfigType`;
+  `mkDefault` inside it is stored as a literal.
+- `runtime.mode = "s6"` is a NixOS assertion, not `throw`. A `throw`
+  inside `mkIf` is forced during module merge.
