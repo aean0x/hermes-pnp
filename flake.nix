@@ -1,5 +1,5 @@
 {
-  description = "Declarative MCP reverse proxy: inject secrets, filter tools and arguments";
+  description = "Hermes PnP (Plug n Pray) — reusable Hermes services and plugins";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -13,13 +13,17 @@
       ];
       forAllSystems = lib.genAttrs systems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
+      catalog = import ./nix/catalog.nix;
     in
     {
-      nixosModules.default = import ./nix/module.nix;
-      nixosModules.mcp-proxy = self.nixosModules.default;
+      plugins = catalog;
+
+      nixosModules.default = import ./nix/modules/default.nix;
+      nixosModules.mcp-proxy = import ./services/mcp-proxy/nix/module.nix;
+      nixosModules.plugins = import ./nix/modules/plugins.nix;
 
       overlays.default = final: _prev: {
-        mcp-proxy = final.callPackage ./nix/package.nix { };
+        mcp-proxy = final.callPackage ./services/mcp-proxy/nix/package.nix { };
       };
 
       packages = forAllSystems (
@@ -28,7 +32,7 @@
           pkgs = pkgsFor system;
         in
         rec {
-          mcp-proxy = pkgs.callPackage ./nix/package.nix { };
+          mcp-proxy = pkgs.callPackage ./services/mcp-proxy/nix/package.nix { };
           default = mcp-proxy;
         }
       );
@@ -39,9 +43,16 @@
           pkgs = pkgsFor system;
         in
         {
-          tests = pkgs.runCommand "mcp-proxy-tests" { nativeBuildInputs = [ pkgs.python3 ]; } ''
-            export PYTHONPATH=${./src}
-            python3 -m unittest discover -s ${./tests} -v
+          mcp-proxy-tests = pkgs.runCommand "mcp-proxy-tests" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+            export PYTHONPATH=${./services/mcp-proxy/src}
+            python3 -m unittest discover -s ${./services/mcp-proxy/tests} -v
+            touch $out
+          '';
+          plugin-tests = pkgs.runCommand "hermes-pnp-plugin-tests" {
+            nativeBuildInputs = [ pkgs.python3 ];
+          } ''
+            ( cd ${./plugins/secret-handoff} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
+            ( cd ${./plugins/model-router} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
             touch $out
           '';
         }
@@ -56,9 +67,10 @@
           default = pkgs.mkShell {
             packages = [ pkgs.python3 ];
             shellHook = ''
-              export PYTHONPATH=${toString ./src}:''${PYTHONPATH:-}
-              echo "mcp-proxy dev: python3 -m mcp_proxy --config …"
-              echo "tests: PYTHONPATH=src python3 -m unittest discover -s tests -v"
+              export PYTHONPATH=${toString ./services/mcp-proxy/src}:''${PYTHONPATH:-}
+              echo "Hermes PnP"
+              echo "  mcp-proxy:  python3 -m mcp_proxy --config …"
+              echo "  tests:      nix flake check"
             '';
           };
         }

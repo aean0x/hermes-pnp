@@ -1,0 +1,10 @@
+{
+  "extensions": [
+    {
+      "id": "model-router",
+      "name": "Model Router",
+      "scripts": ["config.js", "model-router.js"],
+      "stylesheets": ["model-router.css"]
+    }
+  ]
+}

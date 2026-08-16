@@ -1,0 +1,10 @@
+name: secret-handoff
+version: 0.2.0
+description: >-
+  Ephemeral login paste: request_secret asks via stock clarify, injects the
+  reply through a direct CDP websocket, and returns status only. The secret
+  is never stored on disk or written into the tool result.
+author: aean0x
+kind: standalone
+provides_tools:
+  - request_secret

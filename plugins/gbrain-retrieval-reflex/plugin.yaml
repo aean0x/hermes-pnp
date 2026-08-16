@@ -1,0 +1,11 @@
+name: gbrain-retrieval-reflex
+version: 0.5.0
+description: >
+  Ambient GBrain push-context: HTTP MCP volunteer_context (entity, multi-turn)
+  + hybrid query fallback, merge/dedupe, inject top-N strength-ordered Brain
+  pages with short previews into pre_llm_call. Optional resolve IPC if a sock
+  exists (stdio serve only). Pointers, timeouts, and MCP URL are env-overridable.
+author: aean0x
+kind: standalone
+provides_hooks:
+  - pre_llm_call

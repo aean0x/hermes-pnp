@@ -1,0 +1,9 @@
+name: tool-call-coherency
+version: 0.1.0
+description: >
+  Auto-heal misrouted tool_call invocations: unwrap double-nested tool_call,
+  allow core tools via the bridge, and rewrite bare skill names to skill_view.
+  Fixes Grok/OpenRouter thrash on MCP (GBrain) and deferred tools.
+author: aean0x
+kind: standalone
+provides_hooks: []

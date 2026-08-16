@@ -1,0 +1,15 @@
+name: model-router
+version: 0.2.0
+description: >-
+  Per-turn cost router with configurable tiers (default: cheap / work / voice).
+  Classifies via auxiliary.triage_specifier. Pins with /t1 /t2 /t3 /auto.
+  Models and providers come from config.json or MODEL_ROUTER_* env.
+  Uses AIAgent.switch_model — no Hermes/WebUI core edits.
+author: aean0x
+kind: standalone
+provides_hooks:
+  - pre_llm_call
+  - post_llm_call
+  - post_tool_call
+  - pre_api_request
+  - transform_llm_output

@@ -1,0 +1,10 @@
+name: gbrain-memory-flush
+version: 0.3.0
+description: >-
+  When MEMORY.md nears the injection budget, inject a pre_llm_call nudge to
+  put durable facts via GBrain MCP put_page and prune MEMORY. Budget, warn
+  ratio, and nudge interval are env-overridable.
+author: aean0x
+kind: standalone
+provides_hooks:
+  - pre_llm_call

@@ -1,0 +1,32 @@
+.mr-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 8px;
+}
+.mr-label {
+  font-size: 11px;
+  color: var(--muted, #8a8fa3);
+  margin-right: 4px;
+}
+.mr-btn {
+  appearance: none;
+  border: 1px solid var(--border2, #2a2e3d);
+  background: var(--surface, #161822);
+  color: var(--text, #e8eaf2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mr-btn:hover {
+  border-color: var(--accent-bg-strong, #3d5afe);
+  color: var(--accent-text, #c5d0ff);
+}
+.mr-btn[aria-pressed="true"] {
+  background: var(--accent-bg, #24305a);
+  border-color: var(--accent-bg-strong, #3d5afe);
+}
