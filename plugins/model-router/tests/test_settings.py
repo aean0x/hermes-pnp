@@ -18,9 +18,6 @@ _ENV_KEYS = (
     "MODEL_ROUTER_LOW_PROVIDER",
     "MODEL_ROUTER_MEDIUM_MODEL",
     "MODEL_ROUTER_HIGH_MODEL",
-    "MODEL_ROUTER_FINAL",
-    "MODEL_ROUTER_FINAL_VOICE",
-    "MODEL_ROUTER_REST_ON_HIGH",
 )
 
 
@@ -49,24 +46,25 @@ def _load(name: str = "mr_settings"):
 
 
 class Defaults(unittest.TestCase):
-    def test_three_named_models_and_voice(self) -> None:
+    def test_three_named_models(self) -> None:
         with _clean_env():
             mod = _load("mr_defaults")
         self.assertEqual(mod.NAMES, ("low", "medium", "high"))
         self.assertIn("low", mod.MODELS)
         self.assertIn("medium", mod.MODELS)
         self.assertIn("high", mod.MODELS)
-        self.assertEqual(mod.FINAL, "high")
-        self.assertTrue(mod.FINAL_VOICE)
-        self.assertTrue(mod.REST_ON_HIGH)
         self.assertEqual(mod.ESCALATE_MAX, "high")
         self.assertEqual(mod.ESCALATION_ERRORS["low"], 4)
         self.assertEqual(mod.ESCALATION_ERRORS["medium"], 3)
-        self.assertNotIn("Archimedes", mod.FINAL_VOICE_SYSTEM)
         self.assertNotIn("rocknas", mod.CLASSIFIER.lower())
         self.assertIn("low, medium, or high", mod.CLASSIFIER)
         self.assertNotIn("ONLY a digit", mod.CLASSIFIER)
         self.assertNotIn("T1", mod.CLASSIFIER)
+        # best_for is the sole prompt source — descriptors appear, no steering block.
+        self.assertIn("Architecture", mod.CLASSIFIER)
+        self.assertIn("Trivial Q&A", mod.CLASSIFIER)
+        self.assertNotIn("Rules:", mod.CLASSIFIER)
+        self.assertNotIn("high-stakes", mod.CLASSIFIER.lower())
         cmds = [row["cmd"] for row in mod.webui_models()]
         self.assertEqual(cmds, ["/low", "/medium", "/high", "/auto"])
         labels = [row["label"] for row in mod.webui_models()[:3]]
@@ -79,10 +77,7 @@ class EnvOverlay(unittest.TestCase):
             cfg = Path(tmp) / "cfg.json"
             cfg.write_text(
                 json.dumps(
-                    {
-                        "models": {"high": {"model": "some-voice", "provider": "other"}},
-                        "final_voice": False,
-                    }
+                    {"models": {"high": {"model": "some-voice", "provider": "other"}}}
                 ),
                 encoding="utf-8",
             )
@@ -90,7 +85,6 @@ class EnvOverlay(unittest.TestCase):
                 mod = _load("mr_named_overlay")
             self.assertEqual(mod.MODELS["high"]["model"], "some-voice")
             self.assertEqual(mod.MODELS["high"]["provider"], "other")
-            self.assertFalse(mod.FINAL_VOICE)
 
     def test_low_model_env(self) -> None:
         with _clean_env(MODEL_ROUTER_LOW_MODEL="flash-override"):
