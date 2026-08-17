@@ -144,6 +144,13 @@ in
     test "${toString containerConfig.services.hermes-agent.container.enable}" = "1"
     test "${lib.concatStringsSep "," containerConfig.services.hermes-agent.settings.skills.external_dirs}" = "/var/lib/hermes/skills,/data/skills"
     test "${containerConfig.services.hermes-agent.container.image}" = "ubuntu:24.04"
+    test "${toString containerConfig.services.hermesPnP.webui.container.enable}" = "1"
+    test "${toString containerConfig.services.hermesPnP.browser.container.enable}" = "1"
+    test "${toString (containerConfig.systemd.services ? hermes-browser)}" = "1"
+    test "${toString (containerConfig.systemd.services ? hermes-browser-vnc)}" = ""
+    test "${toString (containerConfig.systemd.services ? hermes-browser-novnc)}" = ""
+    test "${containerConfig.services.hermesPnP.browser.noVNC.listenAddress}" = "127.0.0.1"
+    test "${toString (builtins.elem 6080 containerConfig.networking.firewall.allowedTCPPorts)}" = ""
     touch "$out"
   '';
 
@@ -167,6 +174,8 @@ in
     test "${toString (optionsEval.options.services.hermesPnP ? extraPlugins)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? pluginInstall)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.webui.enable.isDefined or true)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.webui ? container)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser ? container)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.toolbox.enable.isDefined or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser.enable.default or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser.cdpPort.default or 0)}" = "9222"

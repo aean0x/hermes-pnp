@@ -401,6 +401,48 @@ re-add a wrapper around an official option.
 Do not copy rk3588's 50% RAM cap, `/data/src` bind, or media mounts
 into PnP defaults.
 
+## Sandbox (webui + browser OCI)
+
+Official `services.hermes-agent.container` already jails the gateway.
+Official `services.hermes-webui` has no `container.*`. The composer
+adds `hermesPnP.webui.container` and `hermesPnP.browser.container`
+(same `docker create --network=host` + `/nix/store:ro` + identity hash
++ `start -a` as official). Both default on when
+`hermesPnP.container.enable` is set. Opt out per-service.
+
+Helper: `nix/lib/oci-container.nix`. Slim entrypoint (UID/GID +
+setpriv, no sudo/apt). Upstream-shaped — lift into
+nesquena/hermes-webui as `container.enable` when it lands.
+
+WebUI container mounts: `/nix/store:ro`, agent stateDir → `/data`,
+agent home → `/home/hermes`, webui stateDir same-path, `/etc/ssl:ro`.
+Not `/etc/nixos`, not docker.sock. Terminal spawned from the WebUI
+runs inside this container.
+
+Browser container mounts: workspace, profile, cookies, logs, VNC
+pass file. Not hermes home, not `.hermes`, not `/etc`. Xvfb + browser
++ x11vnc + noVNC share the container. `--no-sandbox` is fine: the
+container is the jail.
+
+Takeover stays local: one browser, two control planes.
+- Agent: CDP `127.0.0.1:9222`
+- Human: noVNC on `listenAddress` (default `127.0.0.1`), reverse-proxied
+  through Caddy with the same auth as the WebUI.
+Do not bind `0.0.0.0:6080`. Do not open the firewall when loopback.
+Set `browser.noVNC.publicUrl` to the Caddy URL the agent should relay
+(`https://browser.example.com/vnc.html`). VNC password stays as a
+second factor.
+
+Consumer recipe:
+
+    services.caddy.proxyServices."browser.${domain}" = 6080;
+    services.hermesPnP.browser.noVNC.publicUrl = "https://browser.${domain}/vnc.html";
+
+Do not Cloudflare-tunnel the browser host unless you want WAN
+captcha handoff.
+
+Do not require a full container image build in default flake checks.
+
 ## Toolbox
 
 A `buildEnv` of everyday CLI tools, materialized to
