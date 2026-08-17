@@ -68,8 +68,8 @@ slash commands use the same names.
 
 | name   | role                      | seeds                                      |
 | ------ | ------------------------- | ------------------------------------------ |
-| low    | cheap helper              | every auxiliary slot + unpinned cron       |
-| medium | workhorse                 | delegation (`delegate_task` children)      |
+| low    | cheap helper              | mechanical auxiliary slots + unpinned cron       |
+| medium | workhorse                 | delegation + reasoning auxiliary slots    |
 | high   | session identity + voice  | `model.default`, `fallback_model`, rest    |
 
 When the composer is on, those values are written into official

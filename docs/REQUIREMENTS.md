@@ -18,7 +18,7 @@
   those plugins does not require `gbrain.enable`.
 - When composer is on, seed official `settings.model` +
   `fallback_model` from high, `delegation` from medium, `cron` +
-  listed auxiliary slots from low (`reasoning_effort = "none"`).
+  listed auxiliary slots from low or medium (`reasoning_effort = "none"`).
   Do not seed STT / TTS / vision.
 - Users override seeds with official `services.hermes-agent.settings.*`.
 - model-router internal keys are `low` < `medium` < `high`. Commands
@@ -43,7 +43,7 @@
   web_extract, skills_hub, mcp, triage_specifier, kanban_decomposer,
   profile_describer, curator, background_review, monitor,
   memory_query_rewrite. Not seeded: vision, tts_audio_tags, moa_*,
-  goal_judge, session_search (removed upstream).
+  goal_judge, session_search (removed upstream). background_review, curator, kanban_decomposer ride medium; the rest ride low.
 - GBrain URL stays on typed `mcpServers.gbrain.url`, not inside
   `settings.mcp_servers`.
 - `nix flake check` stays eval-cheap (dummy agent/webui packages).
