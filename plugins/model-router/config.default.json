@@ -23,7 +23,7 @@
     }
   },
   "final": "high",
-  "final_voice": true,
+  "final_voice": false,
   "rest_on_high": true,
   "escalate_max": "high",
   "escalation_errors": { "low": 4, "medium": 3 }

@@ -241,7 +241,7 @@ def load_settings() -> dict[str, Any]:
         "models": deepcopy(DEFAULT_MODELS),
         "provider_hosts": deepcopy(DEFAULT_PROVIDER_HOSTS),
         "final": "high",
-        "final_voice": True,
+        "final_voice": False,
         "rest_on_high": True,
         "escalate_max": "high",
         "escalation_errors": {"low": 4, "medium": 3},

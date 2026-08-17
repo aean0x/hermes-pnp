@@ -57,7 +57,7 @@ class Defaults(unittest.TestCase):
         self.assertIn("medium", mod.MODELS)
         self.assertIn("high", mod.MODELS)
         self.assertEqual(mod.FINAL, "high")
-        self.assertTrue(mod.FINAL_VOICE)
+        self.assertFalse(mod.FINAL_VOICE)
         self.assertTrue(mod.REST_ON_HIGH)
         self.assertEqual(mod.ESCALATE_MAX, "high")
         self.assertEqual(mod.ESCALATION_ERRORS["low"], 4)
