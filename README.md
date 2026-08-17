@@ -5,7 +5,9 @@ on top of the official `services.hermes-agent` surface. WebUI is part of
 the product. Site identity stays in the consumer flake.
 
 This is not a host flake. It does not own secrets, hostnames, Telegram
-IDs, mail routing, browser CDP, RAM caps, or SOUL.md.
+IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/noVNC is a
+composer opinion (`services.hermesPnP.browser`); the engine is a consumer
+choice.
 
 ## Drop-in
 
@@ -40,7 +42,8 @@ IDs, mail routing, browser CDP, RAM caps, or SOUL.md.
     };
 
     # webui.enable = true;     # default on when composer is on
-    # toolbox.enable = true;
+    # toolbox.enable = true;   # everyday CLI buildEnv → /var/lib/hermes/toolbox/bin
+    # browser = { package = pkgs.brave; engine = "brave"; };  # CDP + noVNC
     # gbrain.enable = false;
     # mcpProxy.enable = false;
   };
@@ -206,16 +209,22 @@ JSON config is generated from the NixOS module. Secrets are systemd
 ## Runtime
 
 Default is the official module's native or container path. PnP does not
-turn `container.enable` on.
+turn `container.enable` on. Extra host mounts use the official
+`services.hermes-agent.container.extraVolumes` directly — there is no
+`runtime.*` wrapper.
 
-`services.hermesPnP.runtime.extraBindMounts` appends host paths to
-official `container.extraVolumes`. `runtime.mode = "s6"` is not
-implemented.
+## Toolbox + browser
+
+`toolbox.enable` builds the everyday CLI `buildEnv` into
+`/var/lib/hermes/toolbox/bin` (container `/data/toolbox/bin`) and wires
+it onto the agent PATH. `browser.*` provisions a persistent CDP browser
+(+ optional noVNC phone handoff) and seeds `BROWSER_CDP_URL` into the
+agent env.
 
 ## Out of scope
 
 HMC, declarative gbrain serve, SOUL.md from Nix, Telegram allowlists,
-browser CDP, Composio policy, home-manager, darwin.
+Composio policy, home-manager, darwin.
 
 ## Develop
 

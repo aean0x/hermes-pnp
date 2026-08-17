@@ -5,7 +5,9 @@ on top of the official `services.hermes-agent` surface. WebUI is part of
 the product. Site identity stays in the consumer flake.
 
 This is not a host flake. It does not own secrets, hostnames, Telegram
-IDs, mail routing, browser CDP, RAM caps, or SOUL.md.
+IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/noVNC provisioning
+*is* a composer opinion (`services.hermesPnP.browser`); the engine choice
+stays in the consumer.
 
 ## Goal
 
@@ -28,7 +30,7 @@ services.hermesPnP.enable = true;
 ```
 
 and get a cohesive agent + WebUI + first-party plugins + toolbox + MCP
-proxy, with official options still working as documented.
+proxy + CDP browser, with official options still working as documented.
 
 A user who wants more control keeps writing `services.hermes-agent.*`
 and `services.hermes-webui.*` exactly as the upstream modules declare
@@ -39,7 +41,7 @@ them. PnP only adds pairing, plugins, and a few extra modules.
 - Declarative GBrain (PGLite, sources, embeddings, HTTP serve). Tertiary.
   We expose first-party GBrain *plugins* and a thin optional MCP URL hook.
 - HMC / context-manager packaging. Leave it out.
-- Honcho, Telegram home-channel, browser CDP, Composio mail-filter policy.
+- Honcho, Telegram home-channel, Composio mail-filter policy.
   Those are site policy. The MCP *proxy mechanism* stays; the mail rules
   do not.
 - Shipping SOUL.md / USER.md / MEMORY.md from Nix.
@@ -95,8 +97,8 @@ hermes-pnp/
       webui.nix                  # official webui + pairing defaults
       plugins.nix                # plugins list + extraPlugins + pluginInstall
       models.nix                 # seed official settings from models.*
-      toolbox.nix                # extraPackages + PATH
-      runtime.nix                # extra binds; optional s6
+      toolbox.nix                # everyday CLI buildEnv → /var/lib/hermes/toolbox/bin
+      browser.nix                # persistent CDP browser + optional noVNC handoff
       package.nix                # shared package + bundled-share env
       gbrain.nix                 # thin optional MCP URL + plugin env
   plugins/                       # first-party plugins (unchanged)
@@ -137,8 +139,9 @@ option PnP set via `mkDefault`.
    or the MCP proxy. `mcpServers` may contain URLs and headers that
    reference env vars; never raw tokens.
 8. **Site policy stays out.** Telegram allowlists, home channel, RAM
-   Percentage, browser CDP, Composio tool/account filters, hostnames,
-   sops paths — consumer flake only.
+   Percentage, Composio tool/account filters, hostnames, sops paths —
+   consumer flake only. Browser CDP/noVNC provisioning is composer-owned;
+   the engine (brave vs chromium) is a consumer choice.
 
 ### User-facing options
 
@@ -175,9 +178,12 @@ reads like a short list — comment a line to drop a thing.
 - `services.hermesPnP.webui.enable` — default `true` when composer
   is on. Escape hatch to run gateway-only.
 - `services.hermesPnP.toolbox.enable` — default `true` when composer
-  is on. Installs a small curated extraPackages set onto the official
-  `extraPackages` / native `environment.systemPackages` path.
+  is on. Builds the everyday CLI `buildEnv` into
+  `/var/lib/hermes/toolbox/bin` (container sees `/data/toolbox/bin` via the
+  stateDir bind) and wires it onto the agent PATH.
 - `services.hermesPnP.toolbox.extraPackages` — append-only.
+- `services.hermesPnP.toolbox.hostPath` / `toolbox.binDir` — resolved
+  host/container paths, exported for consumers to wire into units.
 - `services.hermesPnP.gbrain.enable` — default `false`. Thin: set
   `services.hermes-agent.mcpServers.gbrain.url` (mkDefault) and export
   `GBRAIN_MCP_URL` / `GBRAIN_TOKEN_FILE`. Appends the two gbrain
@@ -187,10 +193,10 @@ reads like a short list — comment a line to drop a thing.
   env, never read into Nix.
 - `services.hermesPnP.mcpProxy.enable` — turns on `services.mcpProxy`.
   Backends stay under `services.mcpProxy.*`.
-- `services.hermesPnP.runtime.mode` — `"upstream"` (default) or `"s6"`.
-  `s6` is not implemented (assertion).
-- `services.hermesPnP.runtime.extraBindMounts` — list of host paths
-  appended to official `container.extraVolumes`.
+- `services.hermesPnP.browser.enable` / `package` / `engine` / `cdpPort`
+  / `novnc` — persistent CDP browser + optional noVNC phone handoff;
+  seeds `BROWSER_CDP_URL` into the agent env. `runtime.*` is gone:
+  consumers use official `container.extraVolumes` directly.
 - `services.hermesPnP.packageFixes.silenceMarkers` — default `true`.
   Patch via PYTHONPATH. Escape hatch for when upstream ships the plural form.
 - `services.hermesPnP.pluginInstall.*` — installer internals (`stateDir`,
@@ -354,38 +360,33 @@ already has what most users need; extras are a consumer choice.
 
 ## Runtime
 
-Default is the official module's native or container path. PnP does not
-turn `container.enable` on. The consumer does, same as today.
+There is no `runtime.*` module. The composer does not wrap the official
+container/runtime surface. Default is the official module's native or
+container path; PnP does not turn `container.enable` on (the consumer
+does).
 
-`runtime.mode = "upstream"` (default):
-
-- `runtime.extraBindMounts` → `container.extraVolumes`
-- toolbox packages → `container.extraPackages` when container is on,
-  else `environment.systemPackages`
-
-`runtime.mode = "s6"`:
-
-- Extract rk3588 `runtime.nix` + `toolbox.nix` image/s6 tree into
-  `nix/modules/runtime.nix` (and whatever small `services/runtime/`
-  tree it needs).
-- Still same user/package/env map.
-- This is for hosts that already outgrew the official container
-  (extra binds, docker.sock, PATH). It is an escape hatch, not the
-  product default.
+Extra host mounts are the official
+`services.hermes-agent.container.extraVolumes` (`listOf str`, default
+`[]`). Consumers use it directly — the composer-invented
+`runtime.extraBindMounts` wrapper was deleted as scaffolding. Do not
+re-add a wrapper around an official option.
 
 Do not copy rk3588's 50% RAM cap, `/data/src` bind, or media mounts
 into PnP defaults.
 
 ## Toolbox
 
-Small default set, append-only `extraPackages`. The opinion is "the
-agent can do basic unix work," not "here is one person's workstation."
+A `buildEnv` of everyday CLI tools, materialized to
+`/var/lib/hermes/toolbox/bin` (container path `/data/toolbox/bin` via the
+stateDir bind) and wired onto the agent PATH. This is the deployment's
+"sauce": one PATH that works identically in the gateway, the WebUI, and
+any host unit that sources it.
 
-Default packages: `git`, `curl`, `jq`, `ripgrep`, `file`, `unzip`,
-`gnused`, `coreutils`, `findutils`.
-
-Not in the default: `gh`, `docker`, `sops`, `age`, `nmap`, language
-toolchains. Consumers append those.
+The opinion is "the agent can do real unix work" — not a bare-minimum set
+and not "here is one person's workstation." The default set includes git, curl,
+jq, ripgrep, file, unzip, python3 (with requests/pyyaml/toml), and the
+chromium/chromedriver aliases. `gh`, `docker`, `sops`, `age`, `nmap`, and
+language toolchains are consumer `extraPackages`.
 
 ## GBrain (tertiary)
 
@@ -435,7 +436,7 @@ Add:
   off) still evaluates; proves we did not break the library path.
 - `checks.${system}.options` — assert the user-facing option paths
   exist (`services.hermesPnP.models.low.model`, `plugins` is a list,
-  `webui.enable`, `toolbox.enable`, `runtime.mode`, `gbrain.enable`,
+  `webui.enable`, `toolbox.enable`, `browser.enable`, `gbrain.enable`,
   `packageFixes.silenceMarkers`). Assert no `plugins.enable` /
   `plugins.modelRouter`. Assert composer seeds
   `settings.auxiliary.triage_specifier.model` from `models.low` and
@@ -452,17 +453,14 @@ Do not require a full container image build in default checks.
 3. `package.nix` — share env + optional silence wrap.
 4. `agent.nix` + `webui.nix` — pairing defaults, gated on
    `hermesPnP.enable`.
-5. `toolbox.nix` — small extraPackages set.
-6. `runtime.nix` — extraBindMounts + `mode` (`upstream` implemented;
-   `s6` may land as a stub that `throw`s "not yet" rather than a
-   half-port). Prefer a complete upstream path over a broken s6 path.
+5. `toolbox.nix` — everyday CLI buildEnv.
+6. `browser.nix` — persistent CDP browser + optional noVNC handoff.
 7. `gbrain.nix` — thin optional hook.
 8. Checks + example snippet in README.
 9. Do **not** migrate rk3588 in this repo.
 
-If time is tight, ship 1–5 + 7–8. `runtime.mode = "s6"` can wait.
-`packageFixes` and WebUI pairing are not optional for a useful
-composer.
+If time is tight, ship 1–5 + 7–8. `packageFixes` and WebUI pairing are
+not optional for a useful composer.
 
 ## Acceptance
 
@@ -478,13 +476,10 @@ composer.
 - No HMC module. No gbrain systemd unit. No SOUL.md.
 - Existing plugin Python and mcp-proxy behavior unchanged.
 
-## Out of scope for v1 (write down, do not build)
+## Out of scope (write down, do not build)
 
-- rk3588-nixos-nas cutover PR
-- s6 runtime port (unless it is clean and complete)
 - Declarative gbrain serve
 - HMC
-- Browser / CDP module
 - Composio policy module
 - Home-manager module
 - darwin / Nix-on-Linux non-NixOS
@@ -496,14 +491,9 @@ passed: modules, drop-in, options, plugin tests, mcp-proxy tests.
 
 Deltas from this document vs live upstream at implement time:
 
-- Official module has no `container.extraPackages`. Toolbox writes
-  `services.hermes-agent.extraPackages` and also
-  `environment.systemPackages` when `container.enable` is false.
 - GBrain URL is `mkDefault` on `services.hermes-agent.mcpServers.gbrain.url`,
   not inside `settings.mcp_servers`. `settings` is `deepConfigType`;
   `mkDefault` inside it is stored as a literal.
-- `runtime.mode = "s6"` is a NixOS assertion, not `throw`. A `throw`
-  inside `mkIf` is forced during module merge.
 
 ## Implementation notes (named models + option beauty)
 
@@ -523,3 +513,24 @@ Shipped as `feat(pnp): named low/medium/high models + option beauty`.
   Official DEFAULT_CONFIG also has `fallback_providers`, `goal_judge`,
   `tts_audio_tags`, `moa_*`, `vision` — we do not seed those.
 - Plugin surface is `low` / `medium` / `high`.
+
+## Implementation notes (reorg: toolbox buildEnv + browser, drop runtime)
+
+Shipped as `refactor: fold toolbox buildEnv + browser CDP into composer`;
+the rk3588 cutover PR reworks the host tree to match.
+
+- `toolbox.nix` is now the full everyday CLI `buildEnv` (was a small
+  `extraPackages` passthrough). Materializes to
+  `/var/lib/hermes/toolbox/bin`, container path `/data/toolbox/bin`;
+  exports `hostPath` + `binDir` for consumers to wire into units
+  (WebUI PATH, gbrain unit, sudo `hermes-cli`).
+- `browser.nix` is new: persistent CDP browser + optional noVNC phone
+  handoff, ported from the rk3588 host. Seeds `BROWSER_CDP_URL` +
+  `BU_CDP_URL` and the noVNC URL into `services.hermes-agent.environment`.
+  Engine (`package`/`engine`) is a consumer choice.
+- `runtime.nix` is deleted. `runtime.extraBindMounts` was invented
+  scaffolding; the official `container.extraVolumes` is used directly.
+  There is no `runtime.mode`; the s6 port is abandoned.
+- `catalog.nix` import in `plugins.nix` fixed (`../../` → `../`); the
+  earlier move had broken plugin-install evaluation (only forced at
+  install time, so `nix flake check` stayed green until the reorg).
