@@ -50,29 +50,17 @@ let
   ];
 
   routerMeta = {
-    low = {
-      label = "Low";
-      role = "fast triage + cheap helper";
-    };
-    medium = {
-      label = "Medium";
-      role = "default workhorse";
-    };
-    high = {
-      label = "High";
-      role = "high-stakes + final voice";
-    };
+    low.label = "Low";
+    medium.label = "Medium";
+    high.label = "High";
   };
 
   modelRouterConfig = {
     models = lib.genAttrs routerOrder (name: {
-      inherit (routerMeta.${name}) label role;
+      inherit (routerMeta.${name}) label;
       inherit (pnp.models.${name}) model provider;
       short = routerMeta.${name}.label;
     });
-    final = "high";
-    final_voice = true;
-    rest_on_high = true;
     escalate_max = "high";
     escalation_errors = {
       low = 4;
