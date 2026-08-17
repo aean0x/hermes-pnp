@@ -1,14 +1,16 @@
 """Load model-router settings from config.json and env overlays.
 
-Defaults are a 3-tier cheap / work / voice map. Override models, providers,
-labels, final-voice, and rest behaviour without editing plugin code.
+Exactly three named models: low < medium < high. Override models,
+providers, labels, final-voice, and rest behaviour without editing
+plugin code.
 
 Resolution order (later wins per key):
   1. built-in defaults
   2. plugin-adjacent config.json
   3. MODEL_ROUTER_CONFIG path (JSON)
-  4. MODEL_ROUTER_T{n}_MODEL / _PROVIDER / _LABEL
-     MODEL_ROUTER_FINAL_TIER / FINAL_VOICE / REST_ON_FINAL
+  4. MODEL_ROUTER_{LOW,MEDIUM,HIGH}_{MODEL,PROVIDER,LABEL}
+     (load-time alias: MODEL_ROUTER_T{1,2,3}_*)
+     MODEL_ROUTER_FINAL / FINAL_VOICE / REST_ON_HIGH
 """
 
 from __future__ import annotations
@@ -21,10 +23,25 @@ from typing import Any
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
 
-DEFAULT_TIERS: dict[int, dict[str, Any]] = {
-    1: {
-        "label": "T1 Flash",
-        "short": "T1",
+NAMES: tuple[str, ...] = ("low", "medium", "high")
+RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
+
+_ALIAS_TO_NAME: dict[str, str] = {
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "1": "low",
+    "2": "medium",
+    "3": "high",
+    "t1": "low",
+    "t2": "medium",
+    "t3": "high",
+}
+
+DEFAULT_MODELS: dict[str, dict[str, Any]] = {
+    "low": {
+        "label": "Low",
+        "short": "Low",
         "model": "deepseek-v4-flash",
         "provider": "deepseek",
         "role": "fast triage + cheap helper",
@@ -37,12 +54,12 @@ DEFAULT_TIERS: dict[int, dict[str, Any]] = {
             "Documentation and drafting",
         ],
     },
-    2: {
-        "label": "T2 Pro",
-        "short": "T2",
+    "medium": {
+        "label": "Medium",
+        "short": "Medium",
         "model": "deepseek-v4-pro",
         "provider": "deepseek",
-        "role": "default workhorse — coding, review, docs",
+        "role": "default workhorse",
         "best_for": [
             "Default day-to-day work",
             "Standard coding and research",
@@ -55,12 +72,12 @@ DEFAULT_TIERS: dict[int, dict[str, Any]] = {
             "Multi-file implementation",
         ],
     },
-    3: {
-        "label": "T3 Voice",
-        "short": "T3",
+    "high": {
+        "label": "High",
+        "short": "High",
         "model": "grok-4.6",
         "provider": "xai-oauth",
-        "role": "high-stakes + final user-facing voice",
+        "role": "high-stakes + final voice",
         "best_for": [
             "Architecture",
             "Migration planning",
@@ -83,33 +100,56 @@ DEFAULT_PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = {
 }
 
 
+class SettingsError(ValueError):
+    """Invalid model-router configuration."""
+
+
+def as_name(raw: Any) -> str | None:
+    """Map a config/env/classifier token onto low|medium|high, or None."""
+    if raw is None:
+        return None
+    return _ALIAS_TO_NAME.get(str(raw).strip().lower())
+
+
 def _truthy(raw: str | None, default: bool) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() not in {"0", "false", "no", "off", ""}
 
 
-def _as_int_keys(tiers: Any) -> dict[int, dict[str, Any]]:
-    out: dict[int, dict[str, Any]] = {}
-    if not isinstance(tiers, dict):
-        return out
-    for key, meta in tiers.items():
-        try:
-            n = int(key)
-        except (TypeError, ValueError):
+def _coerce_models_map(raw: Any, *, origin: str) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    extra: list[str] = []
+    for key, meta in raw.items():
+        name = as_name(key)
+        if name is None:
+            extra.append(str(key))
             continue
         if isinstance(meta, dict):
-            out[n] = dict(meta)
+            out[name] = dict(meta)
+    if extra:
+        raise SettingsError(
+            f"model-router: {origin} declares unknown models {extra}; "
+            "only low, medium, high are allowed"
+        )
+    if len(raw) > 3 or len(out) > 3:
+        raise SettingsError(
+            f"model-router: {origin} declares {len(raw)} models; exactly 3 are allowed"
+        )
     return out
 
 
-def _deep_merge(base: dict[int, dict[str, Any]], overlay: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+def _deep_merge(
+    base: dict[str, dict[str, Any]], overlay: dict[str, dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
     merged = deepcopy(base)
-    for n, meta in overlay.items():
-        if n in merged:
-            merged[n] = {**merged[n], **meta}
+    for name, meta in overlay.items():
+        if name in merged:
+            merged[name] = {**merged[name], **meta}
         else:
-            merged[n] = dict(meta)
+            merged[name] = dict(meta)
     return merged
 
 
@@ -121,182 +161,232 @@ def _load_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _generated_classifier(tiers: dict[int, dict[str, Any]]) -> str:
+def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
     lines = [
-        "You assign a single WORK routing tier for the user's message.",
+        "You assign a single WORK routing model for the user's message.",
         "(The final user-facing reply may still be polished separately.)",
         "",
     ]
-    nums = sorted(tiers)
-    for n in nums:
-        meta = tiers[n]
-        label = meta.get("label") or f"T{n}"
+    for name in NAMES:
+        meta = models[name]
+        label = meta.get("label") or name.capitalize()
         role = meta.get("role") or ""
         best = meta.get("best_for") or []
         extra = "; ".join(str(x) for x in best[:8]) if best else role
-        lines.append(f"{n} = {label} — {extra}")
-    lo, hi = nums[0], nums[-1]
-    mid = nums[1] if len(nums) > 2 else hi
+        lines.append(f"{name} = {label} — {extra}")
     lines.extend(
         [
             "",
             "Rules:",
-            f"- When unsure between {lo} and {mid}, pick {mid} for real work; pick {lo} only for trivial turns.",
-            f"- When unsure between {mid} and {hi}, pick {mid} unless architecture/security/high-stakes fits.",
-            f"- Tier {hi} is uncommon but not vanishingly rare.",
-            f"- if user message is >1 sentence, strongly consider {mid}.",
+            "- When unsure between low and medium, pick medium for real work; pick low only for trivial turns.",
+            "- When unsure between medium and high, pick medium unless architecture/security/high-stakes fits.",
+            "- high is uncommon but not vanishingly rare.",
+            "- if user message is >1 sentence, strongly consider medium.",
             "- Multi-sentence questions, critiques, and follow-ups are real work, not triage.",
-            f"- Respond with ONLY a digit: {', '.join(str(n) for n in nums)}.",
+            "- Respond with ONLY one word: low, medium, or high.",
         ]
     )
     return "\n".join(lines)
 
 
-def _generated_final_voice(tiers: dict[int, dict[str, Any]], final_tier: int) -> str:
-    meta = tiers.get(final_tier) or {}
-    label = meta.get("label") or f"T{final_tier}"
+def _generated_final_voice(models: dict[str, dict[str, Any]], final: str) -> str:
+    meta = models.get(final) or {}
+    label = meta.get("label") or final.capitalize()
     return (
         f"You are the final user-facing voice ({label}). Rewrite the draft assistant "
         "reply for the user.\n"
         "Preserve every fact, path, command, URL, code block, number, and decision exactly.\n"
         "Improve clarity, structure, and voice. Do not invent new claims. Do not mention "
-        "models, tiers, routing, or that a draft existed. Output ONLY the final reply.\n"
+        "models, routing, or that a draft existed. Output ONLY the final reply.\n"
     )
 
 
-def load_settings() -> dict[str, Any]:
-    tiers = deepcopy(DEFAULT_TIERS)
-    provider_hosts = deepcopy(DEFAULT_PROVIDER_HOSTS)
-    final_tier = 3
-    final_voice = True
-    rest_on_final = True
-    escalate_max = 3
-    escalation_errors = {1: 4, 2: 3}
-    skip_platforms = ["cron", "subagent"]
-    classifier_system = None
-    final_voice_system = None
+def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> None:
+    # Leftover numbered `tiers` first; named `models` wins on overlap.
+    if "tiers" in data:
+        state["models"] = _deep_merge(
+            state["models"], _coerce_models_map(data["tiers"], origin=f"{origin}.tiers")
+        )
+    if "models" in data:
+        state["models"] = _deep_merge(
+            state["models"], _coerce_models_map(data["models"], origin=f"{origin}.models")
+        )
+    if "provider_hosts" in data and isinstance(data["provider_hosts"], dict):
+        for prov, spec in data["provider_hosts"].items():
+            if isinstance(spec, dict):
+                state["provider_hosts"][str(prov)] = {
+                    "forbid": list(spec.get("forbid") or []),
+                    "prefer": list(spec.get("prefer") or []),
+                }
+    if "final" in data:
+        name = as_name(data["final"])
+        if name:
+            state["final"] = name
+    elif "final_tier" in data:
+        name = as_name(data["final_tier"])
+        if name:
+            state["final"] = name
+    if "final_voice" in data:
+        state["final_voice"] = bool(data["final_voice"])
+    if "rest_on_high" in data:
+        state["rest_on_high"] = bool(data["rest_on_high"])
+    elif "rest_on_final_tier" in data:
+        state["rest_on_high"] = bool(data["rest_on_final_tier"])
+    if "escalate_max" in data:
+        name = as_name(data["escalate_max"])
+        if name:
+            state["escalate_max"] = name
+    if "escalation_errors" in data and isinstance(data["escalation_errors"], dict):
+        errors: dict[str, int] = {}
+        extra: list[str] = []
+        for key, val in data["escalation_errors"].items():
+            name = as_name(key)
+            if name is None:
+                extra.append(str(key))
+                continue
+            errors[name] = int(val)
+        if extra:
+            raise SettingsError(
+                f"model-router: {origin}.escalation_errors has unknown keys {extra}; "
+                "only low, medium, high are allowed"
+            )
+        state["escalation_errors"] = errors
+    if "skip_platforms" in data and isinstance(data["skip_platforms"], list):
+        state["skip_platforms"] = [str(x) for x in data["skip_platforms"]]
+    if data.get("classifier_system"):
+        state["classifier_system"] = str(data["classifier_system"])
+    if data.get("final_voice_system"):
+        state["final_voice_system"] = str(data["final_voice_system"])
 
-    for candidate in (
-        _PLUGIN_DIR / "config.json",
-        Path(os.environ["MODEL_ROUTER_CONFIG"]) if os.environ.get("MODEL_ROUTER_CONFIG") else None,
+
+def _env_first(*keys: str) -> str | None:
+    for key in keys:
+        val = os.environ.get(key)
+        if val:
+            return val
+    return None
+
+
+def load_settings() -> dict[str, Any]:
+    state: dict[str, Any] = {
+        "models": deepcopy(DEFAULT_MODELS),
+        "provider_hosts": deepcopy(DEFAULT_PROVIDER_HOSTS),
+        "final": "high",
+        "final_voice": True,
+        "rest_on_high": True,
+        "escalate_max": "high",
+        "escalation_errors": {"low": 4, "medium": 3},
+        "skip_platforms": ["cron", "subagent"],
+        "classifier_system": None,
+        "final_voice_system": None,
+    }
+
+    for candidate, origin in (
+        (_PLUGIN_DIR / "config.json", "config.json"),
+        (
+            Path(os.environ["MODEL_ROUTER_CONFIG"]) if os.environ.get("MODEL_ROUTER_CONFIG") else None,
+            "MODEL_ROUTER_CONFIG",
+        ),
     ):
         if candidate is None:
             continue
         data = _load_json(candidate)
-        if not data:
-            continue
-        if "tiers" in data:
-            tiers = _deep_merge(tiers, _as_int_keys(data["tiers"]))
-        if "provider_hosts" in data and isinstance(data["provider_hosts"], dict):
-            for prov, spec in data["provider_hosts"].items():
-                if isinstance(spec, dict):
-                    provider_hosts[str(prov)] = {
-                        "forbid": list(spec.get("forbid") or []),
-                        "prefer": list(spec.get("prefer") or []),
-                    }
-        if "final_tier" in data:
-            try:
-                final_tier = int(data["final_tier"])
-            except (TypeError, ValueError):
-                pass
-        if "final_voice" in data:
-            final_voice = bool(data["final_voice"])
-        if "rest_on_final_tier" in data:
-            rest_on_final = bool(data["rest_on_final_tier"])
-        if "escalate_max" in data:
-            try:
-                escalate_max = int(data["escalate_max"])
-            except (TypeError, ValueError):
-                pass
-        if "escalation_errors" in data and isinstance(data["escalation_errors"], dict):
-            escalation_errors = {
-                int(k): int(v) for k, v in data["escalation_errors"].items()
-            }
-        if "skip_platforms" in data and isinstance(data["skip_platforms"], list):
-            skip_platforms = [str(x) for x in data["skip_platforms"]]
-        if data.get("classifier_system"):
-            classifier_system = str(data["classifier_system"])
-        if data.get("final_voice_system"):
-            final_voice_system = str(data["final_voice_system"])
+        if data:
+            _apply_file(data, state, origin=origin)
 
-    for n in list(tiers):
-        prefix = f"MODEL_ROUTER_T{n}_"
-        model = os.environ.get(prefix + "MODEL")
-        provider = os.environ.get(prefix + "PROVIDER")
-        label = os.environ.get(prefix + "LABEL")
+    models = state["models"]
+    extra = [name for name in models if name not in RANK]
+    if extra:
+        raise SettingsError(
+            f"model-router: unknown models {extra}; only low, medium, high are allowed"
+        )
+    if len(models) > 3:
+        raise SettingsError("model-router: a fourth model is not allowed")
+
+    env_slots = (
+        ("low", "MODEL_ROUTER_LOW_", "MODEL_ROUTER_T1_"),
+        ("medium", "MODEL_ROUTER_MEDIUM_", "MODEL_ROUTER_T2_"),
+        ("high", "MODEL_ROUTER_HIGH_", "MODEL_ROUTER_T3_"),
+    )
+    for name, primary, alias in env_slots:
+        model = _env_first(primary + "MODEL", alias + "MODEL")
+        provider = _env_first(primary + "PROVIDER", alias + "PROVIDER")
+        label = _env_first(primary + "LABEL", alias + "LABEL")
         if model:
-            tiers[n]["model"] = model.strip()
+            models[name]["model"] = model.strip()
         if provider:
-            tiers[n]["provider"] = provider.strip()
+            models[name]["provider"] = provider.strip()
         if label:
-            tiers[n]["label"] = label.strip()
-            tiers[n].setdefault("short", label.strip().split()[0])
+            models[name]["label"] = label.strip()
+            models[name].setdefault("short", label.strip().split()[0])
 
-    env_final = os.environ.get("MODEL_ROUTER_FINAL_TIER")
+    env_final = _env_first("MODEL_ROUTER_FINAL", "MODEL_ROUTER_FINAL_TIER")
     if env_final:
-        try:
-            final_tier = int(env_final)
-        except ValueError:
-            pass
-    final_voice = _truthy(os.environ.get("MODEL_ROUTER_FINAL_VOICE"), final_voice)
-    rest_on_final = _truthy(os.environ.get("MODEL_ROUTER_REST_ON_FINAL"), rest_on_final)
+        name = as_name(env_final)
+        if name:
+            state["final"] = name
+    state["final_voice"] = _truthy(os.environ.get("MODEL_ROUTER_FINAL_VOICE"), state["final_voice"])
+    if os.environ.get("MODEL_ROUTER_REST_ON_HIGH") is not None:
+        state["rest_on_high"] = _truthy(os.environ.get("MODEL_ROUTER_REST_ON_HIGH"), state["rest_on_high"])
+    elif os.environ.get("MODEL_ROUTER_REST_ON_FINAL") is not None:
+        state["rest_on_high"] = _truthy(os.environ.get("MODEL_ROUTER_REST_ON_FINAL"), state["rest_on_high"])
 
-    if final_tier not in tiers:
-        final_tier = max(tiers) if tiers else 3
-    escalate_max = max(tiers) if tiers else escalate_max
+    if state["final"] not in models:
+        state["final"] = "high" if "high" in models else next(iter(models))
+    if state["escalate_max"] not in models:
+        state["escalate_max"] = "high" if "high" in models else state["final"]
 
-    for n, meta in tiers.items():
-        meta.setdefault("short", f"T{n}")
-        meta.setdefault("label", f"T{n}")
+    for name, meta in models.items():
+        meta.setdefault("short", name.capitalize())
+        meta.setdefault("label", name.capitalize())
         meta.setdefault("role", "")
         meta.setdefault("best_for", [])
 
-    if not classifier_system:
-        classifier_system = _generated_classifier(tiers)
-    if not final_voice_system:
-        final_voice_system = _generated_final_voice(tiers, final_tier)
+    if not state["classifier_system"]:
+        state["classifier_system"] = _generated_classifier(models)
+    if not state["final_voice_system"]:
+        state["final_voice_system"] = _generated_final_voice(models, state["final"])
 
-    return {
-        "tiers": tiers,
-        "final_tier": final_tier,
-        "final_voice": final_voice,
-        "rest_on_final_tier": rest_on_final,
-        "escalate_max": escalate_max,
-        "escalation_errors": escalation_errors,
-        "skip_platforms": frozenset(skip_platforms),
-        "provider_hosts": provider_hosts,
-        "classifier_system": classifier_system,
-        "final_voice_system": final_voice_system,
-    }
+    return state
 
 
 _SETTINGS = load_settings()
 
-TIERS: dict[int, dict[str, Any]] = _SETTINGS["tiers"]
-FINAL_TIER: int = _SETTINGS["final_tier"]
+MODELS: dict[str, dict[str, Any]] = _SETTINGS["models"]
+FINAL: str = _SETTINGS["final"]
 FINAL_VOICE: bool = _SETTINGS["final_voice"]
-REST_ON_FINAL: bool = _SETTINGS["rest_on_final_tier"]
-ESCALATE_MAX: int = _SETTINGS["escalate_max"]
-ESCALATION_ERROR_THRESHOLD_BY_TIER: dict[int, int] = _SETTINGS["escalation_errors"]
-SKIP_PLATFORMS: frozenset[str] = _SETTINGS["skip_platforms"]
+REST_ON_HIGH: bool = _SETTINGS["rest_on_high"]
+ESCALATE_MAX: str = _SETTINGS["escalate_max"]
+ESCALATION_ERRORS: dict[str, int] = _SETTINGS["escalation_errors"]
+SKIP_PLATFORMS: frozenset[str] = frozenset(_SETTINGS["skip_platforms"])
 PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = _SETTINGS["provider_hosts"]
 CLASSIFIER: str = _SETTINGS["classifier_system"]
 FINAL_VOICE_SYSTEM: str = _SETTINGS["final_voice_system"]
-TIER_DIGITS = "".join(str(n) for n in sorted(TIERS))
-MIN_TIER = min(TIERS) if TIERS else 1
-MAX_TIER = max(TIERS) if TIERS else 3
 
 
-def webui_tiers() -> list[dict[str, str]]:
+def webui_models() -> list[dict[str, str]]:
     out = []
-    for n, meta in sorted(TIERS.items()):
+    for name in NAMES:
+        if name not in MODELS:
+            continue
+        meta = MODELS[name]
+        label = str(meta.get("label") or name.capitalize())
         out.append(
             {
-                "cmd": f"/t{n}",
-                "label": str(meta.get("label") or f"T{n}"),
-                "short": str(meta.get("short") or f"T{n}"),
+                "cmd": f"/{name}",
+                "label": label,
+                "short": str(meta.get("short") or name.capitalize()),
                 "model": str(meta.get("model") or ""),
-                "title": f"Pin {meta.get('label') or f'T{n}'}",
+                "title": f"Pin {label}",
             }
         )
+    out.append(
+        {
+            "cmd": "/auto",
+            "label": "Auto",
+            "short": "Auto",
+            "model": "",
+            "title": "Resume per-turn routing",
+        }
+    )
     return out

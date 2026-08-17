@@ -1,17 +1,17 @@
 """model-router — configurable per-turn cost routing for Hermes.
 
-Default map is a 3-tier cheap / work / voice ladder. Models, providers,
-labels, final-voice, and rest-on-final are config — see settings.py and
+Exactly three named models: low < medium < high. Models, providers,
+labels, final-voice, and rest-on-high are config — see settings.py and
 config.default.json. Override via config.json or MODEL_ROUTER_* env.
 
 Policy:
-  • Work loop stays on the classified tier for the full multi-tool turn.
-  • Multi-sentence user messages floor at the middle tier.
-  • Tool-error escalation may climb toward the final tier and de-escalate back.
-  • End of turn: optional one-shot final-voice polish when still off the voice tier.
-  • Manual /tN pins win over auto final-voice.
+  • Work loop stays on the classified model for the full multi-tool turn.
+  • Multi-sentence user messages floor at medium.
+  • Tool-error escalation may climb toward high and de-escalate back.
+  • End of turn: optional one-shot final-voice polish when still off high.
+  • Manual /low /medium /high pins win over auto final-voice.
   • Every pre_api_request re-heals half-switch (model name on the wrong API host).
-  • post_llm_call optionally rests on the final tier between turns.
+  • post_llm_call optionally rests on high between turns.
 
 No Hermes/WebUI core file edits. Live switch uses AIAgent.switch_model via
 the same hermes_cli.model_switch resolver as /model (native providers, not
@@ -50,20 +50,21 @@ def _import_settings() -> Any:
 
 
 _s = _import_settings()
-TIERS = _s.TIERS
-_FINAL_TIER = _s.FINAL_TIER
+MODELS = _s.MODELS
+NAMES = _s.NAMES
+RANK = _s.RANK
+as_name = _s.as_name
+_FINAL = _s.FINAL
 _FINAL_VOICE = _s.FINAL_VOICE
-_REST_ON_FINAL = _s.REST_ON_FINAL
+_REST_ON_HIGH = _s.REST_ON_HIGH
 _ESCALATE_MAX = _s.ESCALATE_MAX
-_ESCALATION_ERROR_THRESHOLD_BY_TIER = _s.ESCALATION_ERROR_THRESHOLD_BY_TIER
+_ESCALATION_ERRORS = _s.ESCALATION_ERRORS
 _SKIP_PLATFORMS = _s.SKIP_PLATFORMS
 _PROVIDER_HOSTS = _s.PROVIDER_HOSTS
 _CLASSIFIER = _s.CLASSIFIER
 _FINAL_VOICE_SYSTEM = _s.FINAL_VOICE_SYSTEM
-_TIER_DIGITS = _s.TIER_DIGITS
-_MIN_TIER = _s.MIN_TIER
-_MAX_TIER = _s.MAX_TIER
-_MID_TIER = sorted(TIERS)[1] if len(TIERS) > 1 else _MIN_TIER
+_MIN = "low"
+_MID = "medium"
 
 
 def _attach_file_handler() -> None:
@@ -85,12 +86,24 @@ def _attach_file_handler() -> None:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-# Escalation may climb toward the final (voice) tier; post_llm_call
-# de-escalates back to the classified work base.
+# Escalation may climb toward high; post_llm_call de-escalates back
+# to the classified work base.
 
 
-def _escalation_threshold(tier: int) -> int:
-    return _ESCALATION_ERROR_THRESHOLD_BY_TIER.get(tier, 3)
+def _rank(name: str) -> int:
+    return RANK.get(name, RANK[_MID])
+
+
+def _higher(name: str) -> str:
+    i = _rank(name)
+    nxt = NAMES[min(i + 1, len(NAMES) - 1)]
+    if _rank(nxt) > _rank(_ESCALATE_MAX):
+        return _ESCALATE_MAX
+    return nxt
+
+
+def _escalation_threshold(name: str) -> int:
+    return _ESCALATION_ERRORS.get(name, 3)
 
 
 # A real tool error has a non-empty "error" value or "failed": true.
@@ -101,8 +114,14 @@ _ERROR_PAT = re.compile(r'"(?:error|failed)"\s*:\s*(?!\s*null\b)(?!\s*false\b)(?
 # subagent = delegate_task children: model is pinned by the delegation
 # config; their output is intermediate work, not a user-facing reply.
 
-_TIER_RE = re.compile(rf"(?:^|(?<=\s)|(?<=\())[tT]([{_TIER_DIGITS}])(?:\b|(?=\)))")
-_TIER_WORD_RE = re.compile(rf"(?:^|(?<=\s)|(?<=\())tier\s*([{_TIER_DIGITS}])", re.IGNORECASE)
+_NAME_RE = re.compile(
+    r"(?:^|(?<=\s)|(?<=\())(?:/?(low|medium|high)|/?t([123]))(?:\b|(?=\)))",
+    re.IGNORECASE,
+)
+_TIER_WORD_RE = re.compile(
+    r"(?:^|(?<=\s)|(?<=\())tier\s*([123])",
+    re.IGNORECASE,
+)
 _ACK_RE = re.compile(
     r"^(ok|okay|thanks|thank you|thx|got it|understood|sure|yes|no|yep|nope|"
     r"alright|cool|great|nice|perfect|done|noted|ack|hello|hi|hey)"
@@ -114,9 +133,12 @@ _WEBUI_WORKSPACE_RE = re.compile(
     r"^\[Workspace::v1:\s*[^\]]+\]\s*",
     re.IGNORECASE,
 )
-# Explicit pin-style requests only — bare "T1" inside a long critique is NOT a pin.
+# Explicit pin-style requests only — bare "low" inside a long critique is NOT a pin.
 _EXPLICIT_REQ_RE = re.compile(
-    rf"(?:^|\s)(?:/t([{_TIER_DIGITS}])\b|(?:use|pin|switch\s+to|run\s+(?:on|at)|please\s+use)\s+t([{_TIER_DIGITS}])\b)",
+    r"(?:^|\s)(?:/"
+    r"(?:(low|medium|high)|t([123]))\b"
+    r"|(?:use|pin|switch\s+to|run\s+(?:on|at)|please\s+use)\s+"
+    r"(?:(low|medium|high)|t([123]))\b)",
     re.IGNORECASE,
 )
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?]+\s+|\n+")
@@ -126,12 +148,12 @@ _live_agents: dict[str, Any] = {}
 _last_bound: tuple[str, Any] | None = None
 _last_user_sid: str = ""  # session of the most recent real user turn (command anchor)
 _pinned: dict[str, bool] = {}
-_last_tier: dict[str, int] = {}
-_base_tier: dict[str, int] = {}
-_last_msg: dict[str, tuple[str, int]] = {}
+_last_tier: dict[str, str] = {}
+_base_tier: dict[str, str] = {}
+_last_msg: dict[str, tuple[str, str]] = {}
 _tool_errors: dict[str, int] = {}
 _escalated: dict[str, bool] = {}
-_pending: dict[str, int] = {}  # classified but not yet applied
+_pending: dict[str, str] = {}  # classified but not yet applied
 _tools_this_turn: dict[str, int] = {}
 _user_msg: dict[str, str] = {}  # original user message for final-voice polish
 _ack_turn: dict[str, bool] = {}
@@ -284,8 +306,8 @@ def _install_agent_capture() -> None:
     logger.info("model-router: AIAgent capture installed")
 
 
-def _apply_tier(agent: Any, tier: int) -> bool:
-    meta = TIERS.get(tier)
+def _apply_tier(agent: Any, name: str) -> bool:
+    meta = MODELS.get(name)
     if not meta or agent is None:
         return False
     model = meta["model"]
@@ -320,13 +342,13 @@ def _apply_tier(agent: Any, tier: int) -> bool:
             custom_providers=cfg.get("custom_providers"),
         )
     except Exception as exc:
-        logger.warning("model-router: resolve T%d failed: %s", tier, exc)
+        logger.warning("model-router: resolve %s failed: %s", name, exc)
         return False
 
     if not getattr(result, "success", False):
         logger.warning(
-            "model-router: resolve T%d failed: %s",
-            tier,
+            "model-router: resolve %s failed: %s",
+            name,
             getattr(result, "error_message", "unknown"),
         )
         return False
@@ -335,16 +357,16 @@ def _apply_tier(agent: Any, tier: int) -> bool:
     resolved_prov = getattr(result, "target_provider", None) or provider
     if not resolved_base:
         logger.warning(
-            "model-router: resolve T%d returned empty base_url for %s/%s",
-            tier,
+            "model-router: resolve %s returned empty base_url for %s/%s",
+            name,
             resolved_prov,
             getattr(result, "new_model", model),
         )
         return False
     if not _base_url_matches_provider(resolved_base, resolved_prov):
         logger.warning(
-            "model-router: resolve T%d host mismatch provider=%s base_url=%s",
-            tier,
+            "model-router: resolve %s host mismatch provider=%s base_url=%s",
+            name,
             resolved_prov,
             resolved_base,
         )
@@ -359,12 +381,12 @@ def _apply_tier(agent: Any, tier: int) -> bool:
             result.api_mode or "",
         )
     except Exception as exc:
-        logger.warning("model-router: switch_model T%d failed: %s", tier, exc)
+        logger.warning("model-router: switch_model %s failed: %s", name, exc)
         return False
 
-    # switch_model does not touch reasoning_config. Final-tier effort
-    # must not leak onto cheaper tiers (wasted tokens or provider 400s).
-    if tier != _FINAL_TIER:
+    # switch_model does not touch reasoning_config. High-model effort
+    # must not leak onto cheaper slots (wasted tokens or provider 400s).
+    if name != _FINAL:
         agent.reasoning_config = None
 
     # Prefer agent attributes; fall back to what we just applied.
@@ -393,8 +415,8 @@ def _apply_tier(agent: Any, tier: int) -> bool:
         return False
     if not _base_url_matches_provider(live_base, resolved_prov):
         logger.warning(
-            "model-router: post-switch base_url still wrong for T%d: provider=%s base_url=%s",
-            tier,
+            "model-router: post-switch base_url still wrong for %s: provider=%s base_url=%s",
+            name,
             resolved_prov,
             live_base,
         )
@@ -410,30 +432,47 @@ def _apply_tier(agent: Any, tier: int) -> bool:
     return True
 
 
-def _detect_explicit_tier(msg: str) -> int | None:
-    """Only honor pin-style or short single-tier requests — not meta discussion."""
-    text = _strip_platform_prefix(msg)
-    reqs: set[int] = set()
-    for m in _EXPLICIT_REQ_RE.finditer(text):
-        g = m.group(1) or m.group(2)
-        if g:
-            reqs.add(int(g))
-    if reqs:
-        return max(reqs)
+def _token_to_name(*parts: str | None) -> str | None:
+    for part in parts:
+        if not part:
+            continue
+        name = as_name(part)
+        if name:
+            return name
+    return None
 
-    mentions = {int(m) for m in _TIER_RE.findall(text)}
-    mentions |= {int(m) for m in _TIER_WORD_RE.findall(text)}
+
+def _detect_explicit_tier(msg: str) -> str | None:
+    """Only honor pin-style or short single-model requests — not meta discussion."""
+    text = _strip_platform_prefix(msg)
+    reqs: set[str] = set()
+    for m in _EXPLICIT_REQ_RE.finditer(text):
+        name = _token_to_name(*m.groups())
+        if name:
+            reqs.add(name)
+    if reqs:
+        return max(reqs, key=_rank)
+
+    mentions: set[str] = set()
+    for m in _NAME_RE.finditer(text):
+        name = _token_to_name(*m.groups())
+        if name:
+            mentions.add(name)
+    for m in _TIER_WORD_RE.finditer(text):
+        name = as_name(m.group(1))
+        if name:
+            mentions.add(name)
     if len(mentions) != 1:
         return None
-    # Short messages like "t2 please" / "T3" only.
+    # Short messages like "medium please" / "high" only.
     words = text.split()
     if len(words) <= 6:
         return next(iter(mentions))
     return None
 
 
-def _classify(user_message: str, history: list) -> int:
-    """Return 1-3. Fail-open to T2 (upstream default) — never silent T1 on errors."""
+def _classify(user_message: str, history: list) -> str:
+    """Return low|medium|high. Fail-open to medium — never silent low on errors."""
     try:
         from agent.auxiliary_client import call_llm
 
@@ -461,26 +500,35 @@ def _classify(user_message: str, history: list) -> int:
         response = call_llm(
             task="triage_specifier",
             messages=messages,
-            max_tokens=3,
+            max_tokens=8,
             temperature=0.0,
         )
         raw = (response.choices[0].message.content or "").strip()
-        digit = re.search(rf"[{_TIER_DIGITS}]", raw)
+        raw_l = raw.lower()
+        found = [n for n in NAMES if re.search(rf"\b{n}\b", raw_l)]
+        if len(found) == 1:
+            return found[0]
+        hidden = as_name(raw)
+        if hidden:
+            return hidden
+        digit = re.search(r"\b[tT]?([123])\b", raw)
         if digit:
-            return int(digit.group())
-        logger.warning("model-router: classifier non-digit %r — default mid tier", raw[:40])
+            mapped = as_name(digit.group(1))
+            if mapped:
+                return mapped
+        logger.warning("model-router: classifier non-name %r — default medium", raw[:40])
     except Exception as exc:
-        logger.warning("model-router: classifier failed (%s) — default mid tier", exc)
-    return _MID_TIER
+        logger.warning("model-router: classifier failed (%s) — default medium", exc)
+    return _MID
 
 
-def _target_tier(session_id: str, msg: str, history: list) -> int:
+def _target_tier(session_id: str, msg: str, history: list) -> str:
     with _lock:
         cached = _last_msg.get(session_id)
         is_new = cached is None or cached[0] != msg
     if not is_new:
         with _lock:
-            return _last_tier.get(session_id, _MID_TIER)
+            return _last_tier.get(session_id, _MID)
 
     with _lock:
         _tool_errors[session_id] = 0
@@ -496,25 +544,25 @@ def _target_tier(session_id: str, msg: str, history: list) -> int:
     explicit = _detect_explicit_tier(msg)
     reason = "classify"
     if explicit is not None:
-        tier = explicit
+        name = explicit
         reason = "explicit"
     elif is_ack:
-        tier = _MIN_TIER
+        name = _MIN
         reason = "ack"
     else:
-        tier = _classify(msg, history)
+        name = _classify(msg, history)
         reason = "classify"
-        # Deterministic floor: multi-sentence work is never the cheapest tier.
-        if tier < _MID_TIER and n_sent > 1:
-            tier = _MID_TIER
+        # Deterministic floor: multi-sentence work is never the cheapest model.
+        if _rank(name) < _rank(_MID) and n_sent > 1:
+            name = _MID
             reason = "classify+multi_sentence_floor"
-        elif tier < _MID_TIER and len(words) > 12:
-            tier = _MID_TIER
+        elif _rank(name) < _rank(_MID) and len(words) > 12:
+            name = _MID
             reason = "classify+length_floor"
 
     logger.info(
-        "model-router: route T%d (%s) words=%d sentences=%d preview=%r",
-        tier,
+        "model-router: route %s (%s) words=%d sentences=%d preview=%r",
+        name,
         reason,
         len(words),
         n_sent,
@@ -522,45 +570,45 @@ def _target_tier(session_id: str, msg: str, history: list) -> int:
     )
 
     with _lock:
-        _last_msg[session_id] = (msg, tier)
-        _base_tier[session_id] = tier
-        _last_tier[session_id] = tier
-        _pending[session_id] = tier
+        _last_msg[session_id] = (msg, name)
+        _base_tier[session_id] = name
+        _last_tier[session_id] = name
+        _pending[session_id] = name
         _ack_turn[session_id] = is_ack and explicit is None
-    return tier
+    return name
 
 
 def _is_final_model(model: str | None) -> bool:
-    """True if *model* looks like the configured final/voice tier."""
+    """True if *model* looks like the configured final/voice model."""
     m = _norm(model or "")
     if not m:
         return False
-    final = TIERS.get(_FINAL_TIER) or {}
+    final = MODELS.get(_FINAL) or {}
     want = _norm(str(final.get("model") or ""))
     if want and (m == want or m.endswith("/" + want) or want in m):
         return True
     return False
 
 
-def _force_tier(session_id: str, tier: int, reason: str) -> None:
-    """Apply tier and bookkeep; mark escalated when climbing above base."""
+def _force_tier(session_id: str, name: str, reason: str) -> None:
+    """Apply model and bookkeep; mark escalated when climbing above base."""
     with _lock:
-        base = _base_tier.get(session_id, tier)
+        base = _base_tier.get(session_id, name)
         prev = _last_tier.get(session_id, base)
-        if tier > base:
+        if _rank(name) > _rank(base):
             _escalated[session_id] = True
-        _last_tier[session_id] = tier
-        _pending[session_id] = tier
-    if tier != prev:
+        _last_tier[session_id] = name
+        _pending[session_id] = name
+    if name != prev:
         logger.info(
-            "model-router: force %s (was T%d → T%d) — %s",
-            TIERS[tier]["label"],
+            "model-router: force %s (was %s → %s) — %s",
+            MODELS[name]["label"],
             prev,
-            tier,
+            name,
             reason,
         )
     agent = _get_agent(session_id)
-    if agent is not None and _apply_tier(agent, tier):
+    if agent is not None and _apply_tier(agent, name):
         with _lock:
             _pending.pop(session_id, None)
 
@@ -611,10 +659,10 @@ def _final_voice_polish(session_id: str, draft: str, model_hint: str = "") -> st
         user_msg = _user_msg.get(session_id, "")
         is_ack = _ack_turn.get(session_id, False)
         pinned = _pinned.get(session_id, False)
-        last = _last_tier.get(session_id, 1)
+        last = _last_tier.get(session_id, _MIN)
         base = _base_tier.get(session_id, last)
-    if pinned and last < _FINAL_TIER:
-        logger.info("model-router: final voice skip (pinned T%d)", last)
+    if pinned and _rank(last) < _rank(_FINAL):
+        logger.info("model-router: final voice skip (pinned %s)", last)
         return None
     if is_ack:
         return None
@@ -626,15 +674,15 @@ def _final_voice_polish(session_id: str, draft: str, model_hint: str = "") -> st
     if _is_final_model(draft_model) or _is_final_model(live_model):
         logger.info("model-router: final voice skip (already voice model=%s)", draft_model or live_model)
         return None
-    # Classifier/escalation already on the final tier.
-    if last >= _FINAL_TIER and base >= _FINAL_TIER:
-        logger.info("model-router: final voice skip (base T3)")
+    # Classifier/escalation already on the final model.
+    if _rank(last) >= _rank(_FINAL) and _rank(base) >= _rank(_FINAL):
+        logger.info("model-router: final voice skip (base high)")
         return None
 
     try:
         from agent.auxiliary_client import call_llm
 
-        meta = TIERS[_FINAL_TIER]
+        meta = MODELS[_FINAL]
         response = call_llm(
             provider=meta["provider"],
             model=meta["model"],
@@ -662,18 +710,18 @@ def _final_voice_polish(session_id: str, draft: str, model_hint: str = "") -> st
             )
             # Still mark final tier so bookkeeping matches the voice path.
             with _lock:
-                _last_tier[session_id] = _FINAL_TIER
+                _last_tier[session_id] = _FINAL
             return None
         logger.info(
-            "model-router: final voice polish (%d→%d chars) work=T%d",
+            "model-router: final voice polish (%d→%d chars) work=%s",
             len(draft),
             len(polished),
             base if base else last,
         )
         with _lock:
-            _last_tier[session_id] = _FINAL_TIER
+            _last_tier[session_id] = _FINAL
         if agent is not None:
-            _apply_tier(agent, _FINAL_TIER)
+            _apply_tier(agent, _FINAL)
         return polished
     except Exception as exc:
         logger.warning("model-router: final voice polish failed: %s", exc)
@@ -705,9 +753,9 @@ def on_pre_llm_call(
         sid = session_id or ""
         if (user_message or "").strip():
             # A real user turn (not a tool-call continuation) anchors which
-            # session the human is talking in. Slash commands (/t1 /t2 /t3
-            # /auto) are dispatched without session context, so they resolve
-            # against this instead of the racy _last_bound global.
+            # session the human is talking in. Slash commands (/low /medium
+            # /high /auto) are dispatched without session context, so they
+            # resolve against this instead of the racy _last_bound global.
             with _lock:
                 _last_user_sid = sid
         agent = _get_agent(sid)
@@ -720,9 +768,9 @@ def on_pre_llm_call(
             # Still heal half-switch on pinned sessions (WebUI credential refresh).
             if agent is not None:
                 with _lock:
-                    tier = _last_tier.get(sid) or _base_tier.get(sid) or 3
-                _apply_tier(agent, tier)
-            logger.debug("model-router: pinned session %s — skip classify (tier=%s)", sid or "-", _last_tier.get(sid, "-"))
+                    name = _last_tier.get(sid) or _base_tier.get(sid) or _FINAL
+                _apply_tier(agent, name)
+            logger.debug("model-router: pinned session %s — skip classify (model=%s)", sid or "-", _last_tier.get(sid, "-"))
             return
 
         msg = (user_message or "").strip()
@@ -730,26 +778,26 @@ def on_pre_llm_call(
             # Empty hook payload still needs host/model coherence repair.
             if agent is not None:
                 with _lock:
-                    tier = _pending.get(sid) or _last_tier.get(sid) or _FINAL_TIER
-                _apply_tier(agent, tier)
+                    name = _pending.get(sid) or _last_tier.get(sid) or _FINAL
+                _apply_tier(agent, name)
             return
 
-        tier = _target_tier(sid, msg, conversation_history or [])
+        name = _target_tier(sid, msg, conversation_history or [])
         agent = _get_agent(sid)
         if agent is None:
             logger.warning(
-                "model-router: T%d classified, no live agent sid=%s — first call may stay on default",
-                tier,
+                "model-router: %s classified, no live agent sid=%s — first call may stay on default",
+                name,
                 sid or "-",
             )
             return
-        if _apply_tier(agent, tier):
+        if _apply_tier(agent, name):
             with _lock:
                 _pending.pop(sid, None)
         else:
             logger.warning(
-                "model-router: T%d apply failed sid=%s model=%s provider=%s base=%s",
-                tier,
+                "model-router: %s apply failed sid=%s model=%s provider=%s base=%s",
+                name,
                 sid or "-",
                 getattr(agent, "model", "") or "-",
                 getattr(agent, "provider", "") or "-",
@@ -791,14 +839,14 @@ def on_pre_api_request(*, session_id: str = "", platform: str = "", **kwargs: An
                 base = _agent_base_url(agent)
                 if prov and not _base_url_matches_provider(base, prov):
                     m = _norm(getattr(agent, "model", "") or "")
-                    heal = _FINAL_TIER
-                    for n, meta in TIERS.items():
+                    heal = _FINAL
+                    for n, meta in MODELS.items():
                         want = _norm(str(meta.get("model") or ""))
                         if want and (m == want or want in m):
                             heal = n
                             break
                     logger.warning(
-                        "model-router: uncategorized half-switch heal→T%d model=%s base=%s",
+                        "model-router: uncategorized half-switch heal→%s model=%s base=%s",
                         heal,
                         m,
                         base,
@@ -856,24 +904,24 @@ def on_post_tool_call(
             else:
                 _tool_errors[sid] = 0
             count = _tool_errors.get(sid, 0)
-            current = _last_tier.get(sid, 1)
+            current = _last_tier.get(sid, _MIN)
 
-        # Tool-error escalation may climb toward the final tier. Threshold is
-        # per current tier so cheaper tiers can burn more retries first.
+        # Tool-error escalation may climb toward high. Threshold is
+        # per current model so cheaper slots can burn more retries first.
         threshold = _escalation_threshold(current)
-        if is_error and count >= threshold and current < _ESCALATE_MAX:
-            new_tier = min(current + 1, _ESCALATE_MAX)
+        if is_error and count >= threshold and _rank(current) < _rank(_ESCALATE_MAX):
+            new_name = _higher(current)
             _force_tier(
                 sid,
-                new_tier,
-                f"auto-escalate after {count} tool errors (need {threshold} on T{current})",
+                new_name,
+                f"auto-escalate after {count} tool errors (need {threshold} on {current})",
             )
             with _lock:
                 _tool_errors[sid] = 0
             logger.info(
-                "model-router: auto-escalate T%d→T%d after %d tool errors (need %d)",
+                "model-router: auto-escalate %s→%s after %d tool errors (need %d)",
                 current,
-                new_tier,
+                new_name,
                 count,
                 threshold,
             )
@@ -914,30 +962,30 @@ def on_post_llm_call(*, session_id: str = "", model: str = "", **kwargs: Any) ->
                 _tools_this_turn[sid] = 0
                 return
             was = _escalated.get(sid, False)
-            base = _base_tier.get(sid, 1)
-            current = _last_tier.get(sid, 1)
+            base = _base_tier.get(sid, _MIN)
+            current = _last_tier.get(sid, _MIN)
             _tools_this_turn[sid] = 0
 
         # De-escalate bookkeeping back to work base, then optionally rest
-        # on the final/voice tier so the default lineage stays there.
-        if was and current > base:
+        # on high so the default lineage stays there.
+        if was and _rank(current) > _rank(base):
             with _lock:
                 _escalated[sid] = False
                 _last_tier[sid] = base
                 _pending[sid] = base
             logger.info(
-                "model-router: de-escalate T%d→T%d (base)%s",
+                "model-router: de-escalate %s→%s (base)%s",
                 current,
                 base,
-                ", then rest on final tier" if _REST_ON_FINAL else "",
+                ", then rest on high" if _REST_ON_HIGH else "",
             )
 
         # Next pre_llm_call re-classifies and downgrades for work.
-        if _REST_ON_FINAL:
+        if _REST_ON_HIGH:
             with _lock:
-                _last_tier[sid] = _FINAL_TIER
-                _pending[sid] = _FINAL_TIER
-            if _apply_tier(agent, _FINAL_TIER):
+                _last_tier[sid] = _FINAL
+                _pending[sid] = _FINAL
+            if _apply_tier(agent, _FINAL):
                 with _lock:
                     _pending.pop(sid, None)
     except Exception as exc:
@@ -963,21 +1011,21 @@ def _resolve_cmd_sid() -> str:
     return ""
 
 
-def _cmd_pin(raw_args: str, tier: int) -> str:
+def _cmd_pin(raw_args: str, name: str) -> str:
     del raw_args
     sid = _resolve_cmd_sid()
     agent = _get_agent(sid) if sid else _get_agent("")
     if agent is not None and sid:
         bind_agent(sid, agent)
-    meta = TIERS[tier]
+    meta = MODELS[name]
     with _lock:
         _pinned[sid] = True
-        _last_tier[sid] = tier
-        _base_tier[sid] = tier
-        _pending[sid] = tier
+        _last_tier[sid] = name
+        _base_tier[sid] = name
+        _pending[sid] = name
         _ack_turn[sid] = False
-    logger.info("model-router: /t%d pin sid=%s", tier, sid or "-")
-    if agent is not None and _apply_tier(agent, tier):
+    logger.info("model-router: /%s pin sid=%s", name, sid or "-")
+    if agent is not None and _apply_tier(agent, name):
         with _lock:
             _pending.pop(sid, None)
         return f"Pinned to {meta['label']} ({meta['provider']} / {meta['model']}). Auto-routing paused. /auto to resume."
@@ -1033,20 +1081,24 @@ def register(ctx: Any) -> None:
     ctx.register_hook("post_tool_call", on_post_tool_call)
     ctx.register_hook("transform_llm_output", on_transform_llm_output)
     ctx.register_hook("post_llm_call", on_post_llm_call)
-    for n, meta in sorted(TIERS.items()):
-        label = meta.get("label") or f"T{n}"
+    for name in NAMES:
+        meta = MODELS[name]
+        label = meta.get("label") or name.capitalize()
         ctx.register_command(
-            f"t{n}",
-            lambda args, tier=n: _cmd_pin(args, tier),
+            name,
+            lambda args, n=name: _cmd_pin(args, n),
             f"Pin session to {label} ({meta.get('provider')}/{meta.get('model')})",
         )
+    # Hidden aliases for leftover /t1 /t2 /t3 muscle-memory. Not documented.
+    for alias, name in (("t1", "low"), ("t2", "medium"), ("t3", "high")):
+        ctx.register_command(alias, lambda args, n=name: _cmd_pin(args, n), "")
     ctx.register_command("auto", _cmd_auto, "Resume model-router auto routing")
-    labels = " / ".join(f"T{n} {TIERS[n].get('label')}" for n in sorted(TIERS))
+    labels = " / ".join(f"{n} {MODELS[n].get('label')}" for n in NAMES)
     logger.info(
         "model-router: %s | work-loop=classify | final_voice=%s rest=%s | "
-        "escalate≤T%d | /tN /auto | no SOUL writes",
+        "escalate≤%s | /low /medium /high /auto | no SOUL writes",
         labels,
         _FINAL_VOICE,
-        _REST_ON_FINAL,
+        _REST_ON_HIGH,
         _ESCALATE_MAX,
     )

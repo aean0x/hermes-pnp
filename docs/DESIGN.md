@@ -93,7 +93,8 @@ hermes-pnp/
       default.nix                # composer: imports below
       agent.nix                  # official module + pairing opinions
       webui.nix                  # official webui + pairing defaults
-      plugins.nix                # exists; keep API
+      plugins.nix                # plugins list + extraPlugins + pluginInstall
+      models.nix                 # seed official settings from models.*
       toolbox.nix                # extraPackages + PATH
       runtime.nix                # extra binds; optional s6
       package.nix                # shared package + bundled-share env
@@ -141,7 +142,8 @@ option PnP set via `mkDefault`.
 
 ### User-facing options
 
-Keep existing names. Add only what a consumer must say to compose.
+Official option names stay. Flatten PnP extras so a consumer flake
+reads like a short list — comment a line to drop a thing.
 
 **Official (passthrough — do not wrap):**
 
@@ -163,34 +165,36 @@ Keep existing names. Add only what a consumer must say to compose.
 - `services.hermesPnP.enable` — composer on. Default `false`.
   When true: WebUI enable defaults on, pairing defaults apply,
   package/share env is injected.
+- `services.hermesPnP.models.{low,medium,high}` — `{ provider, model }`.
+  One block seeds official settings, model-router `config.json`, and
+  WebUI commands. See **Three models**.
+- `services.hermesPnP.plugins` — `listOf str` catalog names.
+  Composer on defaults via `mkDefault` to model-router,
+  tool-call-coherency, secret-handoff. Composer off defaults to `[]`.
+- `services.hermesPnP.extraPlugins` — `attrsOf path` beside the catalog.
 - `services.hermesPnP.webui.enable` — default `true` when composer
   is on. Escape hatch to run gateway-only.
-- `services.hermesPnP.plugins.enable` — list of catalog names.
-  Already exists. Keep.
-- `services.hermesPnP.plugins.extraPlugins` — already exists. Keep.
-- `services.hermesPnP.plugins.modelRouter.settings` — already exists.
 - `services.hermesPnP.toolbox.enable` — default `true` when composer
   is on. Installs a small curated extraPackages set onto the official
-  `container.extraPackages` / native `environment.systemPackages` path.
+  `extraPackages` / native `environment.systemPackages` path.
 - `services.hermesPnP.toolbox.extraPackages` — append-only.
-- `services.hermesPnP.runtime.mode` — `"upstream"` (default) or `"s6"`.
-  Upstream = official `container.enable` path, untouched.
-  `s6` = optional docker+s6 pairing extracted from rk3588. Not the
-  default. Drop-in native users must not be forced onto s6.
-- `services.hermesPnP.runtime.extraBindMounts` — list of host paths
-  appended to official `container.extraVolumes` (upstream mode) or
-  the s6 `-v` list (s6 mode).
-- `services.hermesPnP.packageFixes.silenceMarkers` — default `true`.
-  Upstream `_is_token` still uses singular `_canonical_silence_candidate`,
-  so `**[SILENT]**` / `*NO_REPLY*` fail. Patch via PYTHONPATH. Escape
-  hatch for when upstream ships the plural form.
 - `services.hermesPnP.gbrain.enable` — default `false`. Thin: set
-  `settings.mcp_servers.gbrain.url` (mkDefault) and export
-  `GBRAIN_MCP_URL` / `GBRAIN_TOKEN_FILE` for the first-party plugins.
-  Does **not** start `gbrain serve`, manage PGLite, or declare sources.
+  `services.hermes-agent.mcpServers.gbrain.url` (mkDefault) and export
+  `GBRAIN_MCP_URL` / `GBRAIN_TOKEN_FILE`. Appends the two gbrain
+  plugins if missing. Does **not** start `gbrain serve`.
 - `services.hermesPnP.gbrain.url` — default `http://127.0.0.1:3131/mcp`.
 - `services.hermesPnP.gbrain.tokenFile` — optional path. Injected as
   env, never read into Nix.
+- `services.hermesPnP.mcpProxy.enable` — turns on `services.mcpProxy`.
+  Backends stay under `services.mcpProxy.*`.
+- `services.hermesPnP.runtime.mode` — `"upstream"` (default) or `"s6"`.
+  `s6` is not implemented (assertion).
+- `services.hermesPnP.runtime.extraBindMounts` — list of host paths
+  appended to official `container.extraVolumes`.
+- `services.hermesPnP.packageFixes.silenceMarkers` — default `true`.
+  Patch via PYTHONPATH. Escape hatch for when upstream ships the plural form.
+- `services.hermesPnP.pluginInstall.*` — installer internals (`stateDir`,
+  `user`, `group`, `webuiExtensionDir`). Not advertised.
 - `services.mcpProxy.*` — unchanged.
 
 ### Defaults PnP sets with `mkDefault` (overridable)
@@ -208,8 +212,57 @@ When `services.hermesPnP.enable = true`:
   similarly small set — not the rk3588 kitchen sink)
 
 When `services.hermesPnP.enable = false`, PnP is inert except for
-explicitly enabled submodules (`plugins.enable`, `mcpProxy.enable`).
+explicitly set `plugins` / `extraPlugins` and `mcpProxy.enable`.
 This preserves today's "library flake" use.
+
+## Three models
+
+Exactly three named models. Not numbered. No fourth model. User-facing
+Nix, README, plugin.yaml, WebUI labels, and slash commands speak
+`low` / `medium` / `high` only.
+
+| name   | role                     | seeds                                   |
+| ------ | ------------------------ | --------------------------------------- |
+| low    | cheap helper             | every auxiliary slot + unpinned cron    |
+| medium | workhorse                | `settings.delegation`                   |
+| high   | session identity + voice | `model.default`, `fallback_model`, rest |
+
+Defaults (opinion, two strings each):
+
+```nix
+models.low    = { provider = "deepseek";  model = "deepseek-v4-flash"; };
+models.medium = { provider = "deepseek";  model = "deepseek-v4-pro"; };
+models.high   = { provider = "xai-oauth"; model = "grok-4.6"; };
+```
+
+When `hermesPnP.enable` (module `nix/modules/models.nix`):
+
+- `settings.model.{provider,default}` ← high
+- `settings.fallback_model.{provider,model}` ← high
+- `settings.delegation.{provider,model}` ← medium
+- `settings.cron.{model,model_provider}` ← low
+- `settings.auxiliary.<slot> = { inherit (models.low) provider model; reasoning_effort = "none"; }`
+
+Auxiliary slots (opinion, not user options) match official
+DEFAULT_CONFIG / rk3588 names: `title_generation` `compression`
+`approval` `web_extract` `skills_hub` `mcp` `triage_specifier`
+`kanban_decomposer` `profile_describer` `curator` `background_review`
+`monitor` `memory_query_rewrite`. Do not seed STT / TTS / vision.
+
+`settings` is official `deepConfigType`. Do **not** wrap those leaves
+in `mkDefault` — the merge stores the wrapper as a literal. Last writer
+wins via `recursiveUpdate`; consumers override by assigning official
+`services.hermes-agent.settings.*` after importing PnP.
+
+Whenever `model-router` is in `plugins`, the installer writes
+`config.json` + `webui/config.js` from the same `models` block. No
+extra Nix overlay option.
+
+Classifier / escalate / rest / polish policy is unchanged: 4 errors on
+low, 3 on medium, rest on high, final voice = high. Hidden load-time
+aliases map leftover `tiers: {"1":…}` / `final_tier: 3` / `/t1` `/t2`
+`/t3` / `MODEL_ROUTER_T1_*` onto the named scheme. They must not appear
+in docs or UI.
 
 ## Drop-in migration
 
@@ -237,7 +290,7 @@ services.hermes-agent = {
   environmentFiles = [ … ];
 };
 services.hermesPnP.enable = true;
-services.hermesPnP.plugins.enable = [
+services.hermesPnP.plugins = [
   "model-router"
   "tool-call-coherency"
   "secret-handoff"
@@ -269,7 +322,7 @@ requires it):
 
 Installer rules (already true, keep):
 
-- Empty `plugins.enable` and no `extraPlugins` → no plugin files.
+- Empty `plugins` and no `extraPlugins` → no plugin files.
 - Materialize real files to `$stateDir/plugins/<name>`.
 - Discover via relative symlink under `$stateDir/.hermes/plugins/`.
 - Gateway unit grows `ReadWritePaths` for both dests when systemd
@@ -384,9 +437,12 @@ Add:
 - `checks.${system}.drop-in` — eval of official-only options (composer
   off) still evaluates; proves we did not break the library path.
 - `checks.${system}.options` — assert the user-facing option paths
-  exist (`services.hermesPnP.plugins.enable`, `webui.enable`,
-  `toolbox.enable`, `runtime.mode`, `gbrain.enable`,
-  `packageFixes.silenceMarkers`).
+  exist (`services.hermesPnP.models.low.model`, `plugins` is a list,
+  `webui.enable`, `toolbox.enable`, `runtime.mode`, `gbrain.enable`,
+  `packageFixes.silenceMarkers`). Assert no `plugins.enable` /
+  `plugins.modelRouter`. Assert composer seeds
+  `settings.auxiliary.triage_specifier.model` from `models.low` and
+  `settings.model.default` from `models.high`.
 
 Do not require a full container image build in default checks.
 
@@ -417,9 +473,9 @@ composer.
 - A config that only sets official `services.hermes-agent.*` and
   `services.hermesPnP.enable = true` evaluates and enables WebUI on
   127.0.0.1:8787 with the same user/package.
-- `services.hermesPnP.plugins.enable = [ "model-router" ]` still
+- `services.hermesPnP.plugins = [ "model-router" ]` still
   materializes the symlink pair.
-- `services.hermesPnP.enable = false` plus `plugins.enable = [ … ]`
+- `services.hermesPnP.enable = false` plus `plugins = [ … ]`
   still works (library path).
 - No new required options. A native user adds one `enable = true`.
 - No HMC module. No gbrain systemd unit. No SOUL.md.
@@ -451,3 +507,23 @@ Deltas from this document vs live upstream at implement time:
   `mkDefault` inside it is stored as a literal.
 - `runtime.mode = "s6"` is a NixOS assertion, not `throw`. A `throw`
   inside `mkIf` is forced during module merge.
+
+## Implementation notes (named models + option beauty)
+
+Shipped as `feat(pnp): named low/medium/high models + option beauty`.
+
+- `plugins` flattened to `listOf str`; `extraPlugins` is a sibling
+  attrset. `pluginInstall.*` holds installer internals.
+- Deleted `plugins.modelRouter.settings`. model-router config is
+  generated from `hermesPnP.models` whenever that plugin is listed.
+- `gbrain.enable` appends the two gbrain plugins if missing. Enabling
+  those plugins does not require `gbrain.enable`.
+- Official `settings` seeds live in `nix/modules/models.nix`. Leaves
+  are not `mkDefault` (deepConfigType stores the wrapper as a literal).
+- Live upstream agrees with spec keys: `model.{provider,default}`,
+  `fallback_model.{provider,model}`, `delegation.{provider,model}`,
+  `cron.{model,model_provider}`, `auxiliary.<slot>.{provider,model,reasoning_effort}`.
+  Official DEFAULT_CONFIG also has `fallback_providers`, `goal_judge`,
+  `tts_audio_tags`, `moa_*`, `vision` — we do not seed those.
+- Plugin surface is `low` / `medium` / `high`. Hidden aliases keep
+  leftover `tiers` / `T1` env / `/t1` from crashing.

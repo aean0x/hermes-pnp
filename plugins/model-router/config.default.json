@@ -1,30 +1,30 @@
 {
-  "tiers": {
-    "1": {
-      "label": "T1 Flash",
-      "short": "T1",
+  "models": {
+    "low": {
+      "label": "Low",
+      "short": "Low",
       "model": "deepseek-v4-flash",
       "provider": "deepseek",
       "role": "fast triage + cheap helper"
     },
-    "2": {
-      "label": "T2 Pro",
-      "short": "T2",
+    "medium": {
+      "label": "Medium",
+      "short": "Medium",
       "model": "deepseek-v4-pro",
       "provider": "deepseek",
-      "role": "default workhorse — coding, review, docs"
+      "role": "default workhorse"
     },
-    "3": {
-      "label": "T3 Voice",
-      "short": "T3",
+    "high": {
+      "label": "High",
+      "short": "High",
       "model": "grok-4.6",
       "provider": "xai-oauth",
-      "role": "high-stakes + final user-facing voice"
+      "role": "high-stakes + final voice"
     }
   },
-  "final_tier": 3,
+  "final": "high",
   "final_voice": true,
-  "rest_on_final_tier": true,
-  "escalate_max": 3,
-  "escalation_errors": { "1": 4, "2": 3 }
+  "rest_on_high": true,
+  "escalate_max": "high",
+  "escalation_errors": { "low": 4, "medium": 3 }
 }

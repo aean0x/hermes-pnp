@@ -1,10 +1,9 @@
 # Official hermes-agent pairing: plugin dest follows the agent identity.
 # First-party plugins are not installed via services.hermes-agent.extraPlugins
 # (that copies into $HERMES_HOME and fights the container /data remap).
-{
-  config,
-  lib,
-  ...
+{ config
+, lib
+, ...
 }:
 
 let
@@ -15,8 +14,8 @@ let
 in
 {
   config = mkIf pnp.enable {
-    services.hermesPnP.plugins.stateDir = mkDefault agent.stateDir;
-    services.hermesPnP.plugins.user = mkDefault agent.user;
-    services.hermesPnP.plugins.group = mkDefault agent.group;
+    services.hermesPnP.pluginInstall.stateDir = mkDefault agent.stateDir;
+    services.hermesPnP.pluginInstall.user = mkDefault agent.user;
+    services.hermesPnP.pluginInstall.group = mkDefault agent.group;
   };
 }

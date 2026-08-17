@@ -2,15 +2,15 @@
   if (window.__modelRouterExtLoaded) return;
   window.__modelRouterExtLoaded = true;
 
-  const DEFAULT_TIERS = [
-    { cmd: "/t1", label: "T1 Flash", short: "T1", model: "deepseek-v4-flash", title: "Pin T1 Flash" },
-    { cmd: "/t2", label: "T2 Pro", short: "T2", model: "deepseek-v4-pro", title: "Pin T2 Pro" },
-    { cmd: "/t3", label: "T3 Voice", short: "T3", model: "grok-4.6", title: "Pin T3 Voice" },
+  const DEFAULT_MODELS = [
+    { cmd: "/low", label: "Low", short: "Low", model: "deepseek-v4-flash", title: "Pin Low" },
+    { cmd: "/medium", label: "Medium", short: "Medium", model: "deepseek-v4-pro", title: "Pin Medium" },
+    { cmd: "/high", label: "High", short: "High", model: "grok-4.6", title: "Pin High" },
   ];
   const cfg = window.__MODEL_ROUTER_CONFIG;
-  const TIERS = Array.isArray(cfg && cfg.tiers) && cfg.tiers.length
-    ? cfg.tiers
-    : DEFAULT_TIERS;
+  const fromCfg = (cfg && (cfg.models || cfg.tiers)) || [];
+  const listed = Array.isArray(fromCfg) ? fromCfg.filter((row) => row && row.cmd !== "/auto") : [];
+  const MODELS = listed.length ? listed : DEFAULT_MODELS;
 
   let lastCmd = "/auto";
   let overlaying = false;
@@ -30,7 +30,7 @@
     const needle = String(modelId || "").trim().toLowerCase();
     if (!needle) return null;
     const tail = needle.split("/").pop();
-    for (const tier of TIERS) {
+    for (const tier of MODELS) {
       if (needle === tier.model || tail === tier.model || needle.endsWith("/" + tier.model)) {
         return tier;
       }
@@ -56,7 +56,7 @@
       }
       return "Auto";
     }
-    const pinned = TIERS.find((t) => t.cmd === lastCmd) || tier;
+    const pinned = MODELS.find((t) => t.cmd === lastCmd) || tier;
     if (!pinned) return lastCmd;
     return shortModel ? `${pinned.short} · ${shortModel}` : pinned.short;
   }
@@ -68,7 +68,7 @@
       if (isBusy() && tier) return `Model Router auto-routing (${tier.label}): ${model}`;
       return "Model Router auto-routing";
     }
-    const pinned = TIERS.find((t) => t.cmd === lastCmd) || tier;
+    const pinned = MODELS.find((t) => t.cmd === lastCmd) || tier;
     if (!pinned) return "Model Router pinned";
     return `Model Router pinned: ${pinned.label}${model ? " → " + model : ""}`;
   }
@@ -161,7 +161,7 @@
       void runSlash("/auto");
     };
     bar.appendChild(autoBtn);
-    for (const spec of TIERS) {
+    for (const spec of MODELS) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "mr-btn";
