@@ -61,12 +61,12 @@ WebUI pairing, plugin symlink scripts, and bundled-share env once the
 composer is on.
 
 `services.hermesPnP.enable = false` (the default) keeps the library
-path: plugins and `services.mcpProxy` only.
+path: plugins and `services.hermesPnP.mcpProxy` only.
 
-MCP backends and filters stay on `services.mcpProxy.*`. Point official
+MCP backends and filters live on `services.hermesPnP.mcpProxy.*`
+(`services.mcpProxy` is an alias). Point official
 `services.hermes-agent.mcpServers.<name>.url` at
-`http://127.0.0.1:3140/<backend>`. `hermesPnP.mcpProxy.enable` only
-flips the unit on.
+`http://127.0.0.1:3140/<backend>`.
 
 ## Three models
 
@@ -118,7 +118,7 @@ PnP does **not** default `extraDependencyGroups` to `["mcp"]`. Native
 - `nixosModules.default` — composer (official agent + webui + PnP extras)
 - `nixosModules.agent` / `nixosModules.webui` — official modules only
 - `nixosModules.plugins` — plugin installer only
-- `nixosModules.mcp-proxy` — `services.mcpProxy` only
+- `nixosModules.mcp-proxy` — `services.hermesPnP.mcpProxy` only (`services.mcpProxy` alias)
 - `nixosModules.toolbox` / `nixosModules.runtime`
 - `packages.<system>.mcp-proxy` and `overlays.default`
 - `plugins.<name>` — raw plugin source paths
@@ -164,17 +164,16 @@ Medium / High. Classifier replies with one of those three words.
 When `model-router` is in `plugins`, Nix writes `config.json` and
 `webui/config.js` from `hermesPnP.models`.
 
-## GBrain (optional, thin)
+## GBrain (optional)
 
-Does not start `gbrain serve`. Sets a default MCP URL and plugin env,
-and installs the two gbrain plugins even if they are not in `plugins`:
+Off by default. When enabled, starts loopback `gbrain serve`
+(`gbrain-mcp-http`), sets the MCP URL + plugin env, and installs the
+two gbrain plugins even if they are not in `plugins`. The CLI is still
+a consumer bootstrap (`bun install -g`). No PGLite / registry from Nix.
 
 ```nix
-services.hermesPnP.gbrain = {
-  enable = true;
-  url = "http://127.0.0.1:3131/mcp";
-  tokenFile = "/var/lib/hermes/home/.gbrain/hermes-mcp.token";
-};
+services.hermesPnP.gbrain.enable = true;
+# url / bind / port / tokenFile have conventional defaults
 ```
 
 Listing the GBrain plugins does not require this hook.
@@ -207,11 +206,10 @@ GBrain tokens stay on `gbrain.tokenFile`, not this file. Site identity
 
 ## MCP proxy
 
-Composer does not auto-enable it. `services.hermesPnP.mcpProxy.enable = true`
-turns on `services.mcpProxy`.
+Composer does not auto-enable it.
 
 ```nix
-services.mcpProxy = {
+services.hermesPnP.mcpProxy = {
   enable = true;
   backends.example = {
     upstream = "https://example.example/mcp";

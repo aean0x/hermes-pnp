@@ -229,20 +229,34 @@ in
 
     gbrain = {
       enable = mkEnableOption ''
-        Thin GBrain hook: mkDefault mcpServers.gbrain.url and export
-        GBRAIN_MCP_URL / GBRAIN_TOKEN_FILE. Does not start gbrain serve.
+        GBrain HTTP MCP: start gbrain-mcp-http (loopback serve), mkDefault
+        mcpServers.gbrain.url, and export GBRAIN_MCP_URL / GBRAIN_TOKEN_FILE.
         Also installs the two gbrain plugins even if they are not listed.
+        Off by default. Does not ship PGLite, sources, or a memory registry.
       '';
 
       url = mkOption {
         type = types.str;
         default = "http://127.0.0.1:3131/mcp";
-        description = "GBrain HTTP MCP URL.";
+        description = "GBrain HTTP MCP URL advertised to the agent.";
+      };
+
+      bind = mkOption {
+        type = types.str;
+        default = "127.0.0.1";
+        description = "Address gbrain serve binds. Keep loopback unless you have a reason.";
+      };
+
+      port = mkOption {
+        type = types.port;
+        default = 3131;
+        description = "Port gbrain serve listens on.";
       };
 
       tokenFile = mkOption {
         type = types.nullOr types.str;
-        default = null;
+        default = "${agent.stateDir}/home/.gbrain/hermes-mcp.token";
+        defaultText = literalExpression ''"''${config.services.hermes-agent.stateDir}/home/.gbrain/hermes-mcp.token"'';
         description = "Path to a token file. Injected as GBRAIN_TOKEN_FILE; never read into Nix.";
       };
     };
@@ -327,12 +341,6 @@ in
         docs/hermes.env.example.
       '';
       example = literalExpression ''[ config.sops.templates.hermesEnv.path ]'';
-    };
-
-    mcpProxy.enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Turn on services.mcpProxy. Backends stay in services.mcpProxy.*.";
     };
 
     packageFixes.silenceMarkers = mkOption {

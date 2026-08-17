@@ -28,6 +28,12 @@ in
   config = mkIf cfg.enable {
     services.hermesPnP.skills.enable = mkDefault true;
 
+    # Host CLI sees $stateDir/skills; the container bind is $stateDir → /data.
+    # settings is deepConfigType — do not wrap in mkDefault.
+    services.hermes-agent.settings.skills.external_dirs = mkIf cfg.skills.enable (
+      [ skillsDir ] ++ lib.optional agent.container.enable "/data/skills"
+    );
+
     systemd.services.hermes-agent-skills = mkIf cfg.skills.enable {
       description = "Materialize hermes-pnp first-party skills";
       wantedBy = [ "multi-user.target" ];

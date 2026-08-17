@@ -1,9 +1,6 @@
 # Hermes PnP composer. Official agent/webui modules are imported from
 # flake.nix (nixosModules.default) so this file stays a plain module.
-{ config
-, lib
-, ...
-}:
+{ ... }:
 {
   imports = [
     ./options.nix
@@ -19,8 +16,4 @@
     ./hmc.nix
     ../../services/mcp-proxy/nix/module.nix
   ];
-
-  config = lib.mkIf config.services.hermesPnP.mcpProxy.enable {
-    services.mcpProxy.enable = true;
-  };
 }

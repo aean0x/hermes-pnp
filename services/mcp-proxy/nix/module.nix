@@ -1,5 +1,7 @@
 # Declarative loopback MCP reverse proxy.
 # Clients talk to 127.0.0.1; this process injects secrets and applies filters.
+# Canonical option tree is services.hermesPnP.mcpProxy; services.mcpProxy
+# is an alias so library-path consumers keep working.
 {
   config,
   lib,
@@ -8,7 +10,7 @@
 }:
 
 let
-  cfg = config.services.mcpProxy;
+  cfg = config.services.hermesPnP.mcpProxy;
   inherit (lib)
     mkEnableOption
     mkIf
@@ -419,7 +421,11 @@ let
   );
 in
 {
-  options.services.mcpProxy = {
+  imports = [
+    (lib.mkAliasOptionModule [ "services" "mcpProxy" ] [ "services" "hermesPnP" "mcpProxy" ])
+  ];
+
+  options.services.hermesPnP.mcpProxy = {
     enable = mkEnableOption "declarative MCP reverse proxy";
 
     listenAddress = mkOption {
@@ -445,15 +451,24 @@ in
     assertions = [
       {
         assertion = enabledBackends != { };
-        message = "services.mcpProxy.enable is true but no backends are enabled";
+        message = "services.hermesPnP.mcpProxy.enable is true but no backends are enabled";
       }
       {
         assertion = lib.all (b: b.upstream != "") (lib.attrValues enabledBackends);
-        message = "every mcpProxy backend needs an upstream URL";
+        message = "every hermesPnP.mcpProxy backend needs an upstream URL";
       }
     ];
 
     environment.systemPackages = [ mcpProxy ];
+
+    systemd.services.hermes-agent = {
+      after = [ "mcp-proxy.service" ];
+      wants = [ "mcp-proxy.service" ];
+    };
+    systemd.services.hermes-webui = {
+      after = [ "mcp-proxy.service" ];
+      wants = [ "mcp-proxy.service" ];
+    };
 
     systemd.services.mcp-proxy = {
       description = "Declarative MCP reverse proxy (secrets + filters)";

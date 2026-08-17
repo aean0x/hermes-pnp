@@ -12,8 +12,8 @@ consumer.
 ## Composer vs library
 
 - `services.hermesPnP.enable = false` (default) keeps the library
-  path: plugins + `services.mcpProxy` only. Official services stay off
-  unless the consumer enables them.
+  path: plugins + `services.hermesPnP.mcpProxy` only. Official services
+  stay off unless the consumer enables them.
 - `services.hermesPnP.enable = true` turns on pairing opinions
   (WebUI, share env, optional silence wrap, toolbox, browser). One extra
   `enable = true` on a native Hermes config.
@@ -42,7 +42,8 @@ consumer.
 
 ## Do not
 
-- Start `gbrain serve` or manage PGLite / sources from Nix.
+- Manage PGLite / sources / a memory registry from Nix. `gbrain.enable`
+  may start loopback `gbrain serve`; it must stay default-off.
 - Write SOUL.md / USER.md / MEMORY.md from Nix.
 - Put secrets in JSON (`mcpServers` may reference env vars only).
 - Rewrite plugin Python unless Nix wiring requires it.
@@ -62,7 +63,7 @@ nix/modules/hmc.nix       # optional hermes-context-manager extraPlugin
 services/browser/          # CDP browser + noVNC handoff (services.hermesPnP.browser)
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
-services/mcp-proxy/       # services.mcpProxy.*
+services/mcp-proxy/       # services.hermesPnP.mcpProxy.* (alias: services.mcpProxy)
 plugins/                  # first-party plugin trees
 skills/                   # first-party skill trees
 ```

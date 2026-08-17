@@ -40,8 +40,10 @@ them. PnP only adds pairing, plugins, and a few extra modules.
 
 ## Non-goals
 
-- Declarative GBrain (PGLite, sources, embeddings, HTTP serve). Tertiary.
-  We expose first-party GBrain *plugins* and a thin optional MCP URL hook.
+- Declarative GBrain *data* (PGLite, sources, embeddings, memory registry).
+  Tertiary. We expose first-party GBrain *plugins*, an optional MCP URL
+  hook, and — when `gbrain.enable` — a loopback `gbrain serve` unit.
+  The consumer still bootstraps the CLI (`bun install -g`).
 - Honcho, Telegram home-channel, Composio mail-filter policy.
   Those are site policy. The MCP *proxy mechanism* stays; the mail rules
   do not. HMC is an optional composer module (`hermesPnP.hmc.enable`),
@@ -106,7 +108,7 @@ hermes-pnp/
   plugins/catalog.nix            # plugin name → path
   skills/                        # first-party skills
   skills/catalog.nix             # skill name → path
-  services/mcp-proxy/            # services.mcpProxy.*
+  services/mcp-proxy/            # services.hermesPnP.mcpProxy.* (alias: services.mcpProxy)
   services/browser/              # services.hermesPnP.browser (CDP + noVNC)
 ```
 
@@ -198,15 +200,20 @@ reads like a short list — comment a line to drop a thing.
   (`ubuntu:24.04`, docker). RAM caps and extra volumes stay official.
 - `services.hermesPnP.hmc.enable` — default `false`. Pins
   hermes-context-manager as `extraPlugins` and creates `hmc_state`.
-- `services.hermesPnP.gbrain.enable` — default `false`. Thin: set
-  `services.hermes-agent.mcpServers.gbrain.url` (mkDefault) and export
-  `GBRAIN_MCP_URL` / `GBRAIN_TOKEN_FILE`. Appends the two gbrain
-  plugins if missing. Does **not** start `gbrain serve`.
+- `services.hermesPnP.gbrain.enable` — default `false`. Starts
+  `gbrain-mcp-http` (`gbrain serve --http` on loopback), sets
+  `services.hermes-agent.mcpServers.gbrain.url` (mkDefault), and
+  exports `GBRAIN_MCP_URL` / `GBRAIN_TOKEN_FILE`. Appends the two
+  gbrain plugins if missing. Does **not** ship PGLite, sources, or a
+  memory registry.
 - `services.hermesPnP.gbrain.url` — default `http://127.0.0.1:3131/mcp`.
-- `services.hermesPnP.gbrain.tokenFile` — optional path. Injected as
-  env, never read into Nix.
-- `services.hermesPnP.mcpProxy.enable` — turns on `services.mcpProxy`.
-  Backends stay under `services.mcpProxy.*`.
+- `services.hermesPnP.gbrain.bind` / `port` — serve listen (127.0.0.1:3131).
+- `services.hermesPnP.gbrain.tokenFile` — default
+  `${stateDir}/home/.gbrain/hermes-mcp.token`. Injected as env, never
+  read into Nix.
+- `services.hermesPnP.mcpProxy` — enable, listen, backends. Canonical
+  tree (site policy still writes backends here). `services.mcpProxy`
+  is an alias.
 - `services.hermesPnP.browser.enable` / `package` / `engine` / `cdpPort`
   / `novnc` — persistent CDP browser + optional noVNC phone handoff;
   seeds `BROWSER_CDP_URL` into the agent env. `runtime.*` is gone:
@@ -215,7 +222,7 @@ reads like a short list — comment a line to drop a thing.
   Patch via PYTHONPATH. Escape hatch for when upstream ships the plural form.
 - `services.hermesPnP.pluginInstall.*` — installer internals (`stateDir`,
   `user`, `group`, `webuiExtensionDir`). Not advertised.
-- `services.mcpProxy.*` — unchanged.
+- `services.mcpProxy.*` — alias of `services.hermesPnP.mcpProxy`.
 
 ### Defaults PnP sets with `mkDefault` (overridable)
 
@@ -410,26 +417,30 @@ language toolchains are consumer `extraPackages`.
 
 ## GBrain (tertiary)
 
-`gbrain.nix` is ~40 lines:
+`nix/modules/gbrain.nix`, gated on `gbrain.enable` (default false):
 
-- `enable` default false
-- `url` / `tokenFile`
-- `mkDefault` `services.hermes-agent.settings.mcp_servers.gbrain`
+- `url` / `bind` / `port` / `tokenFile`
+- `mkDefault` `services.hermes-agent.mcpServers.gbrain`
 - env for `gbrain-retrieval-reflex` / `gbrain-memory-flush`
+- `gbrain-mcp-http` systemd unit: `gbrain serve --http` on loopback,
+  PATH from the toolbox (or `~/.bun/bin`), EnvironmentFile from the
+  agent. Binary is the consumer-bootstrapped bun-global CLI.
 
-No systemd unit. No PGLite. No sources. The consumer runs `gbrain
-serve --http` however they want (or not at all).
+No PGLite. No sources. No memory registry. No `config.yaml` Bearer
+rewrite — those stay in the consumer if needed.
 
 Enabling the GBrain *plugins* does not require `gbrain.enable`. The
 plugins no-op if the env is unset.
 
 ## MCP proxy
 
-Unchanged. `services.mcpProxy`. Composer does not auto-enable it.
+`services.hermesPnP.mcpProxy`. Composer does not auto-enable it.
 A consumer who wants Composio/GitHub auth injection turns it on and
-points `settings.mcp_servers` at `http://127.0.0.1:<port>/…`.
+points official `mcpServers` at `http://127.0.0.1:<port>/…`.
+`services.mcpProxy` is a compatibility alias of the same tree.
 
 Site-specific `tools.deny` / account filters stay in the consumer.
+When the proxy is on, hermes-agent / hermes-webui wait for it.
 
 ## WebUI
 
@@ -493,13 +504,12 @@ not optional for a useful composer.
 - `services.hermesPnP.enable = false` plus `plugins = [ … ]`
   still works (library path).
 - No new required options. A native user adds one `enable = true`.
-- HMC is opt-in (`hmc.enable`), not a required default. No gbrain systemd unit. No SOUL.md.
+- HMC is opt-in (`hmc.enable`), not a required default. GBrain serve
+  is opt-in (`gbrain.enable`). No SOUL.md.
 - Existing plugin Python and mcp-proxy behavior unchanged.
 
 ## Out of scope (write down, do not build)
 
-- Declarative gbrain serve
-- HMC
 - Composio policy module
 - Home-manager module
 - darwin / Nix-on-Linux non-NixOS

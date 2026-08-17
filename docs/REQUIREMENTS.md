@@ -51,6 +51,7 @@
   materializes the plugin and still does not seed official settings.
 - First-party plugins still materialize to `$stateDir/plugins/<name>`
   with a relative symlink under `$stateDir/.hermes/plugins/`.
-- No HMC module, no declarative gbrain serve, no SOUL.md from Nix,
+- HMC is opt-in. `gbrain.enable` (default false) starts loopback HTTP
+  serve + MCP URL hook; no PGLite/registry from Nix. No SOUL.md from Nix,
   no default `extraDependencyGroups = [ "mcp" ]`, no home-manager /
   darwin, no drive-by rewrites of other plugins.
