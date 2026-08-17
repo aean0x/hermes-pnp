@@ -20,7 +20,7 @@ let
     ;
   cfg = config.services.hermesPnP;
   agent = config.services.hermes-agent;
-  catalog = import ../../../skills/catalog.nix;
+  catalog = import ../../skills/catalog.nix;
   allSkills = catalog // cfg.skills.extraSkills;
   skillsDir = "${agent.stateDir}/skills";
 in
