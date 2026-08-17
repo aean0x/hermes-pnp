@@ -6,6 +6,8 @@
 #   services.hermesPnP.plugins.extraPlugins.my-plugin = ./local;
 #
 # Host-only plugins (HMC pins, one-off trees) belong in extraPlugins.
+# Do not use official services.hermes-agent.extraPlugins for first-party
+# plugins: it copies into $HERMES_HOME and fights the container /data remap.
 {
   config,
   lib,
@@ -130,6 +132,11 @@ in
 
     # Requires the official hermes-agent module. Installer is a no-op without enable.
     services.hermes-agent.settings.plugins.enabled = enabledNames;
+
+    systemd.services.hermes-agent.serviceConfig.ReadWritePaths = lib.mkIf config.services.hermes-agent.enable [
+      materializeRoot
+      hermesHomePlugins
+    ];
 
     system.activationScripts.hermes-pnp-plugins = lib.stringAfter [
       "users"
