@@ -16,6 +16,7 @@ let
   inherit (lib)
     mkDefault
     mkIf
+    mkMerge
     mapAttrsToList
     ;
   cfg = config.services.hermesPnP;
@@ -25,16 +26,17 @@ let
   skillsDir = "${agent.stateDir}/skills";
 in
 {
-  config = mkIf cfg.enable {
-    services.hermesPnP.skills.enable = mkDefault true;
-
+  config = mkIf cfg.enable (mkMerge [
+    {
+      services.hermesPnP.skills.enable = mkDefault true;
+    }
+    (mkIf cfg.skills.enable {
     # Host CLI sees $stateDir/skills; the container bind is $stateDir → /data.
-    # settings is deepConfigType — do not wrap in mkDefault.
-    services.hermes-agent.settings.skills.external_dirs = mkIf cfg.skills.enable (
-      [ skillsDir ] ++ lib.optional agent.container.enable "/data/skills"
-    );
+    # settings is deepConfigType — do not wrap leaves in mkIf/mkDefault.
+    services.hermes-agent.settings.skills.external_dirs =
+      [ skillsDir ] ++ lib.optional agent.container.enable "/data/skills";
 
-    systemd.services.hermes-agent-skills = mkIf cfg.skills.enable {
+    systemd.services.hermes-agent-skills = {
       description = "Materialize hermes-pnp first-party skills";
       wantedBy = [ "multi-user.target" ];
       before = [ "hermes-agent.service" ];
@@ -63,5 +65,6 @@ in
         )}
       '';
     };
-  };
+    })
+  ]);
 }

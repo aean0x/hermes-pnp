@@ -137,7 +137,9 @@ in
     test "${toString (modulesConfig.services.hermesPnP.toolbox.hostPath != "")}" = "1"
     test "${toString (builtins.match ".*toolbox/bin.*" modulesConfig.services.hermesPnP.toolbox.hostPath != null)}" = "1"
     test "${toString modulesConfig.services.hermes-agent.container.enable}" = ""
+    test "${lib.concatStringsSep "," modulesConfig.services.hermes-agent.settings.skills.external_dirs}" = "/var/lib/hermes/skills"
     test "${toString containerConfig.services.hermes-agent.container.enable}" = "1"
+    test "${lib.concatStringsSep "," containerConfig.services.hermes-agent.settings.skills.external_dirs}" = "/var/lib/hermes/skills,/data/skills"
     test "${containerConfig.services.hermes-agent.container.image}" = "ubuntu:24.04"
     touch "$out"
   '';
