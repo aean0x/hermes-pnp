@@ -64,6 +64,7 @@ services/browser/          # CDP browser + noVNC handoff (services.hermesPnP.bro
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
 services/mcp-proxy/       # services.hermesPnP.mcpProxy.* (alias: services.mcpProxy)
+scripts/                  # gbrain-setup / validate-gbrain (operator; not Nix)
 plugins/                  # first-party plugin trees
 skills/                   # first-party skill trees
 ```

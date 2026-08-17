@@ -178,6 +178,10 @@ services.hermesPnP.gbrain.enable = true;
 
 Listing the GBrain plugins does not require this hook.
 
+Operator one-shots (not Nix): `scripts/gbrain-setup.sh` and
+`scripts/validate-gbrain.sh`. A consumer `./deploy` copies them from
+this flake's locked input. See `docs/gbrain.md`.
+
 ## Secrets
 
 Declare the rendered env file on the composer. It is forwarded to

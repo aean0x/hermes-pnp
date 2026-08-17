@@ -1,0 +1,54 @@
+You are on a hermes-pnp host. Bootstrap GBrain end-to-end. Do not ask clarifying questions. Do not invent exclusive CLI timers or stdio multi-serve.
+
+## Architecture (SoT)
+- **Sole PGLite owner:** systemd `gbrain-mcp-http` → `gbrain serve --http --bind 127.0.0.1 --port 3131`
+- **Hermes MCP:** `url: http://127.0.0.1:3131/mcp` + **literal** Bearer header (NOT stdio `gbrain serve` per agent)
+- **Token storage (Hermes-owned env, not sops):**
+  - `~/.gbrain/hermes-mcp.token` (600)
+  - `~/.hermes/.env` → `GBRAIN_REMOTE_TOKEN=<same literal token>`
+  - `config.yaml` → `headers.Authorization: "Bearer <same literal token>"`
+  - **IRON RULE:** never write `Bearer ${GBRAIN_REMOTE_TOKEN}` — Hermes does not expand that; it 401s
+- **Plugins:** `gbrain-retrieval-reflex` + `gbrain-memory-flush` (declarative)
+- **NEVER:** `gbrain autopilot --install`; exclusive consolidate/dream; second serve
+- Upstream CLI install only: https://raw.githubusercontent.com/garrytan/gbrain/master/INSTALL_FOR_AGENTS.md (skip soul-audit)
+
+## Steps (terminal; HOME=/home/hermes)
+
+### A. CLI install
+1. bun on PATH; `bun install -g github:garrytan/gbrain` if needed.
+2. `gbrain --version`
+
+### B. Brain init + config
+3. `gbrain init --pglite` if no `~/.gbrain/brain.pglite`
+4. `mkdir -p ~/brain`; git init if empty; `gbrain config set search.mode balanced`
+5. ZEROENTROPY from env if present — never print secrets
+
+### C. HTTP auth (Hermes-side — critical)
+6. Ensure `gbrain-mcp-http` is active (report to operator if not).
+7. If `~/.gbrain/hermes-mcp.token` missing or MCP 401:
+   - Read skill **gbrain-http-auth** if present, or:
+   - `gbrain auth create hermes-agents` (capture token once; do not print in full)
+   - Write token to `~/.gbrain/hermes-mcp.token` (mode 600)
+   - Set `GBRAIN_REMOTE_TOKEN=<token>` in `$HERMES_HOME/.env` (literal value)
+   - Set `mcp_servers.gbrain` to url + `headers.Authorization: Bearer <token>` (literal)
+   - Remove stdio command/args/env on gbrain entry
+8. Prefer operator path when available: `./deploy gbrain-setup` (does mint + wire + probe correctly)
+9. Restart hermes-agent/webui if you cannot (ask operator)
+
+### D. Content + embeds (serve STOPPED for CLI import/embed)
+10. Stop gbrain-mcp-http + agents briefly if allowed
+11. `gbrain import ~/brain --no-embed` if markdown exists
+12. `gbrain embed --stale` if ZEROENTROPY present
+13. Start gbrain-mcp-http, then agents
+
+### E. Verify
+14. `curl -sS http://127.0.0.1:3131/health`
+15. Confirm config Authorization is NOT `${…}`; `hermes mcp test gbrain`
+16. One `gbrain serve --http` only
+17. put_page `ops/gbrain-protocol` (HTTP sole-owner + two plugins)
+
+### F. Skip
+- autopilot --install, exclusive CLI, casual reinit
+
+## Reply
+version; token present yes/no (not value); whether Authorization is literal; HTTP health; mcp test; anything needing operator sudo.
