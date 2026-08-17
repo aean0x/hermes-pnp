@@ -179,7 +179,7 @@ in
           linkroot='${hermesHomePlugins}'
           mkdir -p "$dest" "$linkroot"
 
-          want=${enabledPluginsJson}
+          want='${enabledPluginsJson}'
           echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' | while read -r name; do
             case "$name" in
               *[!a-zA-Z0-9_-]* | "")
