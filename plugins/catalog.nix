@@ -6,5 +6,5 @@
   gbrain-retrieval-reflex = ./gbrain-retrieval-reflex;
   gbrain-memory-flush = ./gbrain-memory-flush;
   secret-handoff = ./secret-handoff;
-  projects-auto-commit = ./projects-auto-commit;
+  git-hook = ./git-hook;
 }
