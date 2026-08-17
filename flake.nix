@@ -68,7 +68,7 @@
       nixosModules.browser = {
         imports = [
           ./nix/modules/options.nix
-          ./nix/modules/browser.nix
+          ./services/browser/nix/module.nix
         ];
       };
 

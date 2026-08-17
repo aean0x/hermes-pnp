@@ -59,7 +59,7 @@ nix/modules/options.nix   # enable, models, plugins, extraPlugins, quiet toggles
 nix/modules/models.nix    # seed official settings from models.*
 nix/modules/plugins.nix   # plugins list + extraPlugins + pluginInstall
 nix/modules/toolbox.nix   # everyday CLI buildEnv
-nix/modules/browser.nix   # CDP browser + noVNC handoff
+services/browser/          # CDP browser + noVNC handoff (services.hermesPnP.browser)
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
 services/mcp-proxy/       # services.mcpProxy.*

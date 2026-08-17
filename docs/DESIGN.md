@@ -99,7 +99,6 @@ hermes-pnp/
       plugins.nix                # plugins list + extraPlugins + pluginInstall
       models.nix                 # seed official settings from models.*
       toolbox.nix                # everyday CLI buildEnv → /var/lib/hermes/toolbox/bin
-      browser.nix                # persistent CDP browser + optional noVNC handoff
       package.nix                # shared package + bundled-share env
       gbrain.nix                 # thin optional MCP URL + plugin env
       skills.nix                 # materialize first-party skills → $stateDir/skills
@@ -107,7 +106,8 @@ hermes-pnp/
   plugins/catalog.nix            # plugin name → path
   skills/                        # first-party skills
   skills/catalog.nix             # skill name → path
-  services/mcp-proxy/            # exists; keep services.mcpProxy
+  services/mcp-proxy/            # services.mcpProxy.*
+  services/browser/              # services.hermesPnP.browser (CDP + noVNC)
 ```
 
 `services.hermesPnP.enable` turns on the composer opinions (WebUI
@@ -463,7 +463,7 @@ Do not require a full container image build in default checks.
 4. `agent.nix` + `webui.nix` — pairing defaults, gated on
    `hermesPnP.enable`.
 5. `toolbox.nix` — everyday CLI buildEnv.
-6. `browser.nix` — persistent CDP browser + optional noVNC handoff.
+6. `services/browser/` — persistent CDP browser + optional noVNC handoff.
 7. `gbrain.nix` — thin optional hook.
 8. Checks + example snippet in README.
 9. Do **not** migrate rk3588 in this repo.
@@ -532,7 +532,7 @@ the rk3588 cutover PR reworks the host tree to match.
   `extraPackages` passthrough). Materializes to
   `/var/lib/hermes/toolbox/bin`, container path `/data/toolbox/bin`;
   exports `hostPath` for consumers to wire into units.
-- `browser.nix` is new: persistent CDP browser + optional noVNC
+- `services/browser/nix/module.nix` is new: persistent CDP browser + optional noVNC
   handoff. Seeds `BROWSER_CDP_URL` + `BU_CDP_URL` and the noVNC URL
   into `services.hermes-agent.environment`. Engine (`package`/`engine`)
   is a consumer choice. Chromium-family PATH aliases live here.
