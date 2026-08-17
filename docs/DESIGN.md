@@ -432,6 +432,9 @@ rewrite — those stay in the consumer if needed.
 Enabling the GBrain *plugins* does not require `gbrain.enable`. The
 plugins no-op if the env is unset.
 
+Operator one-shots live in `scripts/gbrain-setup.sh` and
+`scripts/validate-gbrain.sh` (not Nix). See `docs/gbrain.md`.
+
 ## MCP proxy
 
 `services.hermesPnP.mcpProxy`. Composer does not auto-enable it.
