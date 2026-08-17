@@ -57,10 +57,10 @@
           ./nix/modules/toolbox.nix
         ];
       };
-      nixosModules.runtime = {
+      nixosModules.browser = {
         imports = [
           ./nix/modules/options.nix
-          ./nix/modules/runtime.nix
+          ./nix/modules/browser.nix
         ];
       };
 

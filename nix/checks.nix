@@ -119,6 +119,10 @@ in
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.triage_specifier.model}" = "${modulesConfig.services.hermesPnP.models.low.model}"
     test "${modulesConfig.services.hermes-agent.settings.delegation.model}" = "${modulesConfig.services.hermesPnP.models.medium.model}"
     test "${modulesConfig.services.hermes-agent.settings.cron.model}" = "${modulesConfig.services.hermesPnP.models.low.model}"
+    test "${modulesConfig.services.hermes-agent.settings.browser.cdp_url}" = "http://127.0.0.1:9222"
+    test "${toString (modulesConfig.systemd.services ? hermes-browser)}" = "1"
+    test "${toString (modulesConfig.services.hermesPnP.toolbox.hostPath != "")}" = "1"
+    test "${toString (builtins.match ".*toolbox/bin.*" modulesConfig.services.hermesPnP.toolbox.hostPath != null)}" = "1"
     touch "$out"
   '';
 
@@ -143,7 +147,10 @@ in
     test "${toString (optionsEval.options.services.hermesPnP ? pluginInstall)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.webui.enable.isDefined or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.toolbox.enable.isDefined or true)}" = "1"
-    test "${optionsEval.options.services.hermesPnP.runtime.mode.default}" = "upstream"
+    test "${toString (optionsEval.options.services.hermesPnP.browser.enable.default or true)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser.cdpPort.default or 0)}" = "9222"
+    test "${toString (optionsEval.options.services.hermesPnP.browser.noVNC.enable.default or false)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP ? runtime)}" = ""
     test "${toString optionsEval.options.services.hermesPnP.gbrain.enable.default}" = ""
     test "${toString optionsEval.options.services.hermesPnP.packageFixes.silenceMarkers.default}" = "1"
     touch "$out"

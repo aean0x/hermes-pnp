@@ -13,7 +13,7 @@
     ./models.nix
     ./plugins.nix
     ./toolbox.nix
-    ./runtime.nix
+    ./browser.nix
     ./gbrain.nix
     ../../services/mcp-proxy/nix/module.nix
   ];

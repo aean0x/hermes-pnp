@@ -3,7 +3,9 @@
 #
 # Comment a line to drop a thing. Import a plugin beside the catalog
 # with one extraPlugins attr.
-{ lib
+{ config
+, lib
+, pkgs
 , ...
 }:
 
@@ -40,11 +42,13 @@ let
       inherit description;
       example = { inherit provider model; };
     };
+
+  agent = config.services.hermes-agent;
 in
 {
   options.services.hermesPnP = {
     enable = mkEnableOption ''
-      composer opinions (WebUI pairing, share env, toolbox).
+      composer opinions (WebUI pairing, share env, toolbox, browser).
       Off (default): library path — plugins + mcp-proxy only.
     '';
 
@@ -106,7 +110,12 @@ in
       enable = mkOption {
         type = types.bool;
         default = true;
-        description = "When the composer is on, install a small extraPackages set.";
+        description = ''
+          Opinionated everyday CLI buildEnv (the "sauce"): a curated
+          ~40-package toolkit + python3 + chromium aliases + login PATH
+          + the forced-container hermes-cli wrapper. Set false for a
+          bare agent.
+        '';
       };
 
       extraPackages = mkOption {
@@ -114,13 +123,108 @@ in
         default = [ ];
         description = "Append-only packages added to the toolbox set.";
       };
+
+      pythonPackages = mkOption {
+        type = types.functionTo (types.listOf types.package);
+        default = ps: with ps; [
+          requests
+          pyyaml
+          toml
+        ];
+        defaultText = literalExpression "ps: with ps; [ requests pyyaml toml ]";
+        description = "Python packages baked into the toolbox python3/python.";
+      };
+
+      # Read-only paths computed by toolbox.nix; host modules may reference
+      # these instead of re-deriving PATH.
+      toolboxDir = mkOption { type = types.str; readOnly = true; };
+      containerToolboxDir = mkOption { type = types.str; readOnly = true; };
+      binDir = mkOption { type = types.str; readOnly = true; };
+      hostPath = mkOption { type = types.str; readOnly = true; };
+      containerPath = mkOption { type = types.str; readOnly = true; };
+    };
+
+    browser = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Opinionated host browser: a persistent CDP browser (loopback
+          :9222) + optional noVNC for human captcha handoff. The native
+          hermes browser_* tools attach to it via browser.cdp_url /
+          BROWSER_CDP_URL.
+        '';
+      };
+
+      package = mkOption {
+        type = types.package;
+        default = pkgs.chromium;
+        description = "Browser derivation. Swap for pkgs.brave or any Chromium fork.";
+      };
+
+      engine = mkOption {
+        type = types.str;
+        default = "chromium";
+        description = "HERMES_BROWSER_ENGINE and binary name under package/bin.";
+      };
+
+      cdpPort = mkOption {
+        type = types.port;
+        default = 9222;
+        description = "Loopback CDP port.";
+      };
+
+      profileDir = mkOption {
+        type = types.str;
+        default = "${agent.stateDir}/browser-profile";
+        defaultText = literalExpression ''"''${config.services.hermes-agent.stateDir}/browser-profile"'';
+        description = "Sticky profile directory.";
+      };
+
+      cookiesDir = mkOption {
+        type = types.str;
+        default = "${agent.stateDir}/browser-cookies";
+        defaultText = literalExpression ''"''${config.services.hermes-agent.stateDir}/browser-cookies"'';
+        description = "Drop dir for Netscape / Playwright cookie files.";
+      };
+
+      logDir = mkOption {
+        type = types.str;
+        default = "${agent.stateDir}/browser-logs";
+        defaultText = literalExpression ''"''${config.services.hermes-agent.stateDir}/browser-logs"'';
+        description = "Browser / x11vnc / noVNC log dir.";
+      };
+
+      noVNC = {
+        enable = mkOption {
+          type = types.bool;
+          default = true;
+          description = "Phone / LAN human captcha handoff via noVNC.";
+        };
+        port = mkOption {
+          type = types.port;
+          default = 6080;
+          description = "noVNC web port (opened in the firewall).";
+        };
+        vncPort = mkOption {
+          type = types.port;
+          default = 5900;
+          description = "Raw VNC port (kept closed unless opened explicitly).";
+        };
+      };
+
+      extraArgs = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = "Extra chromium flags appended to the browser ExecStart.";
+      };
     };
 
     gbrain = {
       enable = mkEnableOption ''
         Thin GBrain hook: mkDefault mcpServers.gbrain.url and export
         GBRAIN_MCP_URL / GBRAIN_TOKEN_FILE. Does not start gbrain serve.
-        Also appends the two gbrain plugins if they are not already listed.
+        Also installs the two gbrain plugins even if they are not listed.
       '';
 
       url = mkOption {
@@ -140,28 +244,6 @@ in
       type = types.bool;
       default = false;
       description = "Turn on services.mcpProxy. Backends stay in services.mcpProxy.*.";
-    };
-
-    runtime = {
-      mode = mkOption {
-        type = types.enum [
-          "upstream"
-          "s6"
-        ];
-        default = "upstream";
-        description = ''
-          upstream: official native/container path. s6: not implemented.
-        '';
-      };
-
-      extraBindMounts = mkOption {
-        type = types.listOf types.str;
-        default = [ ];
-        description = ''
-          Host paths appended to official container.extraVolumes.
-          A bare path becomes host:host:rw.
-        '';
-      };
     };
 
     packageFixes.silenceMarkers = mkOption {

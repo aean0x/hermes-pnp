@@ -12,9 +12,4 @@
         "${k}=${v}"
       ]) attrs
     );
-
-  # runtime.extraBindMounts is a list of host paths. Pass through if
-  # the consumer already wrote host:container:mode.
-  bindMountToVolume =
-    p: if lib.hasInfix ":" p then p else "${p}:${p}:rw";
 }
