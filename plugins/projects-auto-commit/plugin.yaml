@@ -1,10 +1,13 @@
 name: projects-auto-commit
-version: 0.2.0
+version: 0.3.0
 description: >-
-  End-of-turn git commit (+ optional push) when $PROJECTS_ROOT (default
-  $HERMES_HOME/projects) is a dirty git tree. Disable with PROJECTS_AUTO_COMMIT=0.
+  Auto fetch/pull before reads, and commit+push only the files this turn
+  changed, for any git worktree Hermes touches. No tools, no scripts.
+  Disable with PROJECTS_AUTO_COMMIT=0.
 author: aean0x
 kind: standalone
 provides_hooks:
+  - pre_tool_call
+  - post_tool_call
   - post_llm_call
   - on_session_end

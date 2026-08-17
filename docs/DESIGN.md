@@ -323,14 +323,17 @@ folder under `plugins/<name>`, add one catalog line. Skills follow the
 same pattern (`skills/catalog.nix`).
 
 Current first-party set (keep, do not rewrite Python unless Nix wiring
-requires it):
+requires it, except `projects-auto-commit` which is the hook-only git
+sync platform):
 
 - `model-router`
 - `tool-call-coherency`
 - `gbrain-retrieval-reflex`
 - `gbrain-memory-flush`
 - `secret-handoff`
-- `projects-auto-commit`
+- `projects-auto-commit` — `pre_tool_call` ff-only pull on first read of
+  a clean worktree; end of turn commits only this turn's porcelain
+  delta and pushes. No sidecar script, no tools.
 
 Installer rules (already true, keep):
 

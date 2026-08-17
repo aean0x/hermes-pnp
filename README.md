@@ -147,7 +147,7 @@ through official `extraPlugins`.
 | `gbrain-retrieval-reflex` | Ambient GBrain pointers over HTTP MCP | `GBRAIN_MCP_URL`, `GBRAIN_TOKEN_FILE`, `GBRAIN_RETRIEVAL_REFLEX_*` |
 | `gbrain-memory-flush` | Nudge durable facts out of MEMORY.md | `GBRAIN_MEMORY_BUDGET_CHARS`, `HERMES_MEMORY_PATH` |
 | `secret-handoff` | Ephemeral login paste via clarify + CDP | `BROWSER_CDP_URL` |
-| `projects-auto-commit` | End-of-turn git commit for a working tree | `PROJECTS_ROOT`, `PROJECTS_AUTO_COMMIT=0` |
+| `projects-auto-commit` | Pull-before-read + commit/push only this turn's dirty files, any git worktree | `PROJECTS_AUTO_COMMIT=0`, `PROJECTS_AUTO_PUSH=0` |
 
 ### model-router
 
