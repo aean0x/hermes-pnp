@@ -29,11 +29,6 @@ class Pins(unittest.TestCase):
         self.assertEqual(self.mod._detect_explicit_tier("/medium"), "medium")
         self.assertEqual(self.mod._detect_explicit_tier("/high please"), "high")
 
-    def test_hidden_t_slash_pins(self) -> None:
-        self.assertEqual(self.mod._detect_explicit_tier("/t1"), "low")
-        self.assertEqual(self.mod._detect_explicit_tier("/t2"), "medium")
-        self.assertEqual(self.mod._detect_explicit_tier("/t3"), "high")
-
     def test_use_phrase(self) -> None:
         self.assertEqual(self.mod._detect_explicit_tier("please use medium"), "medium")
         self.assertEqual(self.mod._detect_explicit_tier("pin high"), "high")
@@ -51,9 +46,8 @@ class Names(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.mod = _load()
 
-    def test_as_name_aliases(self) -> None:
-        self.assertEqual(self.mod.as_name("1"), "low")
-        self.assertEqual(self.mod.as_name("t2"), "medium")
+    def test_as_name_named_only(self) -> None:
+        self.assertEqual(self.mod.as_name("low"), "low")
         self.assertEqual(self.mod.as_name("HIGH"), "high")
         self.assertIsNone(self.mod.as_name("ultra"))
 

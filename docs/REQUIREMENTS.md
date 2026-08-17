@@ -25,8 +25,6 @@
   `/low` `/medium` `/high` `/auto`. Classifier replies with exactly
   one of those three words. Escalation 4 on low, 3 on medium. Rest
   and final voice on high. Do not change that policy.
-- Hidden load-time aliases for leftover `tiers` / `final_tier` /
-  `MODEL_ROUTER_T1_*` / `/t1` are allowed so old configs do not crash.
 - `gbrain.enable` must not clobber the composer plugin default list.
   Append happens at install time (`settings.plugins.enabled`), not by
   writing back into the `plugins` option.

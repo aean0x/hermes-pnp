@@ -115,11 +115,7 @@ _ERROR_PAT = re.compile(r'"(?:error|failed)"\s*:\s*(?!\s*null\b)(?!\s*false\b)(?
 # config; their output is intermediate work, not a user-facing reply.
 
 _NAME_RE = re.compile(
-    r"(?:^|(?<=\s)|(?<=\())(?:/?(low|medium|high)|/?t([123]))(?:\b|(?=\)))",
-    re.IGNORECASE,
-)
-_TIER_WORD_RE = re.compile(
-    r"(?:^|(?<=\s)|(?<=\())tier\s*([123])",
+    r"(?:^|(?<=\s)|(?<=\())/?(low|medium|high)(?:\b|(?=\)))",
     re.IGNORECASE,
 )
 _ACK_RE = re.compile(
@@ -136,9 +132,9 @@ _WEBUI_WORKSPACE_RE = re.compile(
 # Explicit pin-style requests only — bare "low" inside a long critique is NOT a pin.
 _EXPLICIT_REQ_RE = re.compile(
     r"(?:^|\s)(?:/"
-    r"(?:(low|medium|high)|t([123]))\b"
+    r"(low|medium|high)\b"
     r"|(?:use|pin|switch\s+to|run\s+(?:on|at)|please\s+use)\s+"
-    r"(?:(low|medium|high)|t([123]))\b)",
+    r"(low|medium|high)\b)",
     re.IGNORECASE,
 )
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?]+\s+|\n+")
@@ -458,10 +454,6 @@ def _detect_explicit_tier(msg: str) -> str | None:
         name = _token_to_name(*m.groups())
         if name:
             mentions.add(name)
-    for m in _TIER_WORD_RE.finditer(text):
-        name = as_name(m.group(1))
-        if name:
-            mentions.add(name)
     if len(mentions) != 1:
         return None
     # Short messages like "medium please" / "high" only.
@@ -508,14 +500,9 @@ def _classify(user_message: str, history: list) -> str:
         found = [n for n in NAMES if re.search(rf"\b{n}\b", raw_l)]
         if len(found) == 1:
             return found[0]
-        hidden = as_name(raw)
-        if hidden:
-            return hidden
-        digit = re.search(r"\b[tT]?([123])\b", raw)
-        if digit:
-            mapped = as_name(digit.group(1))
-            if mapped:
-                return mapped
+        named = as_name(raw)
+        if named:
+            return named
         logger.warning("model-router: classifier non-name %r — default medium", raw[:40])
     except Exception as exc:
         logger.warning("model-router: classifier failed (%s) — default medium", exc)
@@ -1089,9 +1076,6 @@ def register(ctx: Any) -> None:
             lambda args, n=name: _cmd_pin(args, n),
             f"Pin session to {label} ({meta.get('provider')}/{meta.get('model')})",
         )
-    # Hidden aliases for leftover /t1 /t2 /t3 muscle-memory. Not documented.
-    for alias, name in (("t1", "low"), ("t2", "medium"), ("t3", "high")):
-        ctx.register_command(alias, lambda args, n=name: _cmd_pin(args, n), "")
     ctx.register_command("auto", _cmd_auto, "Resume model-router auto routing")
     labels = " / ".join(f"{n} {MODELS[n].get('label')}" for n in NAMES)
     logger.info(

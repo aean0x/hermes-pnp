@@ -259,10 +259,7 @@ Whenever `model-router` is in `plugins`, the installer writes
 extra Nix overlay option.
 
 Classifier / escalate / rest / polish policy is unchanged: 4 errors on
-low, 3 on medium, rest on high, final voice = high. Hidden load-time
-aliases map leftover `tiers: {"1":…}` / `final_tier: 3` / `/t1` `/t2`
-`/t3` / `MODEL_ROUTER_T1_*` onto the named scheme. They must not appear
-in docs or UI.
+low, 3 on medium, rest on high, final voice = high.
 
 ## Drop-in migration
 
@@ -525,5 +522,4 @@ Shipped as `feat(pnp): named low/medium/high models + option beauty`.
   `cron.{model,model_provider}`, `auxiliary.<slot>.{provider,model,reasoning_effort}`.
   Official DEFAULT_CONFIG also has `fallback_providers`, `goal_judge`,
   `tts_audio_tags`, `moa_*`, `vision` — we do not seed those.
-- Plugin surface is `low` / `medium` / `high`. Hidden aliases keep
-  leftover `tiers` / `T1` env / `/t1` from crashing.
+- Plugin surface is `low` / `medium` / `high`.
