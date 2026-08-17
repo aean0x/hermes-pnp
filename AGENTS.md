@@ -4,8 +4,10 @@
 modules or flake outputs.
 
 This is a **library flake**, not a host flake. Site identity, secrets,
-hostnames, Telegram IDs, mail policy, browser CDP, RAM caps, and
-SOUL.md / USER.md / MEMORY.md stay in the consumer.
+hostnames, Telegram IDs, mail policy, RAM caps, and SOUL.md / USER.md /
+MEMORY.md stay in the consumer. Browser CDP/noVNC provisioning *is* a
+composer opinion (`services.hermesPnP.browser`); the engine stays in the
+consumer.
 
 ## Composer vs library
 
@@ -13,8 +15,16 @@ SOUL.md / USER.md / MEMORY.md stay in the consumer.
   path: plugins + `services.mcpProxy` only. Official services stay off
   unless the consumer enables them.
 - `services.hermesPnP.enable = true` turns on pairing opinions
-  (WebUI, share env, optional silence wrap, toolbox). One extra
+  (WebUI, share env, optional silence wrap, toolbox, browser). One extra
   `enable = true` on a native Hermes config.
+
+## Git identity (non-negotiable)
+
+- Commit ONLY as `aean0x (GitHub noreply identity)`.
+  Set `user.name` + `user.email` global AND repo-local. Never
+  a local agent identity.
+- Check `git config user.name` before the first commit of a session.
+- After any history rewrite, re-pin downstream `flake.lock` inputs.
 
 ## Do
 
@@ -29,8 +39,6 @@ SOUL.md / USER.md / MEMORY.md stay in the consumer.
   Do not install them via official `extraPlugins`.
 - Gate the silence-marker wrap on
   `services.hermesPnP.packageFixes.silenceMarkers`.
-- Keep `runtime.mode = "s6"` as a hard stub (`throw`) until a complete
-  port exists.
 
 ## Do not
 
@@ -40,6 +48,8 @@ SOUL.md / USER.md / MEMORY.md stay in the consumer.
 - Put secrets in JSON (`mcpServers` may reference env vars only).
 - Rewrite plugin Python unless Nix wiring requires it.
 - Force consumers onto container mode or s6.
+- Re-add `runtime.mode` / a `runtime.*` wrapper (deleted — use official
+  `container.extraVolumes` directly).
 
 ## Layout
 
@@ -48,6 +58,8 @@ nix/modules/default.nix   # composer imports
 nix/modules/options.nix   # enable, models, plugins, extraPlugins, quiet toggles
 nix/modules/models.nix    # seed official settings from models.*
 nix/modules/plugins.nix   # plugins list + extraPlugins + pluginInstall
+nix/modules/toolbox.nix   # everyday CLI buildEnv
+nix/modules/browser.nix   # CDP browser + noVNC handoff
 nix/catalog.nix           # plugin name → path
 services/mcp-proxy/       # services.mcpProxy.*
 plugins/                  # first-party plugin trees
