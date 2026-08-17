@@ -123,6 +123,8 @@ let
       pkgs.nmap
       pkgs.netcat-gnu
       pkgs.socat
+      pkgs.gh
+      pkgs.docker
     ] ++ cfg.extraPackages;
   };
 

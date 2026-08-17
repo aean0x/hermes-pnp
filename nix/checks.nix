@@ -88,6 +88,14 @@ let
     }
   ];
 
+  containerConfig = eval [
+    {
+      services.hermes-agent.enable = true;
+      services.hermesPnP.enable = true;
+      services.hermesPnP.container.enable = true;
+    }
+  ];
+
   optionsEval = evalSystem [ ];
 
   dropAux = (dropInConfig.services.hermes-agent.settings.auxiliary or { }).triage_specifier or { };
@@ -125,6 +133,9 @@ in
     test "${toString (modulesConfig.systemd.services ? hermes-browser)}" = "1"
     test "${toString (modulesConfig.services.hermesPnP.toolbox.hostPath != "")}" = "1"
     test "${toString (builtins.match ".*toolbox/bin.*" modulesConfig.services.hermesPnP.toolbox.hostPath != null)}" = "1"
+    test "${toString modulesConfig.services.hermes-agent.container.enable}" = ""
+    test "${toString containerConfig.services.hermes-agent.container.enable}" = "1"
+    test "${containerConfig.services.hermes-agent.container.image}" = "ubuntu:24.04"
     touch "$out"
   '';
 
@@ -155,6 +166,11 @@ in
     test "${toString (optionsEval.options.services.hermesPnP ? runtime)}" = ""
     test "${toString optionsEval.options.services.hermesPnP.gbrain.enable.default}" = ""
     test "${toString optionsEval.options.services.hermesPnP.packageFixes.silenceMarkers.default}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP ? hmc)}" = "1"
+    test "${toString optionsEval.options.services.hermesPnP.hmc.enable.default}" = ""
+    test "${toString (optionsEval.options.services.hermesPnP ? container)}" = "1"
+    test "${toString optionsEval.options.services.hermesPnP.container.enable.default}" = ""
+    test "${optionsEval.config.services.hermesPnP.container.image}" = "ubuntu:24.04"
     touch "$out"
   '';
 }

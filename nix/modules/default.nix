@@ -16,6 +16,7 @@
     ./toolbox.nix
     ../../services/browser/nix/module.nix
     ./gbrain.nix
+    ./hmc.nix
     ../../services/mcp-proxy/nix/module.nix
   ];
 

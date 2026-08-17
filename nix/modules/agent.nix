@@ -13,10 +13,17 @@ let
   agent = config.services.hermes-agent;
 in
 {
-  config = mkIf pnp.enable {
-    services.hermes-agent.environmentFiles = pnp.environmentFiles;
-    services.hermesPnP.pluginInstall.stateDir = mkDefault agent.stateDir;
-    services.hermesPnP.pluginInstall.user = mkDefault agent.user;
-    services.hermesPnP.pluginInstall.group = mkDefault agent.group;
-  };
+  config = lib.mkMerge [
+    (mkIf pnp.enable {
+      services.hermes-agent.environmentFiles = pnp.environmentFiles;
+      services.hermesPnP.pluginInstall.stateDir = mkDefault agent.stateDir;
+      services.hermesPnP.pluginInstall.user = mkDefault agent.user;
+      services.hermesPnP.pluginInstall.group = mkDefault agent.group;
+    })
+    (mkIf pnp.container.enable {
+      services.hermes-agent.container.enable = mkDefault true;
+      services.hermes-agent.container.backend = mkDefault pnp.container.backend;
+      services.hermes-agent.container.image = mkDefault pnp.container.image;
+    })
+  ];
 }

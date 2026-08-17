@@ -45,6 +45,8 @@ choice.
     # webui.enable = true;     # default on when composer is on
     # toolbox.enable = true;   # everyday CLI buildEnv → /var/lib/hermes/toolbox/bin
     # gbrain.enable = false;
+    # container.enable = false;
+    # hmc.enable = false;
     # mcpProxy.enable = false;
   };
 }
@@ -60,6 +62,11 @@ composer is on.
 
 `services.hermesPnP.enable = false` (the default) keeps the library
 path: plugins and `services.mcpProxy` only.
+
+MCP backends and filters stay on `services.mcpProxy.*`. Point official
+`services.hermes-agent.mcpServers.<name>.url` at
+`http://127.0.0.1:3140/<backend>`. `hermesPnP.mcpProxy.enable` only
+flips the unit on.
 
 ## Three models
 
@@ -250,8 +257,8 @@ agent env.
 
 ## Out of scope
 
-HMC, declarative gbrain serve, SOUL.md from Nix, Telegram allowlists,
-Composio policy, home-manager, darwin.
+Declarative gbrain serve, SOUL.md from Nix, Telegram allowlists,
+Composio policy, home-manager, darwin. HMC is opt-in (`hmc.enable`).
 
 ## Develop
 

@@ -42,7 +42,6 @@ consumer.
 
 ## Do not
 
-- Add an HMC module.
 - Start `gbrain serve` or manage PGLite / sources from Nix.
 - Write SOUL.md / USER.md / MEMORY.md from Nix.
 - Put secrets in JSON (`mcpServers` may reference env vars only).
@@ -59,6 +58,7 @@ nix/modules/options.nix   # enable, models, plugins, extraPlugins, quiet toggles
 nix/modules/models.nix    # seed official settings from models.*
 nix/modules/plugins.nix   # plugins list + extraPlugins + pluginInstall
 nix/modules/toolbox.nix   # everyday CLI buildEnv
+nix/modules/hmc.nix       # optional hermes-context-manager extraPlugin
 services/browser/          # CDP browser + noVNC handoff (services.hermesPnP.browser)
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path

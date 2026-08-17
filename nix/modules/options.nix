@@ -247,8 +247,69 @@ in
       };
     };
 
+    container = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Turn on official services.hermes-agent.container (Ubuntu image,
+          host network). Toolbox /data remaps assume this when the
+          composer is on. Extra volumes and RAM flags stay official
+          container.extraVolumes / extraOptions.
+        '';
+      };
+
+      backend = mkOption {
+        type = types.str;
+        default = "docker";
+        description = "Official container.backend.";
+      };
+
+      image = mkOption {
+        type = types.str;
+        default = "ubuntu:24.04";
+        description = "Official container.image.";
+      };
+    };
+
+    hmc = {
+      enable = mkEnableOption ''
+        Pin hermes-context-manager as extraPlugins.hermes-context-manager
+        and create $stateDir/.hermes/hmc_state. Native compact stays on;
+        HMC does cheap per-tool work only.
+      '';
+
+      compressPercent = mkOption {
+        type = types.float;
+        default = 0.30;
+        description = ''
+          HMC compress.max/min_context_percent of the probed window.
+          Unused while background_compression is off.
+        '';
+      };
+
+      src = {
+        owner = mkOption {
+          type = types.str;
+          default = "entrepeneur4lyf";
+        };
+        repo = mkOption {
+          type = types.str;
+          default = "hermes-context-manager";
+        };
+        rev = mkOption {
+          type = types.str;
+          default = "3f775efd48e878679e8fd4290b96968880fed6f7";
+        };
+        hash = mkOption {
+          type = types.str;
+          default = "sha256-aQMKhWN9KVfpgbIbcvlGgTZHZ4xC/ATgJkz8btofM7Y=";
+        };
+      };
+    };
+
     skills = {
-      enable = mkEnableOption "first-party hermes-pnp skills (e.g. browser)";
+      enable = mkEnableOption "first-party hermes-pnp skills (browser, retrieval-reflex, gbrain-http-auth)";
       extraSkills = mkOption {
         type = types.attrsOf types.path;
         default = { };

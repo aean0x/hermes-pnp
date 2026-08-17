@@ -42,10 +42,10 @@ them. PnP only adds pairing, plugins, and a few extra modules.
 
 - Declarative GBrain (PGLite, sources, embeddings, HTTP serve). Tertiary.
   We expose first-party GBrain *plugins* and a thin optional MCP URL hook.
-- HMC / context-manager packaging. Leave it out.
 - Honcho, Telegram home-channel, Composio mail-filter policy.
   Those are site policy. The MCP *proxy mechanism* stays; the mail rules
-  do not.
+  do not. HMC is an optional composer module (`hermesPnP.hmc.enable`),
+  not a required default.
 - Shipping SOUL.md / USER.md / MEMORY.md from Nix.
 - Replacing the official module option tree with a parallel settings DSL.
 - Being a full host flake (networking, sops, disks, users beyond hermes).
@@ -139,7 +139,8 @@ option PnP set via `mkDefault`.
    container `extraOptions` as `docker --env`. This is how plugins and
    skills exist at all in those entrypoints.
 5. **No identity-from-Nix.** PnP never writes SOUL / USER / MEMORY.
-6. **No HMC.** Not imported, not configured.
+6. **HMC is opt-in.** `hermesPnP.hmc.enable` pins upstream and writes
+   config.yaml. Off by default. Native compact stays the LLM summarizer.
 7. **No secrets in JSON.** MCP credentials go through environmentFiles
    or the MCP proxy. `mcpServers` may contain URLs and headers that
    reference env vars; never raw tokens.
@@ -192,6 +193,11 @@ reads like a short list — comment a line to drop a thing.
 - `services.hermesPnP.toolbox.extraPackages` — append-only.
 - `services.hermesPnP.toolbox.hostPath` / `toolbox.binDir` — resolved
   host/container paths, exported for consumers to wire into units.
+- `services.hermesPnP.container.enable` — default `false`. Sets official
+  `services.hermes-agent.container.enable` + `backend` / `image`
+  (`ubuntu:24.04`, docker). RAM caps and extra volumes stay official.
+- `services.hermesPnP.hmc.enable` — default `false`. Pins
+  hermes-context-manager as `extraPlugins` and creates `hmc_state`.
 - `services.hermesPnP.gbrain.enable` — default `false`. Thin: set
   `services.hermes-agent.mcpServers.gbrain.url` (mkDefault) and export
   `GBRAIN_MCP_URL` / `GBRAIN_TOKEN_FILE`. Appends the two gbrain
@@ -374,10 +380,10 @@ already has what most users need; extras are a consumer choice.
 
 ## Runtime
 
-There is no `runtime.*` module. The composer does not wrap the official
-container/runtime surface. Default is the official module's native or
-container path; PnP does not turn `container.enable` on (the consumer
-does).
+There is no `runtime.*` module. RAM caps and extra volumes stay
+official. `hermesPnP.container.enable` is the composer knob that turns
+on official `services.hermes-agent.container` (Ubuntu image, docker).
+Off by default so native-only consumers stay native.
 
 Extra host mounts are the official
 `services.hermes-agent.container.extraVolumes` (`listOf str`, default
@@ -487,7 +493,7 @@ not optional for a useful composer.
 - `services.hermesPnP.enable = false` plus `plugins = [ … ]`
   still works (library path).
 - No new required options. A native user adds one `enable = true`.
-- No HMC module. No gbrain systemd unit. No SOUL.md.
+- HMC is opt-in (`hmc.enable`), not a required default. No gbrain systemd unit. No SOUL.md.
 - Existing plugin Python and mcp-proxy behavior unchanged.
 
 ## Out of scope (write down, do not build)

@@ -1,0 +1,102 @@
+# Optional hermes-context-manager extra plugin.
+# Not in the first-party catalog — upstream pin + generated config.yaml.
+# Native Hermes owns LLM compact; HMC does cheap per-tool work only.
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+
+let
+  inherit (lib) mkIf;
+
+  pnp = config.services.hermesPnP;
+  cfg = pnp.hmc;
+  agent = config.services.hermes-agent;
+  src = cfg.src;
+
+  hmcSrc = pkgs.fetchFromGitHub {
+    inherit (src) owner repo rev hash;
+  };
+
+  percent = toString cfg.compressPercent;
+
+  hmcConfig = pkgs.writeText "hermes-context-manager-config.yaml" ''
+    # Managed by hermes-pnp (nix/modules/hmc.nix). Pin ${src.rev}.
+    enabled: true
+    debug: false
+
+    manual_mode:
+      enabled: false
+      automatic_strategies: true
+
+    compress:
+      max_context_percent: ${percent}
+      min_context_percent: ${percent}
+      protected_tools:
+        - write_file
+        - patch
+
+    strategies:
+      deduplication:
+        enabled: true
+        protected_tools: []
+      purge_errors:
+        enabled: true
+        turns: 4
+        protected_tools: []
+
+    short_circuits:
+      enabled: true
+
+    truncation:
+      enabled: true
+      max_lines: 30
+      head_lines: 10
+      tail_lines: 6
+      min_content_length: 500
+
+    # Native ContextCompressor owns LLM summarization. Do not double-fire.
+    background_compression:
+      enabled: false
+      protect_recent_turns: 3
+
+    analytics:
+      enabled: true
+      retention_days: 90
+      db_path: ""
+
+    code_filter:
+      enabled: true
+      languages:
+        - python
+        - javascript
+        - typescript
+        - rust
+        - go
+      min_lines: 30
+      preserve_docstrings: true
+  '';
+
+  hmcPluginSrc = pkgs.runCommand "hermes-context-manager" { } ''
+    mkdir -p "$out"
+    cp -a ${hmcSrc}/. "$out/"
+    chmod -R u+w "$out"
+    rm -rf "$out/.github" "$out/tests" "$out/.gitignore"
+    cp ${hmcConfig} "$out/config.yaml"
+  '';
+in
+{
+  config = mkIf cfg.enable {
+    services.hermesPnP.extraPlugins.hermes-context-manager = hmcPluginSrc;
+
+    system.activationScripts.hermes-hmc-state = lib.stringAfter [
+      "users"
+      "groups"
+      "hermes-agent-setup"
+    ] ''
+      install -d -m 2770 -o ${agent.user} -g ${agent.group} ${agent.stateDir}/.hermes/hmc_state
+    '';
+  };
+}
