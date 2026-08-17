@@ -32,6 +32,21 @@ _SKIP_PREFIXES = (
     "/tmp/",
     "/var/tmp/",
 )
+_SENSITIVE_DIRS = frozenset(
+    {
+        "credentials",
+        "secrets",
+        "mcp-tokens",
+        "sessions",
+        "memories",
+        "state",
+        "hmc_state",
+        "logs",
+        "cache",
+        "cost-snapshots",
+    }
+)
+_SENSITIVE_FILE_PREFIXES = ("auth.json", "config.yaml", ".env")
 _PATCH_FILE_RE = re.compile(
     r"^\*\*\* (?:(?:Update|Add|Delete) File|Rename File(?: From)?): (.+)$"
 )
@@ -174,6 +189,25 @@ def extract_paths(tool_name: str, args: Optional[Dict[str, Any]]) -> list[str]:
     return found
 
 
+def _sensitive(path: Path, home: Path) -> bool:
+    """Never auto-sync the agent's own secrets/state under its home dir."""
+    try:
+        rel = path.relative_to(home)
+    except ValueError:
+        return False
+    parts = rel.parts
+    if not parts:
+        return False
+    # A sensitive directory anywhere on the path (e.g. home/secrets/api.key).
+    if any(p in _SENSITIVE_DIRS for p in parts):
+        return True
+    # The agent's own secret files live directly under home.
+    if len(parts) == 1:
+        name = parts[0]
+        if name.startswith(_SENSITIVE_FILE_PREFIXES) or ".db" in name:
+            return True
+    return False
+
 def _skipped(path: str) -> bool:
     try:
         p = Path(path).resolve()
@@ -182,7 +216,7 @@ def _skipped(path: str) -> bool:
             return False
         home = _home()
         if p == home or home in p.parents:
-            return True
+            return _sensitive(p, home)
     except OSError:
         return True
     resolved = str(p).rstrip("/") + "/"
@@ -194,8 +228,8 @@ def _skipped(path: str) -> bool:
 def git_root(path: str) -> Optional[str]:
     """Innermost worktree containing path, or None if skipped / not git."""
     try:
-        start = Path(path)
-        start = start if start.is_dir() else start.parent
+        p = Path(path).resolve()
+        start = p if p.is_dir() else p.parent
         start = start.resolve()
     except OSError:
         return None
