@@ -51,6 +51,18 @@ in
     systemd.services.hermes-webui = {
       after = [ "hermes-agent.service" ];
       wants = [ "hermes-agent.service" ];
+      # Host-native WebUI (spawns the agent terminal). Lighter than browser:
+      # the terminal needs process visibility (no ProtectProc) and broad FS
+      # access for git/nix work, but it must not gain setuid or capabilities.
+      serviceConfig = {
+        NoNewPrivileges = true;
+        CapabilityBoundingSet = [];
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
+        ProtectControlGroups = true;
+        RestrictSUIDSGID = true;
+      };
     };
   };
 }

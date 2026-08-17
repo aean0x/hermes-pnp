@@ -77,6 +77,25 @@ let
       exec python3 ${importCookiesPy} --cdp "http://${cdpAddr}:${toString cdpPort}" "$@"
     '';
   };
+
+  # Browser/vnc/novnc run host-native as the unprivileged `hermes` user (not in
+  # the gateway container). Harden them so a compromised browser (the primary
+  # prompt-injection → RCE surface) cannot reach the host: drop all caps, no
+  # setuid gain, read-only system tree, read-only real /home, kernel interfaces
+  # locked. State lives under /var/lib/hermes (not /home) so ProtectHome /
+  # ProtectSystem leave it untouched. No PrivateTmp (x11vnc must reach the
+  # Xvfb socket under /tmp) and no ProtectProc (Chromium reads /proc/meminfo).
+  hardenHost = {
+    NoNewPrivileges = true;
+    CapabilityBoundingSet = [];
+    ProtectSystem = "full";
+    ProtectHome = "read-only";
+    ProtectKernelTunables = true;
+    ProtectKernelModules = true;
+    ProtectKernelLogs = true;
+    ProtectControlGroups = true;
+    RestrictSUIDSGID = true;
+  };
 in
 {
   config = mkIf (pnp.enable && cfg.enable) {
@@ -262,7 +281,7 @@ in
         TimeoutStartSec = 90;
         StandardOutput = "append:${logDir}/browser.stdout";
         StandardError = "append:${logDir}/browser.stderr";
-      };
+      } // hardenHost;
 
       environment = {
         HOME = home;
@@ -321,7 +340,7 @@ in
         RestartSec = 3;
         StandardOutput = "append:${logDir}/x11vnc.stdout";
         StandardError = "append:${logDir}/x11vnc.stderr";
-      };
+      } // hardenHost;
 
       environment.DISPLAY = display;
 
@@ -362,7 +381,7 @@ in
         RestartSec = 3;
         StandardOutput = "append:${logDir}/novnc.stdout";
         StandardError = "append:${logDir}/novnc.stderr";
-      };
+      } // hardenHost;
 
       # novnc web root: prefer share/novnc (nixpkgs), fall back to share/webapps/novnc.
       script = ''
