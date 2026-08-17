@@ -237,8 +237,8 @@ Nix, README, plugin.yaml, WebUI labels, and slash commands speak
 
 | name   | role                     | seeds                                   |
 | ------ | ------------------------ | --------------------------------------- |
-| low    | cheap helper             | every auxiliary slot + unpinned cron    |
-| medium | workhorse                | `settings.delegation`                   |
+| low    | cheap helper             | mechanical auxiliary slots + unpinned cron    |
+| medium | workhorse                | `settings.delegation` + reasoning auxiliary slots|
 | high   | session identity + voice | `model.default`, `fallback_model`, rest |
 
 Defaults (opinion, two strings each):
@@ -255,13 +255,13 @@ When `hermesPnP.enable` (module `nix/modules/models.nix`):
 - `settings.fallback_model.{provider,model}` ← high
 - `settings.delegation.{provider,model}` ← medium
 - `settings.cron.{model,model_provider}` ← low
-- `settings.auxiliary.<slot> = { inherit (models.low) provider model; reasoning_effort = "none"; }`
+- `settings.auxiliary.<slot> = { inherit (models.low or models.medium) provider model; reasoning_effort = "none"; }`
 
 Auxiliary slots (opinion, not user options) match official
 DEFAULT_CONFIG / rk3588 names: `title_generation` `compression`
 `approval` `web_extract` `skills_hub` `mcp` `triage_specifier`
 `kanban_decomposer` `profile_describer` `curator` `background_review`
-`monitor` `memory_query_rewrite`. Do not seed STT / TTS / vision.
+`monitor` `memory_query_rewrite`. `background_review` `curator` `kanban_decomposer` ride `models.medium` (reasoning work); the rest ride `models.low`. Do not seed STT / TTS / vision.
 
 `settings` is official `deepConfigType`. Do **not** wrap those leaves
 in `mkDefault` — the merge stores the wrapper as a literal. Last writer

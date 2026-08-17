@@ -56,13 +56,13 @@ in
       low = mkNamedModel {
         provider = "deepseek";
         model = "deepseek-v4-flash";
-        description = "Cheap helper. Seeds every auxiliary slot + unpinned cron.";
+        description = "Cheap helper. Seeds mechanical auxiliary slots + unpinned cron.";
       };
 
       medium = mkNamedModel {
         provider = "deepseek";
         model = "deepseek-v4-pro";
-        description = "Workhorse. Seeds delegation (delegate_task children).";
+        description = "Workhorse. Seeds delegation + reasoning auxiliary slots (background_review, curator, kanban_decomposer).";
       };
 
       high = mkNamedModel {

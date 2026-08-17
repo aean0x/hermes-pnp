@@ -18,8 +18,13 @@ let
     reasoning_effort = "none";
   };
 
-  # Official DEFAULT_CONFIG names. Not STT / TTS / vision / moa / goal_judge.
-  auxiliarySlots = [
+  mediumSlot = {
+    inherit (models.medium) provider model;
+    reasoning_effort = "none";
+  };
+
+  # Mechanical slots — cheap tier is enough.
+  auxiliaryLowSlots = [
     "title_generation"
     "compression"
     "approval"
@@ -27,12 +32,17 @@ let
     "skills_hub"
     "mcp"
     "triage_specifier"
-    "kanban_decomposer"
     "profile_describer"
-    "curator"
-    "background_review"
     "monitor"
     "memory_query_rewrite"
+  ];
+
+  # Reasoning / quality slots — workhorse tier. Not STT / TTS / vision /
+  # moa / goal_judge.
+  auxiliaryMediumSlots = [
+    "background_review"
+    "curator"
+    "kanban_decomposer"
   ];
 in
 {
@@ -54,7 +64,9 @@ in
         model = models.low.model;
         model_provider = models.low.provider;
       };
-      auxiliary = genAttrs auxiliarySlots (_: lowSlot);
+      auxiliary =
+        genAttrs auxiliaryLowSlots (_: lowSlot)
+        // genAttrs auxiliaryMediumSlots (_: mediumSlot);
     };
   };
 }
