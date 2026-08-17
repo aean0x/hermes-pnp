@@ -112,9 +112,8 @@ in
         default = true;
         description = ''
           Opinionated everyday CLI buildEnv (the "sauce"): a curated
-          ~40-package toolkit + python3 + chromium aliases + login PATH
-          + the forced-container hermes-cli wrapper. Set false for a
-          bare agent.
+          ~40-package toolkit + python3 + login PATH. Browser-specific
+          aliases live in the browser module. Set false for a bare agent.
         '';
       };
 
@@ -238,6 +237,27 @@ in
         default = null;
         description = "Path to a token file. Injected as GBRAIN_TOKEN_FILE; never read into Nix.";
       };
+    };
+
+    skills = {
+      enable = mkEnableOption "first-party hermes-pnp skills (e.g. browser)";
+      extraSkills = mkOption {
+        type = types.attrsOf types.path;
+        default = { };
+        description = "Name → skill dir beside the catalog (consumer skills).";
+      };
+    };
+
+    environmentFiles = mkOption {
+      type = types.listOf types.path;
+      default = [ ];
+      description = ''
+        Drop-in secrets hook: extra env files merged into the agent .env.
+        Prefer sops.nix — render a sops.templates file (e.g. /run/hermes.env)
+        and list that path here. Forwarded to
+        services.hermes-agent.environmentFiles.
+      '';
+      example = [ "/run/hermes.env" ];
     };
 
     mcpProxy.enable = mkOption {

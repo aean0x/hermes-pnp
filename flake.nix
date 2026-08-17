@@ -25,7 +25,8 @@
       ];
       forAllSystems = lib.genAttrs systems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
-      catalog = import ./nix/catalog.nix;
+      catalog = import ./plugins/catalog.nix;
+      skillsCatalog = import ./skills/catalog.nix;
 
       composer = {
         imports = [
@@ -40,6 +41,7 @@
     in
     {
       plugins = catalog;
+      skills = skillsCatalog;
 
       nixosModules.default = composer;
       nixosModules.agent = hermes-agent.nixosModules.default;
@@ -51,6 +53,12 @@
         ];
       };
       nixosModules.mcp-proxy = import ./services/mcp-proxy/nix/module.nix;
+      nixosModules.skills = {
+        imports = [
+          ./nix/modules/options.nix
+          ./nix/modules/skills.nix
+        ];
+      };
       nixosModules.toolbox = {
         imports = [
           ./nix/modules/options.nix

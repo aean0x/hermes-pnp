@@ -18,7 +18,7 @@ let
 
   pnp = config.services.hermesPnP;
   extra = pnp.extraPlugins;
-  catalog = import ../catalog.nix;
+  catalog = import ../../plugins/catalog.nix;
   install = pnp.pluginInstall;
 
   gbrainPlugins = [

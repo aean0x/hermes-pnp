@@ -6,7 +6,7 @@
 # chat` never inherits /data paths).
 #
 # This is the composer's "sauce": a curated ~40-package set + python3 +
-# chromium aliases + login PATH + the forced-container hermes-cli wrapper.
+# login PATH. Browser-specific aliases live in the browser module.
 # Extend with toolbox.extraPackages. Disable with toolbox.enable = false.
 { config
 , lib
@@ -36,7 +36,6 @@ let
 
   toolboxDir = "${stateDir}/toolbox/bin";
   containerToolboxDir = "${data}/toolbox/bin";
-  binDir = "${stateDir}/bin";
   skillsDir = "${stateDir}/skills";
   pluginsDir = "${stateDir}/plugins";
 
@@ -66,26 +65,18 @@ let
 
   containerProcessEnv = {
     PATH = containerPath;
-    HERMES_PY = "${containerToolboxDir}/python3";
     HERMES_PYTHON = "${containerToolboxDir}/python3";
-    AGENT_BROWSER_EXECUTABLE_PATH = "${containerToolboxDir}/chromium";
   };
 
   # withPackages already ships `python` and `python3`; keep both names
   # explicit so a nixpkgs change cannot drop one.
   pythonEnv = pkgs.python3.withPackages cfg.pythonPackages;
+
+  # Explicit python/python3 symlinks so the buildEnv path always has both.
   pythonBins = pkgs.runCommand "hermes-python" { } ''
     mkdir -p "$out/bin"
     ln -s ${pythonEnv}/bin/python3 "$out/bin/python3"
     ln -s ${pythonEnv}/bin/python3 "$out/bin/python"
-  '';
-
-  # Browser tools look for chromium / chrome / google-chrome on PATH.
-  chromiumAliases = pkgs.runCommand "chromium-alias" { } ''
-    mkdir -p "$out/bin"
-    ln -s ${pkgs.chromium}/bin/chromium "$out/bin/chromium"
-    ln -s ${pkgs.chromium}/bin/chromium "$out/bin/chrome"
-    ln -s ${pkgs.chromium}/bin/chromium "$out/bin/google-chrome"
   '';
 
   hermesToolbox = pkgs.buildEnv {
@@ -132,7 +123,6 @@ let
       pkgs.nmap
       pkgs.netcat-gnu
       pkgs.socat
-      chromiumAliases
     ] ++ cfg.extraPackages;
   };
 
@@ -164,44 +154,6 @@ let
   containerBashrc = pkgs.writeText "hermes-home-bashrc" ''
     [ -f "$HOME/.profile" ] && . "$HOME/.profile"
   '';
-
-  # Forced-container-route wrapper: docker exec into the running gateway
-  # when .container-mode exists, else fall back to the host hermes binary.
-  hermesCliWrapper = pkgs.writeShellScript "hermes-cli-wrapper" ''
-    mode_file="${hermesHome}/.container-mode"
-    if [ -f "$mode_file" ]; then
-      marker=$(cat "$mode_file" 2>/dev/null || true)
-      exec_user="${agent.user}"
-      container_name="hermes-agent"
-      hermes_bin="/data/current-package/bin/hermes"
-      if [ -n "$marker" ]; then
-        exec_user=$(echo "$marker" | cut -d' ' -f1)
-        container_name=$(echo "$marker" | cut -d' ' -f2)
-        hermes_bin=$(echo "$marker" | cut -d' ' -f3)
-      fi
-
-      runtime="''${CONTAINER_RUNTIME:-podman}"
-      if command -v "$runtime" >/dev/null 2>&1; then
-        if [ "$runtime" = "podman" ]; then
-          tty_flags=(-i)
-          if [ -t 0 ] && [ -t 1 ]; then
-            tty_flags=(-it)
-          fi
-          env_flags=()
-          [ -n "''${TERM:-}" ] && env_flags+=(-e "TERM=$TERM")
-          [ -n "''${COLORTERM:-}" ] && env_flags+=(-e "COLORTERM=$COLORTERM")
-          [ -n "''${LANG:-}" ] && env_flags+=(-e "LANG=$LANG")
-          [ -n "''${LC_ALL:-}" ] && env_flags+=(-e "LC_ALL=$LC_ALL")
-          exec "$runtime" exec "''${tty_flags[@]}" -u "$exec_user" "''${env_flags[@]}" \
-            "$container_name" "$hermes_bin" "$@"
-        else
-          exec "$runtime" exec -it -u "$exec_user" "$container_name" "$hermes_bin" "$@"
-        fi
-      fi
-    fi
-
-    exec /run/current-system/sw/bin/hermes "$@"
-  '';
 in
 {
   config = mkIf (pnp.enable && cfg.enable) {
@@ -209,7 +161,6 @@ in
       inherit
         toolboxDir
         containerToolboxDir
-        binDir
         hostPath
         containerPath
         ;
@@ -257,9 +208,6 @@ in
 
       install -d -m 2770 -o ${agent.user} -g ${agent.group} ${skillsDir}
       install -d -m 2770 -o ${agent.user} -g ${agent.group} ${pluginsDir}
-
-      install -d -m 0755 -o ${agent.user} -g ${agent.group} ${binDir}
-      install -m 0755 ${hermesCliWrapper} ${binDir}/hermes-cli
     '';
 
     # Run after setup merges environmentFiles into .env so we can strip PATH again.

@@ -14,6 +14,7 @@ let
 in
 {
   config = mkIf pnp.enable {
+    services.hermes-agent.environmentFiles = pnp.environmentFiles;
     services.hermesPnP.pluginInstall.stateDir = mkDefault agent.stateDir;
     services.hermesPnP.pluginInstall.user = mkDefault agent.user;
     services.hermesPnP.pluginInstall.group = mkDefault agent.group;

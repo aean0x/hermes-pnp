@@ -12,6 +12,7 @@
     ./webui.nix
     ./models.nix
     ./plugins.nix
+    ./skills.nix
     ./toolbox.nix
     ./browser.nix
     ./gbrain.nix

@@ -89,7 +89,6 @@ hermes-pnp/
   AGENTS.md                      # for future agents
   README.md                      # user-facing, matches this design
   nix/
-    catalog.nix                  # plugin name → path (exists)
     lib.nix                      # shared helpers (docker --env, plugin dest)
     modules/
       default.nix                # composer: imports below
@@ -101,7 +100,11 @@ hermes-pnp/
       browser.nix                # persistent CDP browser + optional noVNC handoff
       package.nix                # shared package + bundled-share env
       gbrain.nix                 # thin optional MCP URL + plugin env
-  plugins/                       # first-party plugins (unchanged)
+      skills.nix                 # materialize first-party skills → $stateDir/skills
+  plugins/                       # first-party plugins
+  plugins/catalog.nix            # plugin name → path
+  skills/                        # first-party skills
+  skills/catalog.nix             # skill name → path
   services/mcp-proxy/            # exists; keep services.mcpProxy
 ```
 
@@ -310,8 +313,9 @@ example.
 
 ## Plugins
 
-Catalog stays the SoT (`nix/catalog.nix`). Adding a plugin is: drop a
-folder under `plugins/<name>`, add one catalog line.
+Catalog stays the SoT (`plugins/catalog.nix`). Adding a plugin is: drop a
+folder under `plugins/<name>`, add one catalog line. Skills follow the
+same pattern (`skills/catalog.nix`).
 
 Current first-party set (keep, do not rewrite Python unless Nix wiring
 requires it):
@@ -384,8 +388,8 @@ any host unit that sources it.
 
 The opinion is "the agent can do real unix work" — not a bare-minimum set
 and not "here is one person's workstation." The default set includes git, curl,
-jq, ripgrep, file, unzip, python3 (with requests/pyyaml/toml), and the
-chromium/chromedriver aliases. `gh`, `docker`, `sops`, `age`, `nmap`, and
+jq, ripgrep, file, unzip, python3 (with requests/pyyaml/toml). Browser
+PATH aliases live in the browser module. `gh`, `docker`, `sops`, `age`, `nmap`, and
 language toolchains are consumer `extraPackages`.
 
 ## GBrain (tertiary)
@@ -522,15 +526,14 @@ the rk3588 cutover PR reworks the host tree to match.
 - `toolbox.nix` is now the full everyday CLI `buildEnv` (was a small
   `extraPackages` passthrough). Materializes to
   `/var/lib/hermes/toolbox/bin`, container path `/data/toolbox/bin`;
-  exports `hostPath` + `binDir` for consumers to wire into units
-  (WebUI PATH, gbrain unit, sudo `hermes-cli`).
-- `browser.nix` is new: persistent CDP browser + optional noVNC phone
-  handoff, ported from the rk3588 host. Seeds `BROWSER_CDP_URL` +
-  `BU_CDP_URL` and the noVNC URL into `services.hermes-agent.environment`.
-  Engine (`package`/`engine`) is a consumer choice.
+  exports `hostPath` for consumers to wire into units.
+- `browser.nix` is new: persistent CDP browser + optional noVNC
+  handoff. Seeds `BROWSER_CDP_URL` + `BU_CDP_URL` and the noVNC URL
+  into `services.hermes-agent.environment`. Engine (`package`/`engine`)
+  is a consumer choice. Chromium-family PATH aliases live here.
 - `runtime.nix` is deleted. `runtime.extraBindMounts` was invented
   scaffolding; the official `container.extraVolumes` is used directly.
   There is no `runtime.mode`; the s6 port is abandoned.
-- `catalog.nix` import in `plugins.nix` fixed (`../../` → `../`); the
-  earlier move had broken plugin-install evaluation (only forced at
-  install time, so `nix flake check` stayed green until the reorg).
+- Plugin catalog lives at `plugins/catalog.nix`. Skills catalog at
+  `skills/catalog.nix`. First-party skill is `browser` (flake defaults
+  only; consumer extras via `skills.extraSkills`).

@@ -54,6 +54,16 @@ let
 
   browserBin = "${cfg.package}/bin/${cfg.engine}";
 
+  # Browser tools look for chromium / chrome / google-chrome on PATH; point
+  # them at the configured engine so the fallback browser-cli uses the same
+  # browser as the CDP service.
+  chromiumAliases = pkgs.runCommand "chromium-alias" { } ''
+    mkdir -p "$out/bin"
+    ln -s ${browserBin} "$out/bin/chromium"
+    ln -s ${browserBin} "$out/bin/chrome"
+    ln -s ${browserBin} "$out/bin/google-chrome"
+  '';
+
   importCookiesPy = ../browser/import-browser-cookies.py;
   hermesBrowserImportCookies = pkgs.writeShellApplication {
     name = "hermes-browser-import-cookies";
@@ -72,6 +82,7 @@ in
   config = mkIf (pnp.enable && cfg.enable) {
     environment.systemPackages = [
       cfg.package
+      chromiumAliases
       pkgs.xvfb
       pkgs.x11vnc
       pkgs.novnc
