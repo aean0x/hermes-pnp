@@ -50,7 +50,10 @@ let
   silenceOverlay =
     hermesVenv:
     pkgs.runCommand "hermes-gateway-silence-fix" { } ''
-      src=$(find ${lib.escapeShellArg "${hermesVenv}"} -type d -path '*/lib/python*/site-packages/gateway' | head -1)
+      src=""
+      for cand in ${hermesVenv}/lib/python*/site-packages/gateway; do
+        if [ -d "$cand" ]; then src="$cand"; break; fi
+      done
       if [ -z "$src" ]; then
         echo "silence fix: gateway package not found in hermesVenv" >&2
         exit 1
