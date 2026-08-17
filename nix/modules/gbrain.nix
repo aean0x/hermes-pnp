@@ -68,6 +68,11 @@ in
       ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
+      # systemd only honours StartLimit* under [Unit], not [Service]
+      unitConfig = {
+        StartLimitIntervalSec = 120;
+        StartLimitBurst = 5;
+      };
       serviceConfig = {
         Type = "simple";
         User = agent.user;
@@ -81,8 +86,6 @@ in
         ExecStart = "${gbrainHttpScript}";
         Restart = "on-failure";
         RestartSec = 10;
-        StartLimitIntervalSec = 120;
-        StartLimitBurst = 5;
         TimeoutStartSec = "120";
       };
     };
