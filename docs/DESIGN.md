@@ -272,8 +272,10 @@ Whenever `model-router` is in `plugins`, the installer writes
 `config.json` + `webui/config.js` from the same `models` block. No
 extra Nix overlay option.
 
-Classifier / escalate / rest / polish policy is unchanged: 4 errors on
-low, 3 on medium, rest on high, final voice = high.
+Classifier / escalate policy: 4 consecutive tool errors on low, 3 on
+medium, capped at `escalate_max` (high). No `final_voice`, no
+`rest_on_high` — those were purged; high is reached by classification
+or `/high`.
 
 ## Drop-in migration
 

@@ -23,8 +23,8 @@
 - Users override seeds with official `services.hermes-agent.settings.*`.
 - model-router internal keys are `low` < `medium` < `high`. Commands
   `/low` `/medium` `/high` `/auto`. Classifier replies with exactly
-  one of those three words. Escalation 4 on low, 3 on medium. Rest
-  and final voice on high. Do not change that policy.
+  one of those three words. Escalation 4 on low, 3 on medium, cap
+  high. No rest_on_high / final_voice. Do not change that policy.
 - `gbrain.enable` must not clobber the composer plugin default list.
   Append happens at install time (`settings.plugins.enabled`), not by
   writing back into the `plugins` option.
