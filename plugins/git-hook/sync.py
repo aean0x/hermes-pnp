@@ -19,7 +19,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Set
 
-log = logging.getLogger("plugins.projects_auto_commit")
+log = logging.getLogger("plugins.git_hook")
 
 _WRITE_TOOLS = frozenset({"write_file", "patch", "skill_manage"})
 _PATH_KEYS = ("path", "file_path", "workdir")
@@ -52,7 +52,7 @@ def _truthy(name: str, default: bool = True) -> bool:
 
 
 def disabled() -> bool:
-    return not _truthy("PROJECTS_AUTO_COMMIT", True)
+    return not _truthy("GIT_HOOK_COMMIT", True)
 
 
 def _home() -> Path:
@@ -98,7 +98,7 @@ def _git(
     extra_env: Optional[Dict[str, str]] = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    extra = os.environ.get("PROJECTS_AUTO_COMMIT_PATH", "").strip()
+    extra = os.environ.get("GIT_HOOK_COMMIT_PATH", "").strip()
     bits = [p for p in extra.split(":") if p]
     bits += [
         str(_home().parent / "toolbox" / "bin"),
@@ -291,7 +291,7 @@ def _with_repo_lock(root: str):
         # linked worktree: lock next to the worktree, not the shared git dir
         lock_path = Path(root) / ".git-auto-sync.lock"
     else:
-        lock_path = git_dir / "projects-auto-commit.lock"
+        lock_path = git_dir / "git-hook.lock"
 
     class _Guard:
         def __enter__(self):
@@ -323,7 +323,7 @@ def pull_if_clean(root: str) -> str:
     if not _has_upstream(root):
         _pulled.add(root)
         return "no-upstream"
-    timeout = _timeout("PROJECTS_AUTO_PULL_TIMEOUT_S", 12)
+    timeout = _timeout("GIT_HOOK_PULL_TIMEOUT_S", 12)
     try:
         with _with_repo_lock(root):
             if _porcelain_paths(root):
@@ -332,18 +332,18 @@ def pull_if_clean(root: str) -> str:
     except OSError:
         return "locked"
     except subprocess.TimeoutExpired:
-        log.warning("projects-auto-commit: pull timeout %s", root)
+        log.warning("git-hook: pull timeout %s", root)
         return "timeout"
     _pulled.add(root)
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "").strip()[:300]
-        log.info("projects-auto-commit: pull skipped %s (%s)", root, err)
+        log.info("git-hook: pull skipped %s (%s)", root, err)
         return "failed"
     return "pulled"
 
 
 def _commit_message(paths: Iterable[str]) -> str:
-    override = os.environ.get("PROJECTS_AUTO_COMMIT_MSG", "").strip()
+    override = os.environ.get("GIT_HOOK_COMMIT_MSG", "").strip()
     if override:
         return override
     names = [Path(p).name for p in paths]
@@ -366,7 +366,7 @@ def commit_and_push(root: str, paths: Set[str], source: str) -> str:
             add = _git(["add", "--", *rels], cwd=root, timeout=10)
             if add.returncode != 0:
                 log.warning(
-                    "projects-auto-commit: add failed %s %s",
+                    "git-hook: add failed %s %s",
                     root,
                     (add.stderr or "").strip()[:200],
                 )
@@ -391,30 +391,30 @@ def commit_and_push(root: str, paths: Set[str], source: str) -> str:
             )
             if commit.returncode != 0:
                 err = (commit.stderr or commit.stdout or "").strip()[:300]
-                log.info("projects-auto-commit: commit skipped %s (%s)", root, err)
+                log.info("git-hook: commit skipped %s (%s)", root, err)
                 return "commit-skipped"
             sha = (_git(["rev-parse", "--short", "HEAD"], cwd=root, timeout=3).stdout or "").strip()
-            if not _truthy("PROJECTS_AUTO_PUSH", True):
-                log.info("projects-auto-commit [%s]: committed %s (push off)", source, sha)
+            if not _truthy("GIT_HOOK_PUSH", True):
+                log.info("git-hook [%s]: committed %s (push off)", source, sha)
                 return f"committed {sha}"
             if not _has_upstream(root):
-                push = _git(["push", "origin", "HEAD"], cwd=root, timeout=_timeout("PROJECTS_AUTO_PUSH_TIMEOUT_S", 20))
+                push = _git(["push", "origin", "HEAD"], cwd=root, timeout=_timeout("GIT_HOOK_PUSH_TIMEOUT_S", 20))
             else:
-                push = _git(["push"], cwd=root, timeout=_timeout("PROJECTS_AUTO_PUSH_TIMEOUT_S", 20))
+                push = _git(["push"], cwd=root, timeout=_timeout("GIT_HOOK_PUSH_TIMEOUT_S", 20))
             if push.returncode != 0:
                 log.warning(
-                    "projects-auto-commit [%s]: committed %s, push failed %s",
+                    "git-hook [%s]: committed %s, push failed %s",
                     source,
                     sha,
                     (push.stderr or "").strip()[:200],
                 )
                 return f"committed_local_only {sha}"
-            log.info("projects-auto-commit [%s]: pushed %s", source, sha)
+            log.info("git-hook [%s]: pushed %s", source, sha)
             return f"pushed {sha}"
     except OSError:
         return "locked"
     except subprocess.TimeoutExpired:
-        log.warning("projects-auto-commit: git timeout %s", root)
+        log.warning("git-hook: git timeout %s", root)
         return "timeout"
 
 
@@ -478,7 +478,7 @@ def _flush(source: str) -> None:
         try:
             commit_and_push(root, paths, source)
         except Exception:
-            log.exception("projects-auto-commit: flush failed %s", root)
+            log.exception("git-hook: flush failed %s", root)
 
 
 def on_post_llm_call(**kwargs: Any) -> None:
@@ -508,4 +508,4 @@ def register(ctx) -> None:
     ctx.register_hook("post_tool_call", on_post_tool_call)
     ctx.register_hook("post_llm_call", on_post_llm_call)
     ctx.register_hook("on_session_end", on_session_end)
-    log.info("projects-auto-commit: registered (in-process, any worktree)")
+    log.info("git-hook: registered (in-process, any worktree)")

@@ -83,9 +83,9 @@ class GitSync(unittest.TestCase):
         self.td = tempfile.TemporaryDirectory()
         self.root = Path(self.td.name)
         os.environ["PROJECTS_ROOT"] = str(self.root)
-        os.environ.pop("PROJECTS_AUTO_COMMIT", None)
-        os.environ.pop("PROJECTS_AUTO_PUSH", None)
-        os.environ.pop("PROJECTS_AUTO_COMMIT_MSG", None)
+        os.environ.pop("GIT_HOOK_COMMIT", None)
+        os.environ.pop("GIT_HOOK_PUSH", None)
+        os.environ.pop("GIT_HOOK_COMMIT_MSG", None)
 
     def tearDown(self):
         sync.reset_state()
@@ -127,7 +127,7 @@ class GitSync(unittest.TestCase):
 
     def test_commit_only_this_turns_delta(self):
         _, work = self._clone_pair()
-        os.environ["PROJECTS_AUTO_PUSH"] = "0"
+        os.environ["GIT_HOOK_PUSH"] = "0"
         (work / "wip.txt").write_text("unrelated wip\n")  # pre-existing dirty
         target = work / "touched.txt"
 
@@ -147,7 +147,7 @@ class GitSync(unittest.TestCase):
 
     def test_read_then_flush_does_not_commit_unrelated(self):
         _, work = self._clone_pair()
-        os.environ["PROJECTS_AUTO_PUSH"] = "0"
+        os.environ["GIT_HOOK_PUSH"] = "0"
         (work / "wip.txt").write_text("wip\n")
         readme = work / "README"
         sync.on_pre_tool_call("read_file", {"path": str(readme)})
@@ -157,7 +157,7 @@ class GitSync(unittest.TestCase):
         self.assertEqual(log, "init")
 
     def test_disabled(self):
-        os.environ["PROJECTS_AUTO_COMMIT"] = "0"
+        os.environ["GIT_HOOK_COMMIT"] = "0"
         self.assertTrue(sync.disabled())
         sync.on_pre_tool_call("read_file", {"path": "/tmp"})
         self.assertEqual(sync._pulled, set())

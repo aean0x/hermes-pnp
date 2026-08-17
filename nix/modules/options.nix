@@ -85,7 +85,7 @@ in
         "secret-handoff"
         # "gbrain-retrieval-reflex"
         # "gbrain-memory-flush"
-        # "projects-auto-commit"
+        # "git-hook"
       ];
     };
 
