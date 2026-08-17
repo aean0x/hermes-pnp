@@ -5,26 +5,39 @@
       "short": "Low",
       "model": "deepseek-v4-flash",
       "provider": "deepseek",
-      "role": "fast triage + cheap helper"
+      "best_for": [
+        "Short acknowledgements",
+        "Status checks",
+        "Trivial Q&A / look-ups",
+        "Title generation"
+      ]
     },
     "medium": {
       "label": "Medium",
       "short": "Medium",
       "model": "deepseek-v4-pro",
       "provider": "deepseek",
-      "role": "default workhorse"
+      "best_for": [
+        "Default day-to-day work",
+        "Coding, research, debugging",
+        "Code review",
+        "Large-document synthesis"
+      ]
     },
     "high": {
       "label": "High",
       "short": "High",
       "model": "grok-4.6",
       "provider": "xai-oauth",
-      "role": "high-stakes + final voice"
+      "best_for": [
+        "Architecture",
+        "Migration planning",
+        "Complex multi-step design",
+        "Security-sensitive analysis",
+        "Monetary transactions"
+      ]
     }
   },
-  "final": "high",
-  "final_voice": true,
-  "rest_on_high": true,
   "escalate_max": "high",
   "escalation_errors": { "low": 4, "medium": 3 }
 }

@@ -1,15 +1,11 @@
-"""Load model-router settings from config.json and env overlays.
+"""model-router settings — three named tiers (low < medium < high).
 
-Exactly three named models: low < medium < high. Override models,
-providers, labels, final-voice, and rest behaviour without editing
-plugin code.
+Models, providers, and routing behaviour live here as defaults, overridable
+via a plugin-adjacent config.json, a MODEL_ROUTER_CONFIG path, or
+MODEL_ROUTER_* env vars. No Hermes/WebUI core files are edited.
 
-Resolution order (later wins per key):
-  1. built-in defaults
-  2. plugin-adjacent config.json
-  3. MODEL_ROUTER_CONFIG path (JSON)
-  4. MODEL_ROUTER_{LOW,MEDIUM,HIGH}_{MODEL,PROVIDER,LABEL}
-     MODEL_ROUTER_FINAL / FINAL_VOICE / REST_ON_HIGH
+The `best_for` list on each tier is the single source of truth for the
+classifier prompt — nothing else steers it.
 """
 
 from __future__ import annotations
@@ -31,14 +27,11 @@ DEFAULT_MODELS: dict[str, dict[str, Any]] = {
         "short": "Low",
         "model": "deepseek-v4-flash",
         "provider": "deepseek",
-        "role": "fast triage + cheap helper",
         "best_for": [
             "Short acknowledgements",
-            "Intent classification",
             "Status checks",
-            "Title generation",
             "Trivial Q&A / look-ups",
-            "Documentation and drafting",
+            "Title generation",
         ],
     },
     "medium": {
@@ -46,17 +39,11 @@ DEFAULT_MODELS: dict[str, dict[str, Any]] = {
         "short": "Medium",
         "model": "deepseek-v4-pro",
         "provider": "deepseek",
-        "role": "default workhorse",
         "best_for": [
             "Default day-to-day work",
-            "Standard coding and research",
-            "Debugging",
+            "Coding, research, debugging",
             "Code review",
             "Large-document synthesis",
-            "Complex analysis",
-            "Nuanced code review",
-            "Algorithmic optimization",
-            "Multi-file implementation",
         ],
     },
     "high": {
@@ -64,20 +51,17 @@ DEFAULT_MODELS: dict[str, dict[str, Any]] = {
         "short": "High",
         "model": "grok-4.6",
         "provider": "xai-oauth",
-        "role": "high-stakes + final voice",
         "best_for": [
             "Architecture",
             "Migration planning",
             "Complex multi-step design",
             "Security-sensitive analysis",
-            "High-stakes reasoning",
             "Monetary transactions",
-            "Final user-facing response",
         ],
     },
 }
 
-# Provider → host heuristics for half-switch repair (model name set, old API host).
+# provider -> host heuristics for half-switch repair (model set, old API host).
 DEFAULT_PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = {
     "deepseek": {"forbid": ["x.ai", "xai"], "prefer": ["deepseek"]},
     "deepseek-chat": {"forbid": ["x.ai", "xai"], "prefer": ["deepseek"]},
@@ -97,12 +81,6 @@ def as_name(raw: Any) -> str | None:
         return None
     name = str(raw).strip().lower()
     return name if name in RANK else None
-
-
-def _truthy(raw: str | None, default: bool) -> bool:
-    if raw is None:
-        return default
-    return raw.strip().lower() not in {"0", "false", "no", "off", ""}
 
 
 def _coerce_models_map(raw: Any, *, origin: str) -> dict[str, dict[str, Any]]:
@@ -150,43 +128,16 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
-    lines = [
-        "You assign a single WORK routing model for the user's message.",
-        "(The final user-facing reply may still be polished separately.)",
-        "",
-    ]
+    """Build the triage prompt from each tier's `best_for` list — nothing else."""
+    lines = ["Pick the model for this turn.", ""]
     for name in NAMES:
         meta = models[name]
         label = meta.get("label") or name.capitalize()
-        role = meta.get("role") or ""
         best = meta.get("best_for") or []
-        extra = "; ".join(str(x) for x in best[:8]) if best else role
+        extra = "; ".join(str(x) for x in best) if best else label
         lines.append(f"{name} = {label} — {extra}")
-    lines.extend(
-        [
-            "",
-            "Rules:",
-            "- When unsure between low and medium, pick medium for real work; pick low only for trivial turns.",
-            "- When unsure between medium and high, pick medium unless architecture/security/high-stakes fits.",
-            "- high is uncommon but not vanishingly rare.",
-            "- if user message is >1 sentence, strongly consider medium.",
-            "- Multi-sentence questions, critiques, and follow-ups are real work, not triage.",
-            "- Respond with ONLY one word: low, medium, or high.",
-        ]
-    )
+    lines.extend(["", "Respond with ONLY one word: low, medium, or high."])
     return "\n".join(lines)
-
-
-def _generated_final_voice(models: dict[str, dict[str, Any]], final: str) -> str:
-    meta = models.get(final) or {}
-    label = meta.get("label") or final.capitalize()
-    return (
-        f"You are the final user-facing voice ({label}). Rewrite the draft assistant "
-        "reply for the user.\n"
-        "Preserve every fact, path, command, URL, code block, number, and decision exactly.\n"
-        "Improve clarity, structure, and voice. Do not invent new claims. Do not mention "
-        "models, routing, or that a draft existed. Output ONLY the final reply.\n"
-    )
 
 
 def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> None:
@@ -201,14 +152,6 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
                     "forbid": list(spec.get("forbid") or []),
                     "prefer": list(spec.get("prefer") or []),
                 }
-    if "final" in data:
-        name = as_name(data["final"])
-        if name:
-            state["final"] = name
-    if "final_voice" in data:
-        state["final_voice"] = bool(data["final_voice"])
-    if "rest_on_high" in data:
-        state["rest_on_high"] = bool(data["rest_on_high"])
     if "escalate_max" in data:
         name = as_name(data["escalate_max"])
         if name:
@@ -232,22 +175,16 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         state["skip_platforms"] = [str(x) for x in data["skip_platforms"]]
     if data.get("classifier_system"):
         state["classifier_system"] = str(data["classifier_system"])
-    if data.get("final_voice_system"):
-        state["final_voice_system"] = str(data["final_voice_system"])
 
 
 def load_settings() -> dict[str, Any]:
     state: dict[str, Any] = {
         "models": deepcopy(DEFAULT_MODELS),
         "provider_hosts": deepcopy(DEFAULT_PROVIDER_HOSTS),
-        "final": "high",
-        "final_voice": True,
-        "rest_on_high": True,
         "escalate_max": "high",
         "escalation_errors": {"low": 4, "medium": 3},
         "skip_platforms": ["cron", "subagent"],
         "classifier_system": None,
-        "final_voice_system": None,
     }
 
     for candidate, origin in (
@@ -272,12 +209,11 @@ def load_settings() -> dict[str, Any]:
     if len(models) > 3:
         raise SettingsError("model-router: a fourth model is not allowed")
 
-    env_slots = (
+    for name, prefix in (
         ("low", "MODEL_ROUTER_LOW_"),
         ("medium", "MODEL_ROUTER_MEDIUM_"),
         ("high", "MODEL_ROUTER_HIGH_"),
-    )
-    for name, prefix in env_slots:
+    ):
         model = os.environ.get(prefix + "MODEL")
         provider = os.environ.get(prefix + "PROVIDER")
         label = os.environ.get(prefix + "LABEL")
@@ -289,30 +225,16 @@ def load_settings() -> dict[str, Any]:
             models[name]["label"] = label.strip()
             models[name].setdefault("short", label.strip().split()[0])
 
-    env_final = os.environ.get("MODEL_ROUTER_FINAL")
-    if env_final:
-        name = as_name(env_final)
-        if name:
-            state["final"] = name
-    state["final_voice"] = _truthy(os.environ.get("MODEL_ROUTER_FINAL_VOICE"), state["final_voice"])
-    if os.environ.get("MODEL_ROUTER_REST_ON_HIGH") is not None:
-        state["rest_on_high"] = _truthy(os.environ.get("MODEL_ROUTER_REST_ON_HIGH"), state["rest_on_high"])
-
-    if state["final"] not in models:
-        state["final"] = "high" if "high" in models else next(iter(models))
     if state["escalate_max"] not in models:
-        state["escalate_max"] = "high" if "high" in models else state["final"]
+        state["escalate_max"] = "high" if "high" in models else next(iter(models))
 
     for name, meta in models.items():
         meta.setdefault("short", name.capitalize())
         meta.setdefault("label", name.capitalize())
-        meta.setdefault("role", "")
         meta.setdefault("best_for", [])
 
     if not state["classifier_system"]:
         state["classifier_system"] = _generated_classifier(models)
-    if not state["final_voice_system"]:
-        state["final_voice_system"] = _generated_final_voice(models, state["final"])
 
     return state
 
@@ -320,15 +242,11 @@ def load_settings() -> dict[str, Any]:
 _SETTINGS = load_settings()
 
 MODELS: dict[str, dict[str, Any]] = _SETTINGS["models"]
-FINAL: str = _SETTINGS["final"]
-FINAL_VOICE: bool = _SETTINGS["final_voice"]
-REST_ON_HIGH: bool = _SETTINGS["rest_on_high"]
 ESCALATE_MAX: str = _SETTINGS["escalate_max"]
 ESCALATION_ERRORS: dict[str, int] = _SETTINGS["escalation_errors"]
 SKIP_PLATFORMS: frozenset[str] = frozenset(_SETTINGS["skip_platforms"])
 PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = _SETTINGS["provider_hosts"]
 CLASSIFIER: str = _SETTINGS["classifier_system"]
-FINAL_VOICE_SYSTEM: str = _SETTINGS["final_voice_system"]
 
 
 def webui_models() -> list[dict[str, str]]:
