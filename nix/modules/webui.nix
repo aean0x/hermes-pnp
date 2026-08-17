@@ -57,6 +57,7 @@ let
       "${agent.stateDir}/home:/home/hermes"
       "${webui.stateDir}:${webui.stateDir}"
       "/etc/ssl:/etc/ssl:ro"
+      "/etc/gitconfig:/etc/gitconfig:ro"
     ] ++ wctr.extraVolumes;
     extraEnv = extraEnv;
     extraOptions = wctr.extraOptions;
