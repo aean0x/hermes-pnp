@@ -17,12 +17,13 @@ choice.
 
   services.hermes-agent = {
     enable = true;
-    environmentFiles = [ config.sops.secrets.hermes-env.path ];
     # Official settings still work. PnP only seeds via the composer.
   };
 
   services.hermesPnP = {
     enable = true;
+    environmentFiles = [ config.sops.templates.hermesEnv.path ];
+    browser.package = pkgs.brave; # engine follows package.meta.mainProgram
 
     models.low    = { provider = "deepseek";  model = "deepseek-v4-flash"; };
     models.medium = { provider = "deepseek";  model = "deepseek-v4-pro"; };
@@ -43,7 +44,6 @@ choice.
 
     # webui.enable = true;     # default on when composer is on
     # toolbox.enable = true;   # everyday CLI buildEnv → /var/lib/hermes/toolbox/bin
-    # browser = { package = pkgs.brave; engine = "brave"; };  # CDP + noVNC
     # gbrain.enable = false;
     # mcpProxy.enable = false;
   };
@@ -99,8 +99,9 @@ Escape hatches:
 - `services.hermesPnP.packageFixes.silenceMarkers = false`
 
 Official options you keep writing yourself: `settings`,
-`environmentFiles`, `container.*`, `extraPythonPackages`,
-`extraDependencyGroups`, `mcpServers`, `documents`.
+`container.*`, `extraPythonPackages`, `extraDependencyGroups`,
+`mcpServers`, `documents`. Env files go on
+`services.hermesPnP.environmentFiles` (forwarded). See Secrets.
 
 PnP does **not** default `extraDependencyGroups` to `["mcp"]`. Native
 `full` already has what most users need.
@@ -170,6 +171,32 @@ services.hermesPnP.gbrain = {
 ```
 
 Listing the GBrain plugins does not require this hook.
+
+## Secrets
+
+Declare the rendered env file on the composer. It is forwarded to
+`services.hermes-agent.environmentFiles`. WebUI inherits that list.
+Do not put secrets in JSON.
+
+```nix
+sops.templates.hermesEnv = {
+  owner = "hermes";
+  group = "hermes";
+  mode = "0600";
+  path = "/run/hermes.env";
+  content = ''
+    DEEPSEEK_API_KEY=${config.sops.placeholder.deepseek_api_key}
+    XAI_API_KEY=${config.sops.placeholder.xai_api_key}
+  '';
+};
+
+services.hermesPnP.environmentFiles = [ config.sops.templates.hermesEnv.path ];
+```
+
+Include a key for every provider named in `models.*`. Optional tool
+keys (search, crawl, TTS) are listed in `docs/hermes.env.example`.
+GBrain tokens stay on `gbrain.tokenFile`, not this file. Site identity
+(Telegram, mail) stays in the consumer.
 
 ## MCP proxy
 

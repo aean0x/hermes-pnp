@@ -23,10 +23,12 @@ imports = [ inputs.hermes-pnp.nixosModules.default ];
 services.hermes-agent = {
   enable = true;
   settings.model.default = "xai/grok-4";
-  environmentFiles = [ config.sops.secrets.hermes-env.path ];
 };
 
-services.hermesPnP.enable = true;
+services.hermesPnP = {
+  enable = true;
+  environmentFiles = [ config.sops.templates.hermesEnv.path ];
+};
 ```
 
 and get a cohesive agent + WebUI + first-party plugins + toolbox + MCP
@@ -171,6 +173,9 @@ reads like a short list — comment a line to drop a thing.
 - `services.hermesPnP.enable` — composer on. Default `false`.
   When true: WebUI enable defaults on, pairing defaults apply,
   package/share env is injected.
+- `services.hermesPnP.environmentFiles` — secrets drop-in. Forwarded
+  to official `services.hermes-agent.environmentFiles`. Key list:
+  `docs/hermes.env.example`.
 - `services.hermesPnP.models.{low,medium,high}` — `{ provider, model }`.
   One block seeds official settings, model-router `config.json`, and
   WebUI commands. See **Three models**.
@@ -293,9 +298,9 @@ imports = [ inputs.hermes-pnp.nixosModules.default ];
 services.hermes-agent = {
   enable = true;
   settings.model.default = "…";
-  environmentFiles = [ … ];
 };
 services.hermesPnP.enable = true;
+services.hermesPnP.environmentFiles = [ config.sops.templates.hermesEnv.path ];
 services.hermesPnP.plugins = [
   "model-router"
   "tool-call-coherency"

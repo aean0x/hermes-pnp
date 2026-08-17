@@ -138,7 +138,6 @@ in
       # these instead of re-deriving PATH.
       toolboxDir = mkOption { type = types.str; readOnly = true; };
       containerToolboxDir = mkOption { type = types.str; readOnly = true; };
-      binDir = mkOption { type = types.str; readOnly = true; };
       hostPath = mkOption { type = types.str; readOnly = true; };
       containerPath = mkOption { type = types.str; readOnly = true; };
     };
@@ -158,13 +157,22 @@ in
       package = mkOption {
         type = types.package;
         default = pkgs.chromium;
-        description = "Browser derivation. Swap for pkgs.brave or any Chromium fork.";
+        defaultText = literalExpression "pkgs.chromium";
+        description = ''
+          Browser derivation. Swap for pkgs.brave (or any Chromium fork).
+          engine follows package.meta.mainProgram unless you override it.
+        '';
       };
 
       engine = mkOption {
         type = types.str;
-        default = "chromium";
-        description = "HERMES_BROWSER_ENGINE and binary name under package/bin.";
+        default = config.services.hermesPnP.browser.package.meta.mainProgram or "chromium";
+        defaultText = literalExpression ''package.meta.mainProgram or "chromium"'';
+        description = ''
+          Binary name under package/bin and HERMES_BROWSER_ENGINE.
+          Defaults to package.meta.mainProgram, so `package = pkgs.brave`
+          is enough. Override only when the binary name differs.
+        '';
       };
 
       cdpPort = mkOption {
@@ -252,12 +260,12 @@ in
       type = types.listOf types.path;
       default = [ ];
       description = ''
-        Drop-in secrets hook: extra env files merged into the agent .env.
-        Prefer sops.nix — render a sops.templates file (e.g. /run/hermes.env)
-        and list that path here. Forwarded to
-        services.hermes-agent.environmentFiles.
+        Secrets drop-in. Declare the rendered env file here; the composer
+        forwards it to services.hermes-agent.environmentFiles (WebUI
+        inherits that list). Prefer a sops.templates path. Key list:
+        docs/hermes.env.example.
       '';
-      example = [ "/run/hermes.env" ];
+      example = literalExpression ''[ config.sops.templates.hermesEnv.path ]'';
     };
 
     mcpProxy.enable = mkOption {

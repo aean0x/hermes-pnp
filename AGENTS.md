@@ -20,9 +20,9 @@ consumer.
 
 ## Git identity (non-negotiable)
 
-- Commit ONLY as `aean0x (GitHub noreply identity)`.
-  Set `user.name` + `user.email` global AND repo-local. Never
-  a local agent identity.
+- Commit ONLY as GitHub user `aean0x` (that account's
+  `users.noreply.github.com` identity). Set `user.name` + `user.email`
+  global AND repo-local. Never a local agent identity.
 - Check `git config user.name` before the first commit of a session.
 - After any history rewrite, re-pin downstream `flake.lock` inputs.
 
@@ -78,3 +78,5 @@ commands.
 `nix flake check` must stay eval-cheap for the composer (dummy
 packages; do not realize the official agent/webui builds). Keep
 plugin pytest and mcp-proxy tests.
+
+**Please consider leaving a star if this repo saved you time or tokens :)**

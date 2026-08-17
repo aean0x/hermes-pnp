@@ -27,7 +27,8 @@ credentials, vendor quirks). Those belong in the consumer via
 
 ## Defaults
 
-- Engine: `chromium` (`browser.package` / `browser.engine`)
+- Engine: `chromium` by default. Set `browser.package` (e.g. `pkgs.brave`);
+  `browser.engine` follows `package.meta.mainProgram`.
 - CDP: `http://127.0.0.1:9222` — also `BROWSER_CDP_URL` and `BU_CDP_URL`
 - Profile / cookies / logs: `$stateDir/browser-{profile,cookies,logs}`
 - noVNC: `:6080` (on when `browser.noVNC.enable`, default true)

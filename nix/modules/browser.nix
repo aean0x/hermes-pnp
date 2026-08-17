@@ -80,6 +80,12 @@ let
 in
 {
   config = mkIf (pnp.enable && cfg.enable) {
+    assertions = [
+      {
+        assertion = cfg.engine != "";
+        message = "services.hermesPnP.browser.engine is empty; set browser.package (engine follows mainProgram) or browser.engine.";
+      }
+    ];
     environment.systemPackages = [
       cfg.package
       chromiumAliases
