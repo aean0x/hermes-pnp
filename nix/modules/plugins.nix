@@ -187,11 +187,12 @@ in
                 continue
                 ;;
             esac
+            chmod -R u+w "$dest/$name" 2>/dev/null || true
             rm -rf "$dest/$name"
           done
 
           ${lib.concatMapStrings (name: ''
-            ${pkgs.rsync}/bin/rsync -a --delete \
+            ${pkgs.rsync}/bin/rsync -a --delete --chmod=D0750,F0640 \
               --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
               ${resolvedSources.${name}}/ "$dest/${name}/"
             ln -sfn "../../plugins/${name}" "$linkroot/${name}"
