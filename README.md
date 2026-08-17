@@ -153,12 +153,10 @@ Medium / High. Classifier replies with one of those three words.
 When `model-router` is in `plugins`, Nix writes `config.json` and
 `webui/config.js` from `hermesPnP.models`.
 
-WebUI extension dir: `config.services.hermesPnP.pluginInstall.webuiExtensionDir`
-
 ## GBrain (optional, thin)
 
 Does not start `gbrain serve`. Sets a default MCP URL and plugin env,
-and appends the two gbrain plugins if they are missing:
+and installs the two gbrain plugins even if they are not in `plugins`:
 
 ```nix
 services.hermesPnP.gbrain = {

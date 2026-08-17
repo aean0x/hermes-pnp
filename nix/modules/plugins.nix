@@ -1,44 +1,54 @@
-# Install Hermes PnP plugins into $HERMES_HOME/plugins via materialize + symlink.
-#
-# Hermes ≥0.19 scans ONLY $HERMES_HOME/plugins. There is no plugins.external_dirs.
-#
-#   services.hermesPnP.plugins = [ "model-router" "tool-call-coherency" ];
-#   services.hermesPnP.extraPlugins.my-plugin = ./local;
-#
-# Host-only plugins belong in extraPlugins. Do not use official
-# services.hermes-agent.extraPlugins for first-party plugins: it copies
-# into $HERMES_HOME and fights the container /data remap.
-{ config
-, lib
-, pkgs
-, ...
+# Install first-party + extra plugins. Catalog names in `plugins`;
+# extra trees in `extraPlugins`. Comment a line to drop it.
+# Dest is $stateDir/plugins/<name> + relative symlink under .hermes/plugins.
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 
 let
   inherit (lib)
     mkDefault
     mkIf
-    mkMerge
     mkOption
     types
     ;
 
   pnp = config.services.hermesPnP;
+  extra = pnp.extraPlugins;
+  catalog = import ../../catalog.nix;
   install = pnp.pluginInstall;
-  catalog = import ../catalog.nix;
 
-  enabledNames = lib.unique (pnp.plugins ++ lib.attrNames pnp.extraPlugins);
-  sources = catalog // pnp.extraPlugins;
+  gbrainPlugins = [
+    "gbrain-retrieval-reflex"
+    "gbrain-memory-flush"
+  ];
 
-  missing = lib.filter (name: !(sources ? ${name})) pnp.plugins;
+  # User list + extras + gbrain pair (only when gbrain.enable).
+  # Do not assign those names back onto `plugins` — that would clobber
+  # the composer mkDefault at definition priority 100.
+  enabledNames = lib.unique (
+    pnp.plugins
+    ++ lib.optionals pnp.gbrain.enable gbrainPlugins
+    ++ lib.attrNames extra
+  );
 
-  modelRouterSrc = sources.model-router or null;
+  unknown =
+    let
+      known = (lib.attrNames catalog) ++ (lib.attrNames extra);
+    in
+    lib.filter (n: !(lib.elem n known)) pnp.plugins;
+
+  sources = catalog // extra;
 
   routerOrder = [
     "low"
     "medium"
     "high"
   ];
+
   routerMeta = {
     low = {
       label = "Low";
@@ -56,8 +66,9 @@ let
 
   modelRouterConfig = {
     models = lib.genAttrs routerOrder (name: {
-      inherit (pnp.models.${name}) provider model;
       inherit (routerMeta.${name}) label role;
+      inherit (pnp.models.${name}) model provider;
+      short = routerMeta.${name}.label;
     });
     final = "high";
     final_voice = true;
@@ -71,15 +82,13 @@ let
 
   modelRouterWebui = {
     models =
-      (map
-        (name: {
-          cmd = "/${name}";
-          label = routerMeta.${name}.label;
-          short = routerMeta.${name}.label;
-          model = pnp.models.${name}.model;
-          title = "Pin ${routerMeta.${name}.label}";
-        })
-        routerOrder)
+      (map (name: {
+        cmd = "/${name}";
+        label = routerMeta.${name}.label;
+        short = routerMeta.${name}.label;
+        model = pnp.models.${name}.model;
+        title = "Pin ${routerMeta.${name}.label}";
+      }) routerOrder)
       ++ [
         {
           cmd = "/auto";
@@ -90,6 +99,8 @@ let
         }
       ];
   };
+
+  modelRouterSrc = sources.model-router or null;
 
   modelRouterPlugin =
     if modelRouterSrc == null then
@@ -120,132 +131,95 @@ in
     stateDir = mkOption {
       type = types.str;
       default = "/var/lib/hermes";
-      description = "Hermes state directory (installer internal).";
+      internal = true;
+      description = "Plugin dest root. Composer sets this from the official agent.";
     };
-
     user = mkOption {
       type = types.str;
       default = "hermes";
+      internal = true;
     };
-
     group = mkOption {
       type = types.str;
       default = "hermes";
+      internal = true;
     };
-
     webuiExtensionDir = mkOption {
       type = types.nullOr types.path;
       default = null;
-      description = "Read-only: model-router WebUI extension dir when that plugin is enabled.";
+      internal = true;
+      description = "Bundled model-router WebUI dir. Set when that plugin is enabled.";
     };
   };
 
-  config = mkMerge [
+  config = lib.mkMerge [
+    (mkIf (pnp.plugins != [ ] || extra != { } || pnp.gbrain.enable) {
+      assertions = [
+        {
+          assertion = unknown == [ ];
+          message = "services.hermesPnP.plugins: unknown name(s): ${lib.concatStringsSep ", " unknown}";
+        }
+      ];
+
+      services.hermesPnP.pluginInstall.webuiExtensionDir = lib.mkIf
+        (lib.elem "model-router" enabledNames && resolvedSources ? model-router)
+        "${resolvedSources.model-router}/webui";
+
+      services.hermes-agent.settings.plugins.enabled = enabledNames;
+
+      systemd.tmpfiles.rules = [
+        "d ${materializeRoot} 0750 ${install.user} ${install.group} -"
+        "d ${hermesHomePlugins} 0750 ${install.user} ${install.group} -"
+      ];
+
+      systemd.services.hermes-agent-plugins = {
+        description = "Materialize hermes-pnp plugins";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "hermes-agent.service" ];
+        requiredBy = [ "hermes-agent.service" ];
+
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          User = install.user;
+          Group = install.group;
+        };
+
+        script = ''
+          set -euo pipefail
+          dest='${materializeRoot}'
+          linkroot='${hermesHomePlugins}'
+          mkdir -p "$dest" "$linkroot"
+
+          want=${enabledPluginsJson}
+          echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' | while read -r name; do
+            case "$name" in
+              *[!a-zA-Z0-9_-]* | "")
+                echo "hermes-pnp: skip unsafe plugin name: $name" >&2
+                continue
+                ;;
+            esac
+            rm -rf "$dest/$name"
+          done
+
+          ${lib.concatMapStrings (name: ''
+            ${pkgs.rsync}/bin/rsync -a --delete \
+              --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
+              ${resolvedSources.${name}}/ "$dest/${name}/"
+            ln -sfn "../../plugins/${name}" "$linkroot/${name}"
+          '') enabledNames}
+
+          echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' > "$dest/.enabled"
+        '';
+      };
+    })
+
     (mkIf pnp.enable {
       services.hermesPnP.plugins = mkDefault [
         "model-router"
         "tool-call-coherency"
         "secret-handoff"
       ];
-    })
-
-    (mkIf pnp.gbrain.enable {
-      services.hermesPnP.plugins = [
-        "gbrain-retrieval-reflex"
-        "gbrain-memory-flush"
-      ];
-    })
-
-    (mkIf (enabledNames != [ ]) {
-      assertions = [
-        {
-          assertion = missing == [ ];
-          message = "hermesPnP.plugins names not in catalog or extraPlugins: ${lib.concatStringsSep ", " missing}";
-        }
-      ];
-
-      services.hermesPnP.pluginInstall.webuiExtensionDir = lib.mkIf
-        (
-          resolvedSources ? model-router
-        ) "${resolvedSources.model-router}/webui";
-
-      # Requires the official hermes-agent module. Installer is a no-op without enable.
-      services.hermes-agent.settings.plugins.enabled = enabledNames;
-
-      systemd.services.hermes-agent.serviceConfig.ReadWritePaths = lib.mkIf config.services.hermes-agent.enable [
-        materializeRoot
-        hermesHomePlugins
-      ];
-
-      system.activationScripts.hermes-pnp-plugins = lib.stringAfter [
-        "users"
-        "groups"
-      ] ''
-                install_plugin_tree() {
-                  local name="$1" src="$2"
-                  local dest="${materializeRoot}/$name"
-                  local link="${hermesHomePlugins}/$name"
-                  mkdir -p "$dest" "${hermesHomePlugins}"
-                  if [ -e "$link" ] && [ ! -L "$link" ]; then
-                    rm -rf "$link"
-                  fi
-                  find "$dest" -mindepth 1 -maxdepth 1 ! -name webui ! -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-                  ${pkgs.rsync}/bin/rsync -a --delete \
-                    --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
-                    "$src"/ "$dest"/
-                  find "$dest" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-                  find "$dest" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete 2>/dev/null || true
-                  find "$dest" -type f -name '*.py' -exec touch -c {} + 2>/dev/null || true
-                  chown -R ${install.user}:${install.group} "$dest" 2>/dev/null || true
-                  find "$dest" -type d -exec chmod 2770 {} \; 2>/dev/null || true
-                  find "$dest" -type f -exec chmod 0640 {} \; 2>/dev/null || true
-                  ln -sfn ../../plugins/"$name" "$link"
-                  chown -h ${install.user}:${install.group} "$link" 2>/dev/null || true
-                }
-
-                ${lib.concatMapStrings (name: ''
-                  install_plugin_tree ${lib.escapeShellArg name} ${resolvedSources.${name}}
-                '') enabledNames}
-
-                cfg=${install.stateDir}/.hermes/config.yaml
-                if [ -f "$cfg" ]; then
-                  ${pkgs.python3.withPackages (ps: [ ps.pyyaml ])}/bin/python3 - "$cfg" <<'PY'
-        import sys
-        from pathlib import Path
-        import yaml
-
-        path = Path(sys.argv[1])
-        data = yaml.safe_load(path.read_text()) or {}
-        if not isinstance(data, dict):
-            sys.exit(0)
-
-        changed = False
-        plugins = data.setdefault("plugins", {})
-        if not isinstance(plugins, dict):
-            plugins = {}
-            data["plugins"] = plugins
-            changed = True
-
-        if "external_dirs" in plugins:
-            del plugins["external_dirs"]
-            changed = True
-
-        enabled = list(plugins.get("enabled") or [])
-        want = ${enabledPluginsJson}
-        for name in want:
-            if name not in enabled:
-                enabled.append(name)
-                changed = True
-        if plugins.get("enabled") != enabled:
-            plugins["enabled"] = enabled
-            changed = True
-
-        if changed:
-            path.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False))
-        PY
-                  chown ${install.user}:${install.group} "$cfg" 2>/dev/null || true
-                fi
-      '';
     })
   ];
 }

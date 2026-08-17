@@ -27,7 +27,9 @@
   and final voice on high. Do not change that policy.
 - Hidden load-time aliases for leftover `tiers` / `final_tier` /
   `MODEL_ROUTER_T1_*` / `/t1` are allowed so old configs do not crash.
-- One conventional commit. Do not push. Do not open a PR.
+- `gbrain.enable` must not clobber the composer plugin default list.
+  Append happens at install time (`settings.plugins.enabled`), not by
+  writing back into the `plugins` option.
 
 ## Inferred
 

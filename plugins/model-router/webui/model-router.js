@@ -26,13 +26,13 @@
     return sel && sel.value ? String(sel.value) : "";
   }
 
-  function matchTier(modelId) {
+  function matchModel(modelId) {
     const needle = String(modelId || "").trim().toLowerCase();
     if (!needle) return null;
     const tail = needle.split("/").pop();
-    for (const tier of MODELS) {
-      if (needle === tier.model || tail === tier.model || needle.endsWith("/" + tier.model)) {
-        return tier;
+    for (const spec of MODELS) {
+      if (needle === spec.model || tail === spec.model || needle.endsWith("/" + spec.model)) {
+        return spec;
       }
     }
     return null;
@@ -48,27 +48,27 @@
 
   function chipText() {
     const model = sessionModel();
-    const tier = matchTier(model);
+    const row = matchModel(model);
     const shortModel = model ? model.split("/").pop() : "";
     if (!isPinned()) {
-      if (isBusy() && tier) {
-        return shortModel ? `Auto · ${tier.short} · ${shortModel}` : `Auto · ${tier.short}`;
+      if (isBusy() && row) {
+        return shortModel ? `Auto · ${row.short} · ${shortModel}` : `Auto · ${row.short}`;
       }
       return "Auto";
     }
-    const pinned = MODELS.find((t) => t.cmd === lastCmd) || tier;
+    const pinned = MODELS.find((m) => m.cmd === lastCmd) || row;
     if (!pinned) return lastCmd;
     return shortModel ? `${pinned.short} · ${shortModel}` : pinned.short;
   }
 
   function chipTitle() {
     const model = sessionModel();
-    const tier = matchTier(model);
+    const row = matchModel(model);
     if (!isPinned()) {
-      if (isBusy() && tier) return `Model Router auto-routing (${tier.label}): ${model}`;
+      if (isBusy() && row) return `Model Router auto-routing (${row.label}): ${model}`;
       return "Model Router auto-routing";
     }
-    const pinned = MODELS.find((t) => t.cmd === lastCmd) || tier;
+    const pinned = MODELS.find((m) => m.cmd === lastCmd) || row;
     if (!pinned) return "Model Router pinned";
     return `Model Router pinned: ${pinned.label}${model ? " → " + model : ""}`;
   }
@@ -127,11 +127,11 @@
 
   function paintPressed() {
     const model = sessionModel();
-    const activeTier = matchTier(model);
+    const active = matchModel(model);
     document.querySelectorAll(".mr-btn").forEach((btn) => {
       const cmd = btn.dataset.cmd;
       let on = cmd === lastCmd;
-      if (!isPinned() && isBusy() && activeTier && cmd === activeTier.cmd) {
+      if (!isPinned() && isBusy() && active && cmd === active.cmd) {
         on = true;
       }
       if (!isPinned() && cmd === "/auto") on = true;
