@@ -14,7 +14,7 @@
     ./plugins.nix
     ./skills.nix
     ./toolbox.nix
-    ./browser.nix
+    ../../services/browser/nix/module.nix
     ./gbrain.nix
     ../../services/mcp-proxy/nix/module.nix
   ];
