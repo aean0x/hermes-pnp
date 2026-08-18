@@ -240,11 +240,10 @@ let
 
   identity = {
     image = bctr.image;
-    inherit volumes;
+    inherit volumes entrypoint;
     extraOptions = bctr.extraOptions;
     extraEnv = { };
     package = "${supervisor}";
-    inherit entrypoint;
   };
 
   unit = oci.mkUnitScripts {

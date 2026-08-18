@@ -67,7 +67,7 @@ let
     identityFile = "${webui.stateDir}/.oci-identity";
     identity = {
       inherit (wctr) image extraVolumes extraOptions;
-      inherit extraEnv;
+      inherit extraEnv entrypoint;
       envFiles = webui.environmentFiles;
       package = "${webui.package}";
     };

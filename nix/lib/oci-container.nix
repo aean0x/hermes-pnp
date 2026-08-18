@@ -29,6 +29,9 @@ in
         fi
         mkdir -p /home/hermes /tmp
         chown "$HERMES_UID:$HERMES_GID" /home/hermes 2>/dev/null || true
+        export HOME=/home/hermes
+        export USER=hermes
+        export LOGNAME=hermes
         # Drop every remaining capability once we are hermes. The container
       # starts with default docker caps so useradd/setpriv can run.
       exec setpriv --reuid="$HERMES_UID" --regid="$HERMES_GID" --init-groups \
