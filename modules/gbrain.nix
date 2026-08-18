@@ -15,13 +15,28 @@
 let
   inherit (lib)
     mkDefault
+    mkEnableOption
     mkIf
+    mkOption
     optionalAttrs
+    types
     ;
+
+  inherit (import ./_lib.nix { inherit pkgs lib; }) mkDockerEnv;
 
   pnp = config.services.hermesPnP;
   cfg = pnp.gbrain;
   agent = config.services.hermes-agent;
+
+  containerTokenFile =
+    if cfg.tokenFile == null then
+      null
+    else if lib.hasPrefix "${agent.stateDir}/home" cfg.tokenFile then
+      "/home/hermes" + lib.removePrefix "${agent.stateDir}/home" cfg.tokenFile
+    else if lib.hasPrefix agent.stateDir cfg.tokenFile then
+      "/data" + lib.removePrefix agent.stateDir cfg.tokenFile
+    else
+      cfg.tokenFile;
   home = "${agent.stateDir}/home";
   hostPath =
     if pnp.enable && pnp.toolbox.enable then
@@ -43,6 +58,40 @@ let
   '';
 in
 {
+  options.services.hermesPnP.gbrain = {
+    enable = mkEnableOption ''
+      GBrain HTTP MCP: start gbrain-mcp-http (loopback serve), mkDefault
+      mcpServers.gbrain.url, and export GBRAIN_MCP_URL / GBRAIN_TOKEN_FILE.
+      Also installs the two gbrain plugins even if they are not listed.
+      Off by default. Does not ship PGLite, sources, or a memory registry.
+    '';
+
+    url = mkOption {
+      type = types.str;
+      default = "http://127.0.0.1:3131/mcp";
+      description = "GBrain HTTP MCP URL advertised to the agent.";
+    };
+
+    bind = mkOption {
+      type = types.str;
+      default = "127.0.0.1";
+      description = "Address gbrain serve binds. Keep loopback unless you have a reason.";
+    };
+
+    port = mkOption {
+      type = types.port;
+      default = 3131;
+      description = "Port gbrain serve listens on.";
+    };
+
+    tokenFile = mkOption {
+      type = types.nullOr types.str;
+      default = "${agent.stateDir}/home/.gbrain/hermes-mcp.token";
+      defaultText = lib.literalExpression ''"''${config.services.hermes-agent.stateDir}/home/.gbrain/hermes-mcp.token"'';
+      description = "Path to a token file. Injected as GBRAIN_TOKEN_FILE; never read into Nix.";
+    };
+  };
+
   config = mkIf cfg.enable {
     # Official typed option; the agent module merges this into
     # settings.mcp_servers. mkDefault inside settings would be stored
@@ -56,9 +105,13 @@ in
     services.hermes-agent.environment = {
       GBRAIN_MCP_URL = mkDefault cfg.url;
     }
-    // optionalAttrs (cfg.tokenFile != null) {
+    // optionalAttrs (cfg.tokenFile != null && !agent.container.enable) {
       GBRAIN_TOKEN_FILE = mkDefault cfg.tokenFile;
     };
+
+    services.hermes-agent.container.extraOptions = mkIf (
+      agent.container.enable && cfg.tokenFile != null
+    ) (mkDockerEnv { GBRAIN_TOKEN_FILE = containerTokenFile; });
 
     systemd.services.gbrain-mcp-http = {
       description = "GBrain MCP HTTP (loopback; sole PGLite writer)";

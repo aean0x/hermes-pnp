@@ -15,17 +15,31 @@
 let
   inherit (lib)
     mkDefault
+    mkEnableOption
     mkIf
     mkMerge
+    mkOption
     mapAttrsToList
+    types
     ;
   cfg = config.services.hermesPnP;
   agent = config.services.hermes-agent;
-  catalog = import ../../skills/catalog.nix;
+  catalog = import ../skills/catalog.nix;
   allSkills = catalog // cfg.skills.extraSkills;
   skillsDir = "${agent.stateDir}/skills";
 in
 {
+  imports = [ ./enable.nix ];
+
+  options.services.hermesPnP.skills = {
+    enable = mkEnableOption "first-party hermes-pnp skills (browser, retrieval-reflex, gbrain-http-auth)";
+    extraSkills = mkOption {
+      type = types.attrsOf types.path;
+      default = { };
+      description = "Name → skill dir beside the catalog (consumer skills).";
+    };
+  };
+
   config = mkIf cfg.enable (mkMerge [
     {
       services.hermesPnP.skills.enable = mkDefault true;

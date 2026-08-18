@@ -8,10 +8,41 @@
 }:
 
 let
-  inherit (lib) genAttrs mkIf;
+  inherit (lib)
+    genAttrs
+    mkIf
+    mkOption
+    types
+    ;
 
   pnp = config.services.hermesPnP;
   inherit (pnp) models;
+
+  mkModelFields = defaults: {
+    provider = mkOption {
+      type = types.str;
+      default = defaults.provider;
+      description = "Provider id (official settings / plugin).";
+    };
+    model = mkOption {
+      type = types.str;
+      default = defaults.model;
+      description = "Model id (official settings / plugin).";
+    };
+  };
+
+  mkNamedModel =
+    { provider
+    , model
+    , description
+    ,
+    }:
+    mkOption {
+      type = types.submodule { options = mkModelFields { inherit provider model; }; };
+      default = { };
+      inherit description;
+      example = { inherit provider model; };
+    };
 
   lowSlot = {
     inherit (models.low) provider model;
@@ -46,6 +77,26 @@ let
   ];
 in
 {
+  options.services.hermesPnP.models = {
+    low = mkNamedModel {
+      provider = "deepseek";
+      model = "deepseek-v4-flash";
+      description = "Cheap helper. Seeds mechanical auxiliary slots + unpinned cron.";
+    };
+
+    medium = mkNamedModel {
+      provider = "deepseek";
+      model = "deepseek-v4-pro";
+      description = "Workhorse. Seeds delegation + reasoning auxiliary slots (background_review, curator, kanban_decomposer).";
+    };
+
+    high = mkNamedModel {
+      provider = "xai-oauth";
+      model = "grok-4.6";
+      description = "Session identity + voice. Seeds model.default, fallback, rest.";
+    };
+  };
+
   config = mkIf pnp.enable {
     services.hermes-agent.settings = {
       model = {

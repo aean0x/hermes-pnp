@@ -25,99 +25,68 @@
       ];
       forAllSystems = lib.genAttrs systems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
-      catalog = import ./plugins/catalog.nix;
-      skillsCatalog = import ./skills/catalog.nix;
+
+      overlay = final: _prev: {
+        mcp-proxy = final.callPackage ./pkgs/mcp-proxy.nix { };
+        agent-browser = final.callPackage ./pkgs/agent-browser.nix { };
+      };
 
       composer = {
         imports = [
           hermes-agent.nixosModules.default
           hermes-webui.nixosModules.default
-          ./nix/modules/default.nix
+          ./modules
         ];
-        _module.args.hermesPnPFlake = {
-          inherit hermes-agent hermes-webui;
-        };
+        services.hermesPnP.internal.officialAgentPackageFor =
+          system: hermes-agent.packages.${system}.default;
       };
     in
     {
-      plugins = catalog;
-      skills = skillsCatalog;
+      lib = {
+        inherit (import ./lib/env.nix { inherit lib; }) mkDockerEnv;
+        forPkgs = pkgs: import ./lib { inherit pkgs lib; };
+      };
+
+      plugins = import ./plugins/catalog.nix;
+      skills = import ./skills/catalog.nix;
 
       nixosModules.default = composer;
+      nixosModules.hermesPnP = composer;
       nixosModules.agent = hermes-agent.nixosModules.default;
       nixosModules.webui = hermes-webui.nixosModules.default;
-      nixosModules.plugins = {
-        imports = [
-          ./nix/modules/options.nix
-          ./nix/modules/plugins.nix
-        ];
-      };
-      nixosModules.mcp-proxy = import ./services/mcp-proxy/nix/module.nix;
-      nixosModules.skills = {
-        imports = [
-          ./nix/modules/options.nix
-          ./nix/modules/skills.nix
-        ];
-      };
-      nixosModules.toolbox = {
-        imports = [
-          ./nix/modules/options.nix
-          ./nix/modules/toolbox.nix
-        ];
-      };
-      nixosModules.browser = {
-        imports = [
-          ./nix/modules/options.nix
-          ./services/browser/nix/module.nix
-        ];
-      };
+      nixosModules.plugins = ./modules/plugins.nix;
+      nixosModules.mcp-proxy = ./modules/mcp-proxy.nix;
+      nixosModules.skills = ./modules/skills.nix;
+      nixosModules.toolbox = ./modules/toolbox.nix;
+      nixosModules.browser = ./modules/browser;
 
-      overlays.default = final: _prev: {
-        mcp-proxy = final.callPackage ./services/mcp-proxy/nix/package.nix { };
-        agent-browser = final.callPackage ./services/browser/nix/package.nix { };
-      };
+      overlays.default = overlay;
 
       packages = forAllSystems (
         system:
         let
           pkgs = pkgsFor system;
         in
-        rec {
-          mcp-proxy = pkgs.callPackage ./services/mcp-proxy/nix/package.nix { };
-          agent-browser = pkgs.callPackage ./services/browser/nix/package.nix { };
-          default = mcp-proxy;
+        {
+          mcp-proxy = pkgs.callPackage ./pkgs/mcp-proxy.nix { };
+          agent-browser = pkgs.callPackage ./pkgs/agent-browser.nix { };
         }
       );
 
       checks = forAllSystems (
         system:
-        let
+        import ./checks {
+          inherit self nixpkgs system;
           pkgs = pkgsFor system;
-          evalChecks = import ./nix/checks.nix {
-            inherit self nixpkgs system pkgs;
-          };
-          mcp-proxy = pkgs.runCommand "mcp-proxy-tests" { nativeBuildInputs = [ pkgs.python3 pkgs.git ]; } ''
-            export PYTHONPATH=${./services/mcp-proxy/src}
-            python3 -m unittest discover -s ${./services/mcp-proxy/tests} -v
-            touch $out
-          '';
-          plugins = pkgs.runCommand "hermes-pnp-plugin-tests"
-            {
-              nativeBuildInputs = [ pkgs.python3 pkgs.git ];
-            } ''
-            ( cd ${./plugins/secret-handoff} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
-            ( cd ${./plugins/model-router} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
-            ( cd ${./plugins/git-hook} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
-            touch $out
-          '';
-        in
-        {
-          inherit mcp-proxy plugins;
-          mcp-proxy-tests = mcp-proxy;
-          plugin-tests = plugins;
         }
-        // evalChecks
       );
+
+      templates.default = {
+        path = ./templates/default;
+        description = "NixOS host using hermes-pnp composer";
+      };
+
+      formatter = forAllSystems (system: (pkgsFor system).nixfmt-rfc-style);
 
       devShells = forAllSystems (
         system:

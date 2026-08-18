@@ -12,7 +12,6 @@
   config,
   lib,
   pkgs,
-  hermesPnPFlake ? null,
   ...
 }:
 
@@ -21,10 +20,12 @@ let
     mkDefault
     mkIf
     mkMerge
+    mkOption
     optionalAttrs
+    types
     ;
 
-  inherit (import ../lib.nix { inherit lib; }) mkDockerEnv;
+  inherit (import ./_lib.nix { inherit pkgs lib; }) mkDockerEnv;
 
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;
@@ -32,11 +33,7 @@ let
   extrasNonEmpty =
     agent.extraPythonPackages != [ ] || agent.extraDependencyGroups != [ ];
 
-  officialPkg =
-    if hermesPnPFlake == null then
-      throw "hermesPnP package wrap requires the composer flake module"
-    else
-      hermesPnPFlake.hermes-agent.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  officialPkg = pnp.internal.officialAgentPackageFor pkgs.stdenv.hostPlatform.system;
 
   makeBase =
     extraPythonPackages: extraDependencyGroups:
@@ -147,6 +144,25 @@ let
   };
 in
 {
+  options.services.hermesPnP = {
+    packageFixes.silenceMarkers = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Patch gateway silence-token matching via PYTHONPATH.
+        Turn off when upstream ships the plural form.
+      '';
+    };
+
+    internal.officialAgentPackageFor = mkOption {
+      type = types.functionTo types.package;
+      internal = true;
+      default = system: throw "hermesPnP package wrap requires nixosModules.default (official agent package not wired for ${system})";
+      defaultText = lib.literalExpression "system: throw \"…\"";
+      description = "system → official hermes-agent package. Set by the composer flake.";
+    };
+  };
+
   config = mkIf pnp.enable (mkMerge [
     {
       services.hermes-agent.environment = lib.mapAttrs (_: mkDefault) hermesRuntimeEnv;

@@ -54,17 +54,17 @@ consumer.
 ## Layout
 
 ```
-nix/lib/oci-container.nix # slim official-shaped docker create/start helper
-nix/modules/default.nix   # composer imports
-nix/modules/options.nix   # enable, models, plugins, extraPlugins, quiet toggles
-nix/modules/models.nix    # seed official settings from models.*
-nix/modules/plugins.nix   # plugins list + extraPlugins + pluginInstall
-nix/modules/toolbox.nix   # everyday CLI buildEnv
-nix/modules/hmc.nix       # optional hermes-context-manager extraPlugin
-services/browser/          # CDP browser + dashboard gate (services.hermesPnP.browser)
+lib/                      # flake.lib — mkOciJail, mkDockerEnv
+modules/                  # composer + pairing; options live next to config
+modules/webui/            # official WebUI pairing + host harden + OCI jail
+modules/browser/          # CDP browser + dashboard gate
+pkgs/                     # mcp-proxy, agent-browser (overlay source)
+checks/                   # eval + plugin/proxy tests
+examples/                 # composer + library-path (evalled by checks)
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
-services/mcp-proxy/       # services.hermesPnP.mcpProxy.* (alias: services.mcpProxy)
+services/mcp-proxy/       # runtime src/tests only
+services/browser/src/     # cookie-import helper
 scripts/                  # gbrain-setup / validate-gbrain (operator; not Nix)
 plugins/                  # first-party plugin trees
 skills/                   # first-party skill trees

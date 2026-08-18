@@ -115,13 +115,15 @@ PnP does **not** default `extraDependencyGroups` to `["mcp"]`. Native
 
 ## Flake exports
 
-- `nixosModules.default` — composer (official agent + webui + PnP extras)
+- `nixosModules.default` / `nixosModules.hermesPnP` — composer (official agent + webui + PnP extras)
 - `nixosModules.agent` / `nixosModules.webui` — official modules only
 - `nixosModules.plugins` — plugin installer only
 - `nixosModules.mcp-proxy` — `services.hermesPnP.mcpProxy` only (`services.mcpProxy` alias)
-- `nixosModules.toolbox` / `nixosModules.runtime`
-- `packages.<system>.mcp-proxy` and `overlays.default`
+- `nixosModules.toolbox` / `nixosModules.browser` / `nixosModules.skills`
+- `packages.<system>.mcp-proxy` / `agent-browser` and `overlays.default`
+- `lib.mkDockerEnv` / `lib.forPkgs` — OCI + env helpers
 - `plugins.<name>` — raw plugin source paths
+- `templates.default` — `nix flake init -t github:aean0x/hermes-pnp`
 
 Double-import of the official modules is fine: they merge.
 
@@ -248,6 +250,11 @@ Default is the official module's native or container path. PnP does not
 turn `container.enable` on. Extra host mounts use the official
 `services.hermes-agent.container.extraVolumes` directly — there is no
 `runtime.*` wrapper.
+
+`hermesPnP.webui.container.extraVolumes` is independent of the agent
+list. The WebUI/browser jails are ubuntu + `/nix/store:ro` + a slim
+entrypoint, not `ghcr.io/nesquena/hermes-webui` and not the
+agent-browser build-docker image.
 
 ## Toolbox + browser
 

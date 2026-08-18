@@ -5,6 +5,7 @@
   config,
   lib,
   pkgs,
+  options,
   ...
 }:
 
@@ -18,8 +19,11 @@ let
 
   pnp = config.services.hermesPnP;
   extra = pnp.extraPlugins;
-  catalog = import ../../plugins/catalog.nix;
+  catalog = import ../plugins/catalog.nix;
   install = pnp.pluginInstall;
+
+  gbrainOn =
+    (options.services.hermesPnP ? gbrain) && pnp.gbrain.enable;
 
   gbrainPlugins = [
     "gbrain-retrieval-reflex"
@@ -31,7 +35,7 @@ let
   # the composer mkDefault at definition priority 100.
   enabledNames = lib.unique (
     pnp.plugins
-    ++ lib.optionals pnp.gbrain.enable gbrainPlugins
+    ++ lib.optionals gbrainOn gbrainPlugins
     ++ lib.attrNames extra
   );
 
@@ -115,33 +119,68 @@ let
   enabledPluginsJson = builtins.toJSON enabledNames;
 in
 {
-  options.services.hermesPnP.pluginInstall = {
-    stateDir = mkOption {
-      type = types.str;
-      default = "/var/lib/hermes";
-      internal = true;
-      description = "Plugin dest root. Composer sets this from the official agent.";
+  imports = [
+    ./enable.nix
+    ./models.nix
+  ];
+
+  options.services.hermesPnP = {
+    plugins = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = ''
+        Catalog names to materialize. Composer on defaults to
+        model-router, tool-call-coherency, secret-handoff (mkDefault).
+      '';
+      example = [
+        "model-router"
+        "tool-call-coherency"
+        "secret-handoff"
+        # "gbrain-retrieval-reflex"
+        # "gbrain-memory-flush"
+        # "git-hook"
+      ];
     };
-    user = mkOption {
-      type = types.str;
-      default = "hermes";
-      internal = true;
+
+    extraPlugins = mkOption {
+      type = types.attrsOf types.path;
+      default = { };
+      description = "Name → source tree beside the catalog.";
+      example = lib.literalExpression ''
+        {
+          # my-plugin = ./plugins/my-plugin;
+        }
+      '';
     };
-    group = mkOption {
-      type = types.str;
-      default = "hermes";
-      internal = true;
-    };
-    webuiExtensionDir = mkOption {
-      type = types.nullOr types.path;
-      default = null;
-      internal = true;
-      description = "Bundled model-router WebUI dir. Set when that plugin is enabled.";
+
+    pluginInstall = {
+      stateDir = mkOption {
+        type = types.str;
+        default = "/var/lib/hermes";
+        internal = true;
+        description = "Plugin dest root. Composer sets this from the official agent.";
+      };
+      user = mkOption {
+        type = types.str;
+        default = "hermes";
+        internal = true;
+      };
+      group = mkOption {
+        type = types.str;
+        default = "hermes";
+        internal = true;
+      };
+      webuiExtensionDir = mkOption {
+        type = types.nullOr types.path;
+        default = null;
+        internal = true;
+        description = "Bundled model-router WebUI dir. Set when that plugin is enabled.";
+      };
     };
   };
 
   config = lib.mkMerge [
-    (mkIf (pnp.plugins != [ ] || extra != { } || pnp.gbrain.enable) {
+    (mkIf (pnp.plugins != [ ] || extra != { } || gbrainOn) {
       assertions = [
         {
           assertion = unknown == [ ];

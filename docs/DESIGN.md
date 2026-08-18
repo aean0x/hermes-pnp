@@ -82,34 +82,28 @@ Re-export the official modules for consumers who want them unbundled:
 - `nixosModules.plugins` — plugin installer only (today's module)
 - `nixosModules.mcp-proxy` — proxy only
 - `nixosModules.toolbox`
-- `nixosModules.runtime`
+- `nixosModules.browser`
 
 ## Module map
 
 ```
 hermes-pnp/
-  flake.nix
-  docs/DESIGN.md                 # this file
-  AGENTS.md                      # for future agents
-  README.md                      # user-facing, matches this design
-  nix/
-    lib.nix                      # shared helpers (docker --env, plugin dest)
-    modules/
-      default.nix                # composer: imports below
-      agent.nix                  # official module + pairing opinions
-      webui.nix                  # official webui + pairing defaults
-      plugins.nix                # plugins list + extraPlugins + pluginInstall
-      models.nix                 # seed official settings from models.*
-      toolbox.nix                # everyday CLI buildEnv → /var/lib/hermes/toolbox/bin
-      package.nix                # shared package + bundled-share env
-      gbrain.nix                 # thin optional MCP URL + plugin env
-      skills.nix                 # materialize first-party skills → $stateDir/skills
-  plugins/                       # first-party plugins
-  plugins/catalog.nix            # plugin name → path
-  skills/                        # first-party skills
-  skills/catalog.nix             # skill name → path
-  services/mcp-proxy/            # services.hermesPnP.mcpProxy.* (alias: services.mcpProxy)
-  services/browser/              # services.hermesPnP.browser (CDP + dashboard gate)
+  flake.nix                      # inputs + output map
+  lib/                           # flake.lib (mkDockerEnv, mkOciJail)
+  modules/                       # nixosModules — options live next to config
+    default.nix                  # composer: enable + pairing + first-party
+    enable.nix                   # enable, environmentFiles, container.*
+    webui/                       # pairing + host harden + OCI jail
+    browser/                     # CDP browser + dashboard gate
+    mcp-proxy.nix                # services.hermesPnP.mcpProxy (alias: services.mcpProxy)
+  pkgs/                          # packages + overlays.default
+  checks/                        # eval + plugin/proxy tests
+  examples/                      # composer.nix, library-path.nix (evalled by checks)
+  templates/default/             # nix flake init -t …
+  plugins/                       # first-party plugin source + catalog.nix
+  skills/                        # first-party skill source + catalog.nix
+  services/mcp-proxy/{src,tests} # proxy runtime
+  services/browser/src/          # cookie-import helper
 ```
 
 `services.hermesPnP.enable` turns on the composer opinions (WebUI
@@ -262,7 +256,7 @@ models.medium = { provider = "deepseek";  model = "deepseek-v4-pro"; };
 models.high   = { provider = "xai-oauth"; model = "grok-4.6"; };
 ```
 
-When `hermesPnP.enable` (module `nix/modules/models.nix`):
+When `hermesPnP.enable` (module `modules/models.nix`):
 
 - `settings.model.{provider,default}` ← high
 - `settings.fallback_model.{provider,model}` ← high
@@ -363,7 +357,7 @@ these. Document why in the module comment.
 
 ## Package / share env
 
-Extract rk3588 `overrides/package-fix.nix` into `nix/modules/package.nix`.
+Extract rk3588 `overrides/package-fix.nix` into `modules/package.nix`.
 
 Responsibilities:
 
@@ -410,9 +404,20 @@ adds `hermesPnP.webui.container` and `hermesPnP.browser.container`
 + `start -a` as official). Both default on when
 `hermesPnP.container.enable` is set. Opt out per-service.
 
-Helper: `nix/lib/oci-container.nix`. Slim entrypoint (UID/GID +
-setpriv, no sudo/apt). Upstream-shaped — lift into
-nesquena/hermes-webui as `container.enable` when it lands.
+One helper, two first-party services: `lib/oci-container.nix`
+(`mkOciJail`, `mkOciServiceOptions`, `followComposerContainer`,
+`nixosCaBinds`, `hardenHost`). Slim entrypoint (UID/GID + setpriv,
+no sudo/apt). Upstream-shaped — lift into nesquena/hermes-webui as
+`container.enable` when it lands.
+
+Do **not** point `container.image` at `ghcr.io/nesquena/hermes-webui`
+or `nousresearch/hermes-agent`. Do **not** treat
+`vercel-labs/agent-browser` `docker/` as a runtime (that image
+cross-compiles the CLI; we attach a consumer Brave/Chromium via CDP).
+The jail is ubuntu + `/nix/store:ro` + slim entrypoint.
+
+`webui.container.extraVolumes` is independent of
+`services.hermes-agent.container.extraVolumes`.
 
 WebUI container mounts: `/nix/store:ro`, agent stateDir → `/data`,
 agent home → `/home/hermes`, webui stateDir same-path, `/etc/ssl:ro`,
@@ -424,6 +429,16 @@ Browser container mounts: workspace, profile, cookies, logs, gate
 state. Not hermes home, not `.hermes`, not `/etc`. Xvfb + browser
 + agent-browser dashboard share the container. `--no-sandbox` is fine: the
 container is the jail.
+
+When `services.hermes-agent.container.enable` is on, jail-visible
+paths go on `container.extraOptions --env` (`mkDockerEnv`), never
+persisted into `$HERMES_HOME/.env`:
+
+- `HERMES_BROWSER_PROFILE=/data/browser-profile`
+- `GBRAIN_TOKEN_FILE=/home/hermes/.gbrain/hermes-mcp.token`
+
+CDP / gate URLs stay on `environment{}` (`127.0.0.1` + `--network=host`).
+Native mode keeps host paths on `environment{}`.
 
 Takeover stays local: one browser, two control planes.
 - Agent: CDP `127.0.0.1:9222`
@@ -459,7 +474,7 @@ language toolchains are consumer `extraPackages`.
 
 ## GBrain (tertiary)
 
-`nix/modules/gbrain.nix`, gated on `gbrain.enable` (default false):
+`modules/gbrain.nix`, gated on `gbrain.enable` (default false):
 
 - `url` / `bind` / `port` / `tokenFile`
 - `mkDefault` `services.hermes-agent.mcpServers.gbrain`
@@ -580,7 +595,7 @@ Shipped as `feat(pnp): named low/medium/high models + option beauty`.
   generated from `hermesPnP.models` whenever that plugin is listed.
 - `gbrain.enable` appends the two gbrain plugins if missing. Enabling
   those plugins does not require `gbrain.enable`.
-- Official `settings` seeds live in `nix/modules/models.nix`. Leaves
+- Official `settings` seeds live in `modules/models.nix`. Leaves
   are not `mkDefault` (deepConfigType stores the wrapper as a literal).
 - Live upstream agrees with spec keys: `model.{provider,default}`,
   `fallback_model.{provider,model}`, `delegation.{provider,model}`,
@@ -598,7 +613,7 @@ the rk3588 cutover PR reworks the host tree to match.
   `extraPackages` passthrough). Materializes to
   `/var/lib/hermes/toolbox/bin`, container path `/data/toolbox/bin`;
   exports `hostPath` for consumers to wire into units.
-- `services/browser/nix/module.nix` is new: persistent CDP browser + optional dashboard
+- `modules/browser/` is new: persistent CDP browser + optional dashboard
   gate. Seeds `BROWSER_CDP_URL` + `BU_CDP_URL` and the gate URL
   into `services.hermes-agent.environment`. Engine (`package`/`engine`)
   is a consumer choice. Chromium-family PATH aliases live here.
@@ -608,3 +623,31 @@ the rk3588 cutover PR reworks the host tree to match.
 - Plugin catalog lives at `plugins/catalog.nix`. Skills catalog at
   `skills/catalog.nix`. First-party skill is `browser` (flake defaults
   only; consumer extras via `skills.extraSkills`).
+
+## Implementation notes (shared OCI jail)
+
+Shipped as `refactor(oci): one jail helper for webui + browser`.
+
+- WebUI and browser Nix live under `modules/{webui,browser}/`
+  (`default.nix` + `host.nix` + `container.nix`). Both container
+  files call `mkOciJail`.
+- CA binds asserted on `preStart` / returned `volumes`, not `script`
+  (`docker start -a` does not mention volumes).
+- No GHCR webui image, no agent-browser build-docker runtime, no
+  `runtime.*`.
+
+## Implementation notes (library-flake layout)
+
+Shipped as `refactor: library-flake layout (modules/, lib/, pkgs/, examples/)`.
+
+- One module tree: `modules/`. Options live next to the implementer.
+  No god `options.nix`. À-la-carte exports (`plugins`, `toolbox`,
+  `browser`, `skills`, `mcp-proxy`) no longer import unused options.
+- `lib/` is the public helper (`flake.lib.mkDockerEnv`, `flake.lib.forPkgs`).
+- `pkgs/` is the overlay/package source. Modules use `pkgs.mcp-proxy` /
+  `pkgs.agent-browser` with a `callPackage` fallback.
+- `_module.args.hermesPnPFlake` is gone. The composer sets
+  `services.hermesPnP.internal.officialAgentPackageFor`.
+- `packages.default` is unset. `services/` holds runtime source only.
+- `examples/` is evalled by `checks`. `templates.default` is the
+  consumer starter.

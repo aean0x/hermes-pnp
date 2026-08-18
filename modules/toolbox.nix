@@ -17,10 +17,13 @@
 let
   inherit (lib)
     concatStringsSep
+    literalExpression
     mkIf
+    mkOption
+    types
     ;
 
-  inherit (import ../lib.nix { inherit lib; }) mkDockerEnv;
+  inherit (import ./_lib.nix { inherit pkgs lib; }) mkDockerEnv;
 
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;
@@ -158,6 +161,44 @@ let
   '';
 in
 {
+  imports = [ ./enable.nix ];
+
+  options.services.hermesPnP.toolbox = {
+    enable = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Opinionated everyday CLI buildEnv (the "sauce"): a curated
+        ~40-package toolkit + python3 + login PATH. Browser-specific
+        aliases live in the browser module. Set false for a bare agent.
+      '';
+    };
+
+    extraPackages = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      description = "Append-only packages added to the toolbox set.";
+    };
+
+    pythonPackages = mkOption {
+      type = types.functionTo (types.listOf types.package);
+      default = ps: with ps; [
+        requests
+        pyyaml
+        toml
+      ];
+      defaultText = literalExpression "ps: with ps; [ requests pyyaml toml ]";
+      description = "Python packages baked into the toolbox python3/python.";
+    };
+
+    # Read-only paths computed by this module; host modules may reference
+    # these instead of re-deriving PATH.
+    toolboxDir = mkOption { type = types.str; readOnly = true; };
+    containerToolboxDir = mkOption { type = types.str; readOnly = true; };
+    hostPath = mkOption { type = types.str; readOnly = true; };
+    containerPath = mkOption { type = types.str; readOnly = true; };
+  };
+
   config = mkIf (pnp.enable && cfg.enable) {
     services.hermesPnP.toolbox = {
       inherit

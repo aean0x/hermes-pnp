@@ -3,17 +3,17 @@
 { ... }:
 {
   imports = [
-    ./options.nix
+    ./enable.nix
     ./package.nix
     ./agent.nix
-    ./webui.nix
     ./models.nix
     ./plugins.nix
     ./skills.nix
     ./toolbox.nix
-    ../../services/browser/nix/module.nix
     ./gbrain.nix
     ./hmc.nix
-    ../../services/mcp-proxy/nix/module.nix
+    ./webui
+    ./browser
+    ./mcp-proxy.nix
   ];
 }

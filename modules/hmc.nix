@@ -9,7 +9,12 @@
 }:
 
 let
-  inherit (lib) mkIf;
+  inherit (lib)
+    mkEnableOption
+    mkIf
+    mkOption
+    types
+    ;
 
   pnp = config.services.hermesPnP;
   cfg = pnp.hmc;
@@ -23,7 +28,7 @@ let
   percent = toString cfg.compressPercent;
 
   hmcConfig = pkgs.writeText "hermes-context-manager-config.yaml" ''
-    # Managed by hermes-pnp (nix/modules/hmc.nix). Pin ${src.rev}.
+    # Managed by hermes-pnp (modules/hmc.nix). Pin ${src.rev}.
     enabled: true
     debug: false
 
@@ -88,6 +93,42 @@ let
   '';
 in
 {
+  options.services.hermesPnP.hmc = {
+    enable = mkEnableOption ''
+      Pin hermes-context-manager as extraPlugins.hermes-context-manager
+      and create $stateDir/.hermes/hmc_state. Native compact stays on;
+      HMC does cheap per-tool work only.
+    '';
+
+    compressPercent = mkOption {
+      type = types.float;
+      default = 0.30;
+      description = ''
+        HMC compress.max/min_context_percent of the probed window.
+        Unused while background_compression is off.
+      '';
+    };
+
+    src = {
+      owner = mkOption {
+        type = types.str;
+        default = "entrepeneur4lyf";
+      };
+      repo = mkOption {
+        type = types.str;
+        default = "hermes-context-manager";
+      };
+      rev = mkOption {
+        type = types.str;
+        default = "3f775efd48e878679e8fd4290b96968880fed6f7";
+      };
+      hash = mkOption {
+        type = types.str;
+        default = "sha256-aQMKhWN9KVfpgbIbcvlGgTZHZ4xC/ATgJkz8btofM7Y=";
+      };
+    };
+  };
+
   config = mkIf cfg.enable {
     services.hermesPnP.extraPlugins.hermes-context-manager = hmcPluginSrc;
 
