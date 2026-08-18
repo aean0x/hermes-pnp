@@ -55,7 +55,7 @@ in
     let
       containerBin =
         if backend == "docker"
-        then "docker"
+        then "${pkgs.docker}/bin/docker"
         else "${pkgs.podman}/bin/podman";
 
       identityHash = builtins.hashString "sha256" (builtins.toJSON identity);
