@@ -504,15 +504,15 @@ in
         ];
         environment.PATH = lib.mkForce null;
 
+        preStart = unit.preStart;
+        script = unit.script;
+        preStop = unit.preStop;
         serviceConfig = {
           Type = "simple";
           Restart = "on-failure";
           RestartSec = 5;
           TimeoutStartSec = 180;
           TimeoutStopSec = 30;
-          ExecStartPre = unit.preStart;
-          ExecStart = unit.start;
-          ExecStop = unit.stop;
         };
       };
     })
