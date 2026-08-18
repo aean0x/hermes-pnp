@@ -154,6 +154,7 @@ in
     test "${toString containerConfig.services.hermesPnP.webui.container.enable}" = "1"
     test "${toString containerConfig.services.hermesPnP.browser.container.enable}" = "1"
     test "${toString (containerConfig.systemd.services ? hermes-browser)}" = "1"
+    test "${toString (containerConfig.systemd.services.hermes-browser.script != "")}" = "1"
     test "${toString (containerConfig.systemd.services ? hermes-browser-vnc)}" = ""
     test "${toString (containerConfig.systemd.services ? hermes-browser-novnc)}" = ""
     test "${toString (containerConfig.systemd.services ? hermes-browser-gate)}" = ""
