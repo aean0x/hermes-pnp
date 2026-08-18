@@ -1,6 +1,6 @@
 # Hermes PnP (Plug n Pray)
 
-Uncomplicated, uncompromising, declarative Hermes. One flake input
+Uncomplicated, uncompromising, hardened Hermes. One flake input
 replaces a weekend of pairing, PATH, jail, and plugin work with a
 stack we run and test: official agent + WebUI, Ubuntu OCI jails,
 a curated toolbox, a persistent CDP browser, three-model routing
@@ -59,6 +59,7 @@ sandboxing, and the add-ons that should have been one enable.
   # programs.git.config.user = { name = "you"; email = "you@users.noreply.github.com"; };
 }
 ```
+[Living example of hermes-pnp in prod](https://github.com/aean0x/rk3588-nixos-nas/tree/main/hosts/system/hermes)
 
 Official `services.hermes-agent.*` / `services.hermes-webui.*` still
 work. `hermesPnP.enable = false` is the library path (plugins +
@@ -169,14 +170,7 @@ GBrain plugins live under [GBrain](#gbrain).
 `programs.git` (fail-open if `GITHUB_PAT` / `GH_TOKEN` is unset).
 `user.name` / `user.email` stay in the consumer.
 
-**Secrets.** One rendered env file on `environmentFiles`. Do not put
-tokens in JSON. GBrain's Bearer is a runtime mint, not sops.
-
-**Out of scope.** SOUL.md / USER.md / MEMORY.md from Nix. Telegram
-allowlists, Composio policy, home-manager, darwin. RAM caps.
-
-**Check.** `nix flake check`. Plugin and mcp-proxy tests live next
-to their trees.
+**Secrets.** One rendered env file on `environmentFiles`. 
 
 Credits:
 [open-world-project/model-router](https://github.com/open-world-project/model-router)
