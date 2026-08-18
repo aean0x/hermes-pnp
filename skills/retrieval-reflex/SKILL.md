@@ -12,20 +12,20 @@ metadata:
 
 # Retrieval reflex (gbrain-native)
 
-Policy skill for ambient + op GBrain push-context on Hermes (HTTP sole-owner).
+Policy skill for ambient + op GBrain push-context on Hermes.
 
-Plugin SoT: catalog `gbrain-retrieval-reflex` (version **0.4.0+**).
+Plugin SoT: catalog `gbrain-retrieval-reflex`.
 Runtime audit: `~/.gbrain/retrieval-reflex-last.json`.
 
 ## What injects pointers
 
 | Channel | Who | How |
 |---------|-----|-----|
-| Ambient | plugin `gbrain-retrieval-reflex` | On every non-trivial `pre_llm_call`: HTTP MCP **`volunteer_context`** (entity resolve, multi-turn `conversation_history` window) **and** hybrid **`query`** (topical). Merge/dedupe → inject **top-5** strength-ordered `## Brain pages (ambient push)` with ~50–400 char previews. Optional resolve IPC only if sock exists (stdio serve). |
+| Ambient | plugin `gbrain-retrieval-reflex` | On every non-trivial `pre_llm_call`: HTTP MCP **`volunteer_context`** (entity resolve, multi-turn window) **and** hybrid **`query`** (topical). Merge/dedupe → inject **top-5** `## Brain pages (ambient push)`. |
 | Op | **you** (MCP) | Extra `volunteer_context` / `query` when ambient miss, deeper recall, or multi-hop |
 | Open | **you** (MCP) | `get_page` on ranked slugs before relying on details |
 
-HTTP sole-owner does **not** bind resolve IPC sock (stdio-only upstream). Ambient uses MCP over the consumer's `gbrain serve --http` (Bearer), never a second serve / bare CLI.
+Ambient uses MCP over the consumer's `gbrain serve --http` (Bearer). Never a second serve or bare CLI.
 
 ## Ambient block shape (present state)
 
@@ -43,7 +43,7 @@ Never shell gbrain CLI while serve is up.
 - Previews prefer: volunteer `synopsis` → page/query `summary`/`description` → cleaned `chunk_text` (headers stripped, clipped ≤400).
 - Env knobs: `GBRAIN_RETRIEVAL_REFLEX_MAX_POINTERS`, `_SYNOPSIS_MAX`, `_MIN_CONF` (volunteer gate, default 0.6), `_HISTORY_TURNS`, `_MAX_CONTEXT_BYTES`.
 
-## volunteer_context vs query (do not sunset volunteer)
+## volunteer_context vs query
 
 | | `volunteer_context` | `query` |
 |--|---------------------|---------|
@@ -52,7 +52,7 @@ Never shell gbrain CLI while serve is up.
 | Empty when | No extractable entity aliases in the window (topic-only turns) | Weak lexical/vector match |
 | Plugin role | Precision first in merge | Fills remaining top-N slots by score |
 
-**Not obsolete.** Empty volunteer on topic-only turns is expected; query covers that. Named-entity turns still need volunteer (high precision, ~0.97 used/title in stats). Hermes does not own volunteer — it is a GBrain MCP tool the plugin calls.
+Empty volunteer on topic-only turns is expected; query covers that. Named-entity turns still need volunteer. `volunteer_context` is a GBrain MCP tool the plugin calls.
 
 ## When a pointer block appears
 

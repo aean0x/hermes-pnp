@@ -5,7 +5,7 @@ a host. Import `inputs.hermes-pnp.nixosModules.default` (or the
 à-la-carte module named in the file) and merge the snippet.
 
 `nix flake check` evaluates every file here (dummy agent/webui
-packages; HMC’s GitHub fetch is forced off in CI).
+packages).
 
 | File | When to copy it |
 | --- | --- |

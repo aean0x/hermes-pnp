@@ -1,57 +1,43 @@
 # Hermes PnP — requirements
 
-## Described
-
 - One Nix block (`services.hermesPnP.models`) names three models:
-  `low`, `medium`, `high`. That block seeds every place a model must
-  be named (official settings, model-router `config.json`, WebUI,
-  slash commands).
+  `low`, `medium`, `high`. That block seeds official settings,
+  model-router `config.json`, WebUI, and slash commands.
 - Defaults: low = deepseek / deepseek-v4-flash; medium = deepseek /
   deepseek-v4-pro; high = xai-oauth / grok-4.6.
 - No fourth model. No `T1`/`T2`/`T3` in Nix options, README,
   plugin.yaml, WebUI labels, or slash commands.
-- Options read like a short consumer flake: comment a line to drop a
-  thing. `plugins` is `listOf str`; `extraPlugins` is `attrsOf path`.
+- `plugins` is `listOf str`; `extraPlugins` is `attrsOf path`.
 - Composer on: default plugins are model-router, tool-call-coherency,
   secret-handoff (`mkDefault`). Composer off: `plugins` default is `[]`.
-- `gbrain.enable` appends the two gbrain plugins if missing. Listing
-  those plugins does not require `gbrain.enable`.
+- `gbrain.enable` appends the two gbrain plugins if missing, without
+  writing back into the `plugins` option. Listing those plugins does
+  not require `gbrain.enable`.
 - When composer is on, seed official `settings.model` +
   `fallback_model` from high, `delegation` from medium, `cron` +
   listed auxiliary slots from low or medium (`reasoning_effort = "none"`).
-  Do not seed STT / TTS / vision.
+  Do not seed vision / tts / moa / goal_judge.
 - Users override seeds with official `services.hermes-agent.settings.*`.
-- model-router internal keys are `low` < `medium` < `high`. Commands
-  `/low` `/medium` `/high` `/auto`. Classifier replies with exactly
-  one of those three words. Escalation 4 on low, 3 on medium, cap
-  high. No rest_on_high / final_voice. Do not change that policy.
-- `gbrain.enable` must not clobber the composer plugin default list.
-  Append happens at install time (`settings.plugins.enabled`), not by
-  writing back into the `plugins` option.
-
-## Inferred
-
+- model-router keys are `low` / `medium` / `high`. Commands `/low`
+  `/medium` `/high` `/auto`. Classifier replies with exactly one of
+  those three words. Escalation 4 on low, 3 on medium, cap high.
 - Official `settings` is `deepConfigType`: `mkDefault` on a leaf is
-  stored as a literal in YAML. Seeds are plain attrsets; last writer
-  wins via `recursiveUpdate`. Consumer settings must come after the
-  PnP import.
-- Official keys used here match live DEFAULT_CONFIG / rk3588:
-  `model.{provider,default}`, `fallback_model.{provider,model}`,
-  `delegation.{provider,model}`, `cron.{model,model_provider}`,
+  stored as a literal. Seeds are plain attrsets; last writer wins via
+  `recursiveUpdate`. Consumer settings come after the PnP import.
+- Official keys: `model.{provider,default}`,
+  `fallback_model.{provider,model}`, `delegation.{provider,model}`,
+  `cron.{model,model_provider}`,
   `auxiliary.<slot>.{provider,model,reasoning_effort}`.
 - Auxiliary slots seeded: title_generation, compression, approval,
   web_extract, skills_hub, mcp, triage_specifier, kanban_decomposer,
   profile_describer, curator, background_review, monitor,
-  memory_query_rewrite. Not seeded: vision, tts_audio_tags, moa_*,
-  goal_judge, session_search (removed upstream). background_review, curator, kanban_decomposer ride medium; the rest ride low.
-- GBrain URL stays on typed `mcpServers.gbrain.url`, not inside
-  `settings.mcp_servers`.
+  memory_query_rewrite. Medium: background_review, curator,
+  kanban_decomposer. The rest ride low.
+- GBrain URL stays on typed `mcpServers.gbrain.url`.
 - `nix flake check` stays eval-cheap (dummy agent/webui packages).
-- Library path: composer off + `plugins = [ "model-router" ]` still
-  materializes the plugin and still does not seed official settings.
-- First-party plugins still materialize to `$stateDir/plugins/<name>`
-  with a relative symlink under `$stateDir/.hermes/plugins/`.
-- HMC is opt-in. `gbrain.enable` (default false) starts loopback HTTP
-  serve + MCP URL hook; no PGLite/registry from Nix. No SOUL.md from Nix,
-  no default `extraDependencyGroups = [ "mcp" ]`, no home-manager /
-  darwin, no drive-by rewrites of other plugins.
+- Composer off + `plugins = [ "model-router" ]` still materializes the
+  plugin and does not seed official settings.
+- First-party plugins materialize to `$stateDir/plugins/<name>` with a
+  relative symlink under `$stateDir/.hermes/plugins/`.
+- HMC and `gbrain.enable` are opt-in. No PGLite/registry from Nix. No
+  SOUL.md from Nix. No default extras on the package wrap.
