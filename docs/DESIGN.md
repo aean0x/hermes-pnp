@@ -415,9 +415,10 @@ setpriv, no sudo/apt). Upstream-shaped — lift into
 nesquena/hermes-webui as `container.enable` when it lands.
 
 WebUI container mounts: `/nix/store:ro`, agent stateDir → `/data`,
-agent home → `/home/hermes`, webui stateDir same-path, `/etc/ssl:ro`.
-Not `/etc/nixos`, not docker.sock. Terminal spawned from the WebUI
-runs inside this container.
+agent home → `/home/hermes`, webui stateDir same-path, `/etc/ssl:ro`,
+`/etc/static:ro` (NixOS CA farm; `/etc/ssl` alone dangles),
+`/etc/gitconfig:ro`. Not `/etc/nixos`, not docker.sock. Terminal
+spawned from the WebUI runs inside this container.
 
 Browser container mounts: workspace, profile, cookies, logs, gate
 state. Not hermes home, not `.hermes`, not `/etc`. Xvfb + browser

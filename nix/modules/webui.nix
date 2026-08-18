@@ -80,7 +80,10 @@ let
       "${agent.stateDir}:/data"
       "${agent.stateDir}/home:/home/hermes"
       "${webui.stateDir}:${webui.stateDir}"
+      # NixOS /etc/ssl/certs is a symlink farm into /etc/static. Binding
+      # only /etc/ssl leaves ca-certificates.crt dangling in Ubuntu.
       "/etc/ssl:/etc/ssl:ro"
+      "/etc/static:/etc/static:ro"
       "/etc/gitconfig:/etc/gitconfig:ro"
     ] ++ wctr.extraVolumes;
     extraEnv = extraEnv;

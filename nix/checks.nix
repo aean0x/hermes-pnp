@@ -152,6 +152,8 @@ in
     test "${lib.concatStringsSep "," containerConfig.services.hermes-agent.settings.skills.external_dirs}" = "/var/lib/hermes/skills,/data/skills"
     test "${containerConfig.services.hermes-agent.container.image}" = "ubuntu:24.04"
     test "${toString containerConfig.services.hermesPnP.webui.container.enable}" = "1"
+    test "${toString (lib.hasInfix "/etc/ssl:/etc/ssl:ro" containerConfig.systemd.services.hermes-webui.script)}" = "1"
+    test "${toString (lib.hasInfix "/etc/static:/etc/static:ro" containerConfig.systemd.services.hermes-webui.script)}" = "1"
     test "${toString containerConfig.services.hermesPnP.browser.container.enable}" = "1"
     test "${toString (containerConfig.systemd.services ? hermes-browser)}" = "1"
     test "${toString (containerConfig.systemd.services.hermes-browser.script != "")}" = "1"
