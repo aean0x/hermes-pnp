@@ -100,10 +100,46 @@ in
       '';
     };
 
-    webui.enable = mkOption {
-      type = types.bool;
-      default = true;
-      description = "When the composer is on, pair official WebUI. Set false for gateway-only.";
+    webui = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = "When the composer is on, pair official WebUI. Set false for gateway-only.";
+      };
+
+      container = {
+        enable = mkOption {
+          type = types.bool;
+          default = false;
+          description = ''
+            Run official hermes-webui inside an OCI container (same
+            docker create --network=host + /nix/store pattern as
+            services.hermes-agent.container). The WebUI process and any
+            terminal it spawns cannot see /etc/nixos. Defaults on when
+            hermesPnP.container.enable is set.
+          '';
+        };
+        backend = mkOption {
+          type = types.str;
+          default = "docker";
+          description = "docker or podman. Follows hermesPnP.container.backend.";
+        };
+        image = mkOption {
+          type = types.str;
+          default = "ubuntu:24.04";
+          description = "Base image (pulled at runtime). Same default as official agent.";
+        };
+        extraVolumes = mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          description = "Extra host:container[:mode] binds.";
+        };
+        extraOptions = mkOption {
+          type = types.listOf types.str;
+          default = [ "--security-opt=no-new-privileges" ];
+          description = "Extra docker create args. Default refuses privilege regain.";
+        };
+      };
     };
 
     toolbox = {
@@ -195,6 +231,17 @@ in
         description = "Drop dir for Netscape / Playwright cookie files.";
       };
 
+      workspaceDir = mkOption {
+        type = types.str;
+        default = "${agent.stateDir}/workspace";
+        defaultText = literalExpression ''"''${config.services.hermes-agent.stateDir}/workspace"'';
+        description = ''
+          Host workspace bind-mounted into the browser container.
+          Container mode mounts this plus profile/cookies/logs — not
+          hermes home, not .hermes, not /etc.
+        '';
+      };
+
       logDir = mkOption {
         type = types.str;
         default = "${agent.stateDir}/browser-logs";
@@ -211,12 +258,65 @@ in
         port = mkOption {
           type = types.port;
           default = 6080;
-          description = "noVNC web port (opened in the firewall).";
+          description = "noVNC web port. Bound to listenAddress; not firewalled when loopback.";
         };
         vncPort = mkOption {
           type = types.port;
           default = 5900;
-          description = "Raw VNC port (kept closed unless opened explicitly).";
+          description = "Raw VNC port (loopback; not opened in the firewall).";
+        };
+        listenAddress = mkOption {
+          type = types.str;
+          default = "127.0.0.1";
+          description = ''
+            Address noVNC/x11vnc bind. Default loopback — expose via
+            Caddy (same auth as the WebUI), not a LAN-open 6080.
+          '';
+        };
+        publicUrl = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            URL the agent relays for captcha handoff, e.g.
+            https://browser.example.com/vnc.html. When null, relays
+            http://127.0.0.1:<port>/vnc.html.
+          '';
+        };
+      };
+
+      container = {
+        enable = mkOption {
+          type = types.bool;
+          default = false;
+          description = ''
+            Run Xvfb + browser + x11vnc + noVNC in one OCI container.
+            Mounts workspace, profile, cookies, logs. Not hermes home.
+            Defaults on when hermesPnP.container.enable is set.
+          '';
+        };
+        backend = mkOption {
+          type = types.str;
+          default = "docker";
+          description = "docker or podman. Follows hermesPnP.container.backend.";
+        };
+        image = mkOption {
+          type = types.str;
+          default = "ubuntu:24.04";
+          description = "Base image (pulled at runtime).";
+        };
+        extraVolumes = mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          description = "Extra host:container[:mode] binds.";
+        };
+        extraOptions = mkOption {
+          type = types.listOf types.str;
+          default = [
+            "--security-opt=no-new-privileges"
+            "--shm-size=2g"
+            "--init"
+          ];
+          description = "Extra docker create args.";
         };
       };
 

@@ -54,6 +54,7 @@ consumer.
 ## Layout
 
 ```
+nix/lib/oci-container.nix # slim official-shaped docker create/start helper
 nix/modules/default.nix   # composer imports
 nix/modules/options.nix   # enable, models, plugins, extraPlugins, quiet toggles
 nix/modules/models.nix    # seed official settings from models.*
