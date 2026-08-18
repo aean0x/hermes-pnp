@@ -156,7 +156,11 @@ in
     test "${toString (builtins.match ".*toolbox/bin.*" modulesConfig.services.hermesPnP.toolbox.hostPath != null)}" = "1"
     test "${toString modulesConfig.services.hermes-agent.container.enable}" = ""
     test "${lib.concatStringsSep "," modulesConfig.services.hermes-agent.settings.skills.external_dirs}" = "/var/lib/hermes/skills"
+    test "${toString modulesConfig.programs.git.enable}" = "1"
+    test "${toString (lib.any (x: lib.hasInfix "git-credential-github-env" (x.credential.helper or "")) modulesConfig.programs.git.config)}" = "1"
+    test "${toString (lib.any (x: x ? user) modulesConfig.programs.git.config)}" = ""
     test "${toString containerConfig.services.hermes-agent.container.enable}" = "1"
+    test "${toString (lib.any (v: lib.hasInfix "/etc/gitconfig" v) containerConfig.services.hermes-agent.container.extraVolumes)}" = "1"
     test "${lib.concatStringsSep "," containerConfig.services.hermes-agent.settings.skills.external_dirs}" = "/data/skills"
     test "${containerConfig.services.hermes-agent.container.image}" = "ubuntu:24.04"
     test "${toString containerConfig.services.hermesPnP.webui.container.enable}" = "1"
@@ -205,6 +209,7 @@ in
 
   drop-in = pkgs.runCommand "hermes-pnp-drop-in-eval" { } ''
     test "${toString dropInConfig.services.hermesPnP.enable}" = ""
+    test "${toString dropInConfig.services.hermesPnP.git.credentialHelper.enable}" = ""
     test "${toString dropInConfig.services.hermes-webui.enable}" = ""
     test "${toString (builtins.elem "model-router" dropInConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${dropInConfig.services.hermes-agent.settings.model.default}" = "xai/grok-4"

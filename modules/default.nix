@@ -5,6 +5,7 @@
     ./enable.nix
     ./package.nix
     ./agent.nix
+    ./git.nix
     ./models.nix
     ./plugins.nix
     ./skills.nix

@@ -310,6 +310,14 @@ Browser mounts: workspace, profile, cookies, logs, gate. Not hermes
 home, not `.hermes`, not `/etc`. `--no-sandbox`: the container is the
 jail.
 
+Agent jail also bind-mounts `/etc/gitconfig:ro` when
+`hermesPnP.git.credentialHelper.enable` (composer default). That file
+is `programs.git` on the host: credential helper only — no
+`user.name` / `user.email`. The helper (`scripts/git-credential-github-env`)
+feeds `GITHUB_PAT` / `GH_TOKEN` for `github.com` HTTPS (git-hook
+push/pull). No token → exit 0. Nix cannot see sops at eval, so the
+helper is not gated on the secret existing.
+
 When official `container.enable` is on, **stable** jail paths go on
 `container.extraOptions --env` (`mkDockerEnv`), not `$HERMES_HOME/.env`:
 
