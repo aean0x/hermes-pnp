@@ -32,7 +32,7 @@ You are on a hermes-pnp host. Bootstrap GBrain end-to-end. Do not ask clarifying
    - Set `GBRAIN_REMOTE_TOKEN=<token>` in `$HERMES_HOME/.env` (literal value)
    - Set `mcp_servers.gbrain` to url + `headers.Authorization: Bearer <token>` (literal)
    - Remove stdio command/args/env on gbrain entry
-8. Prefer operator path when available: `./deploy gbrain-setup` (does mint + wire + probe correctly)
+8. Prefer operator path: `./deploy gbrain-setup` (requires `hermesPnP.gbrain.enable` already switched; mints + wires + probes). Composer activation re-applies literal Bearer after official config merge.
 9. Restart hermes-agent/webui if you cannot (ask operator)
 
 ### D. Content + embeds (serve STOPPED for CLI import/embed)

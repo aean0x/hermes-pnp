@@ -14,9 +14,10 @@ metadata:
 
 Use when MCP gbrain returns **401**, tools missing after restart, or fresh bootstrap after HTTP serve is up.
 
-The composer (`services.hermesPnP.gbrain`) only sets the MCP URL and
-`GBRAIN_TOKEN_FILE`. The consumer starts `gbrain serve --http`. This
-skill is the operator/agent procedure for minting and wiring the Bearer.
+The composer (`services.hermesPnP.gbrain.enable`) starts `gbrain serve
+--http`, sets the MCP URL + `GBRAIN_TOKEN_FILE`, and re-applies a
+literal Bearer after official config merge. This skill is the mint /
+repair procedure when `gbrain-setup` has not run or MCP 401s.
 
 ## Architecture
 
@@ -62,9 +63,9 @@ install -m 600 /dev/null ~/.gbrain/hermes-mcp.token
 #    (operator if no rights): systemctl restart hermes-agent hermes-webui
 ```
 
-The consumer flake may ship a one-shot that does this (mint, write token
-file + `GBRAIN_REMOTE_TOKEN`, patch `config.yaml` with a literal Bearer,
-probe HTTP). Prefer that when present.
+Prefer `scripts/gbrain-setup.sh` (consumer `./deploy gbrain-setup`) after
+`gbrain.enable` is switched. That mints, writes the token file +
+`GBRAIN_REMOTE_TOKEN`, patches `config.yaml`, and probes HTTP.
 
 ## Verify (no secret dump)
 

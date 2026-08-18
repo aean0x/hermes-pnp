@@ -164,8 +164,10 @@ the official option PnP set via `mkDefault`.
   (`ubuntu:24.04`, docker). RAM caps and extra volumes stay official.
 - `services.hermesPnP.hmc.enable` — default `false`.
 - `services.hermesPnP.gbrain.enable` — default `false`. Loopback
-  `gbrain serve`, `mcpServers.gbrain.url`, plugin env. Appends the two
-  gbrain plugins if missing. No PGLite, sources, or memory registry.
+  `gbrain serve`, `mcpServers.gbrain.url`, plugin env, literal Bearer
+  rewrite after official config merge. Appends the two gbrain plugins
+  if missing. No PGLite, sources, or memory registry. CLI is
+  `scripts/gbrain-setup.sh`.
 - `services.hermesPnP.gbrain.url` / `bind` / `port` / `tokenFile`.
 - `services.hermesPnP.mcpProxy` — enable, listen, backends,
   `clientAuth` (`none` / `token`), `clientTokenFile`.
@@ -366,7 +368,9 @@ consumer `extraPackages`.
 `modules/gbrain.nix`, `gbrain.enable` (default false):
 
 - `url` / `bind` / `port` / `tokenFile`
-- `mkDefault` `services.hermes-agent.mcpServers.gbrain`
+- `mkDefault` `services.hermes-agent.mcpServers.gbrain` (url + timeouts;
+  not headers — token is minted at runtime)
+- activation after `hermes-agent-setup` re-applies literal Bearer
 - env for the two gbrain plugins
 - `gbrain-mcp-http`: `gbrain serve --http` on loopback. Binary is the
   consumer-bootstrapped bun-global CLI.
@@ -374,8 +378,9 @@ consumer `extraPackages`.
 Enabling the plugins does not require `gbrain.enable`. They no-op if
 the env is unset.
 
-Operator scripts: `scripts/gbrain-setup.sh`,
-`scripts/validate-gbrain.sh`. See `docs/gbrain.md`.
+Operator scripts: `scripts/gbrain-setup.sh` (needs the unit),
+`scripts/validate-gbrain.sh`, `scripts/gbrain-wire-config.py`. See
+`docs/gbrain.md`.
 
 ## MCP proxy
 
