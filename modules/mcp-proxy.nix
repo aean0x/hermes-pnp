@@ -411,7 +411,7 @@ let
 
   configFile = pkgs.writeText "mcp-proxy.json" (builtins.toJSON proxyConfig);
 
-  mcpProxy = pkgs.mcp-proxy or (pkgs.callPackage ../pkgs/mcp-proxy.nix { });
+  mcpProxy = pkgs.mcp-proxy or (pkgs.callPackage ../pkgs/mcp-proxy { });
 
   loadCredentials = lib.flatten (
     lib.mapAttrsToList (

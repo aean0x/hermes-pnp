@@ -36,9 +36,9 @@ let
     types
     ;
 
-  inherit (import ../_lib.nix { inherit pkgs lib; }) mkDockerEnv;
+  inherit (import ../../lib { inherit pkgs lib; }) mkDockerEnv;
 
-  oci = import ../_lib.nix { inherit pkgs lib; };
+  oci = import ../../lib { inherit pkgs lib; };
   shared = import ./shared.nix { inherit config lib pkgs; };
   inherit (shared)
     pnp

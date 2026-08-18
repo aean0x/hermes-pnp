@@ -4,7 +4,7 @@
   writeShellApplication,
 }:
 let
-  src = lib.cleanSource ../services/mcp-proxy/src;
+  src = lib.cleanSource ./src;
 in
 writeShellApplication {
   name = "mcp-proxy";

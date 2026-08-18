@@ -27,7 +27,7 @@
       pkgsFor = system: nixpkgs.legacyPackages.${system};
 
       overlay = final: _prev: {
-        mcp-proxy = final.callPackage ./pkgs/mcp-proxy.nix { };
+        mcp-proxy = final.callPackage ./pkgs/mcp-proxy { };
         agent-browser = final.callPackage ./pkgs/agent-browser.nix { };
       };
 
@@ -68,7 +68,7 @@
           pkgs = pkgsFor system;
         in
         {
-          mcp-proxy = pkgs.callPackage ./pkgs/mcp-proxy.nix { };
+          mcp-proxy = pkgs.callPackage ./pkgs/mcp-proxy { };
           agent-browser = pkgs.callPackage ./pkgs/agent-browser.nix { };
         }
       );
@@ -97,7 +97,7 @@
           default = pkgs.mkShell {
             packages = [ pkgs.python3 ];
             shellHook = ''
-              export PYTHONPATH=${toString ./services/mcp-proxy/src}:''${PYTHONPATH:-}
+              export PYTHONPATH=${toString ./pkgs/mcp-proxy/src}:''${PYTHONPATH:-}
               echo "Hermes PnP"
               echo "  mcp-proxy:  python3 -m mcp_proxy --config …"
               echo "  tests:      nix flake check"

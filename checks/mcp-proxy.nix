@@ -8,7 +8,7 @@ pkgs.runCommand "mcp-proxy-tests"
     ];
   }
   ''
-    export PYTHONPATH=${../services/mcp-proxy/src}
-    python3 -m unittest discover -s ${../services/mcp-proxy/tests} -v
+    export PYTHONPATH=${../pkgs/mcp-proxy/src}
+    python3 -m unittest discover -s ${../pkgs/mcp-proxy/tests} -v
     touch $out
   ''

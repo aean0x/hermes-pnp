@@ -72,7 +72,7 @@ Flake inputs (followed, not vendored):
 - `nixpkgs`
 - `hermes-agent` — `github:NousResearch/hermes-agent`
 - `hermes-webui` — `github:nesquena/hermes-webui`
-- `mcp-proxy` — already in-tree as `services/mcp-proxy` (path input)
+- `mcp-proxy` — already in-tree as `pkgs/mcp-proxy`
 
 Re-export the official modules for consumers who want them unbundled:
 
@@ -97,13 +97,14 @@ hermes-pnp/
     browser/                     # CDP browser + dashboard gate
     mcp-proxy.nix                # services.hermesPnP.mcpProxy (alias: services.mcpProxy)
   pkgs/                          # packages + overlays.default
+    mcp-proxy/                   # default.nix + src/tests/examples
+    agent-browser.nix
   checks/                        # eval + plugin/proxy tests
   examples/                      # composer.nix, library-path.nix (evalled by checks)
   templates/default/             # nix flake init -t …
   plugins/                       # first-party plugin source + catalog.nix
   skills/                        # first-party skill source + catalog.nix
-  services/mcp-proxy/{src,tests} # proxy runtime
-  services/browser/src/          # cookie-import helper
+  scripts/                       # operator one-shots (not Nix)
 ```
 
 `services.hermesPnP.enable` turns on the composer opinions (WebUI
@@ -545,7 +546,7 @@ Do not require a full container image build in default checks.
 4. `agent.nix` + `webui.nix` — pairing defaults, gated on
    `hermesPnP.enable`.
 5. `toolbox.nix` — everyday CLI buildEnv.
-6. `services/browser/` — persistent CDP browser + optional dashboard gate.
+6. `modules/browser/` — persistent CDP browser + optional dashboard gate.
 7. `gbrain.nix` — thin optional hook.
 8. Checks + example snippet in README.
 9. Do **not** migrate rk3588 in this repo.
@@ -648,6 +649,8 @@ Shipped as `refactor: library-flake layout (modules/, lib/, pkgs/, examples/)`.
   `pkgs.agent-browser` with a `callPackage` fallback.
 - `_module.args.hermesPnPFlake` is gone. The composer sets
   `services.hermesPnP.internal.officialAgentPackageFor`.
-- `packages.default` is unset. `services/` holds runtime source only.
+- `packages.default` is unset. mcp-proxy source lives under
+  `pkgs/mcp-proxy/`. Cookie import lives next to the browser module.
+  There is no `services/` tree.
 - `examples/` is evalled by `checks`. `templates.default` is the
   consumer starter.

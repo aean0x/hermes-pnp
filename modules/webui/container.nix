@@ -17,7 +17,7 @@ let
   wctr = pnp.webui.container;
   pairing = pnp.enable && pnp.webui.enable;
 
-  oci = import ../_lib.nix { inherit pkgs lib; };
+  oci = import ../../lib { inherit pkgs lib; };
 
   remappedHome =
     if webui.hermesHome != null && lib.hasPrefix agent.stateDir webui.hermesHome

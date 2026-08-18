@@ -19,7 +19,7 @@ let
   extensionDir = pnp.pluginInstall.webuiExtensionDir;
   wctr = pnp.webui.container;
 
-  oci = import ../_lib.nix { inherit pkgs lib; };
+  oci = import ../../lib { inherit pkgs lib; };
 in
 {
   imports = [

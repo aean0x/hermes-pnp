@@ -10,7 +10,7 @@
 let
   inherit (lib) mkDefault mkIf;
 
-  oci = import ../_lib.nix { inherit pkgs lib; };
+  oci = import ../../lib { inherit pkgs lib; };
   shared = import ./shared.nix { inherit config lib pkgs; };
   inherit (shared)
     pnp

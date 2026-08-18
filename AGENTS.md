@@ -57,14 +57,13 @@ consumer.
 lib/                      # flake.lib — mkOciJail, mkDockerEnv
 modules/                  # composer + pairing; options live next to config
 modules/webui/            # official WebUI pairing + host harden + OCI jail
-modules/browser/          # CDP browser + dashboard gate
-pkgs/                     # mcp-proxy, agent-browser (overlay source)
-checks/                   # eval + plugin/proxy tests
+modules/browser/          # CDP browser + dashboard + cookie import
+pkgs/mcp-proxy/           # proxy package + src/tests/examples
+pkgs/agent-browser.nix    # pinned musl-static release
+checks/                   # eval + plugin/proxy tests (CI)
 examples/                 # composer + library-path (evalled by checks)
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
-services/mcp-proxy/       # runtime src/tests only
-services/browser/src/     # cookie-import helper
 scripts/                  # gbrain-setup / validate-gbrain (operator; not Nix)
 plugins/                  # first-party plugin trees
 skills/                   # first-party skill trees

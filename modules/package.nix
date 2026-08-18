@@ -25,7 +25,7 @@ let
     types
     ;
 
-  inherit (import ./_lib.nix { inherit pkgs lib; }) mkDockerEnv;
+  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv;
 
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;

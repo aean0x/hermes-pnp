@@ -10,7 +10,7 @@ let
   pnp = config.services.hermesPnP;
   pairing = pnp.enable && pnp.webui.enable;
   wctr = pnp.webui.container;
-  oci = import ../_lib.nix { inherit pkgs lib; };
+  oci = import ../../lib { inherit pkgs lib; };
 in
 {
   config = lib.mkIf (pairing && !wctr.enable) {

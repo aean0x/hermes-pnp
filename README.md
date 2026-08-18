@@ -274,7 +274,7 @@ Composio policy, home-manager, darwin. HMC is opt-in (`hmc.enable`).
 ```bash
 nix develop
 nix flake check
-PYTHONPATH=services/mcp-proxy/src python3 -m unittest discover -s services/mcp-proxy/tests -v
+PYTHONPATH=pkgs/mcp-proxy/src python3 -m unittest discover -s pkgs/mcp-proxy/tests -v
 python3 -m unittest discover -s plugins/secret-handoff/tests -v
 python3 -m unittest discover -s plugins/model-router/tests -v
 ```

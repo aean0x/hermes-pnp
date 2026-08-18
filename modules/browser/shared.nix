@@ -39,7 +39,7 @@ let
     ln -s ${browserBin} "$out/bin/google-chrome"
   '';
 
-  importCookiesPy = ../../services/browser/src/import-browser-cookies.py;
+  importCookiesPy = ./import-browser-cookies.py;
   hermesBrowserImportCookies = pkgs.writeShellApplication {
     name = "hermes-browser-import-cookies";
     runtimeInputs = [
