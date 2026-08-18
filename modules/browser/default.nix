@@ -261,12 +261,14 @@ in
           HERMES_BROWSER_GATE_URL = gateUrl;
           HERMES_BROWSER_GATE_PORT = toString gatePort;
           HERMES_BROWSER_ENGINE = cfg.engine;
+          AGENT_BROWSER_ENGINE = cfg.engine;
         }
         // optionalAttrs (!agent.container.enable) {
           HERMES_BROWSER_PROFILE = profileDir;
         };
         settings.browser = {
           cdp_url = cdpUrl;
+          engine = cfg.engine;
         };
         container.extraOptions = mkIf agent.container.enable (
           oci.mkDockerEnv { HERMES_BROWSER_PROFILE = containerProfile; }

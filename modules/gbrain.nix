@@ -112,7 +112,6 @@ in
       description = "GBrain MCP HTTP (loopback; sole PGLite writer)";
       after = [
         "network-online.target"
-        "hermes-agent-setup.service"
       ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];

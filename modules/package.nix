@@ -1,9 +1,15 @@
 # Shared agent package + store-safe env for every Hermes entrypoint.
 #
-# Gateway (native or container) and WebUI (in-process) must see the same
-# derivation and the same env map. Container and WebUI do not exec the
-# upstream hermes wrapper, so HERMES_BUNDLED_* is injected into
-# environment{} and container extraOptions --env.
+# Official agent container execs current-package/bin/hermes (the wrapper)
+# which already --set HERMES_BUNDLED_*. WebUI does not exec that wrapper,
+# so the share map is injected into extraEnvironment. environment{} also
+# gets it so native gateway / .env see the same store paths.
+#
+# Do not put store-path HERMES_BUNDLED_* on container.extraOptions:
+# official identity hashes extraOptions, so a package rebuild would
+# recreate the jail and wipe the writable apt/uv layer. Remapped jail
+# paths (profile, token, /data/toolbox PATH) stay on extraOptions
+# because those strings are stable.
 #
 # extras: forward whatever the consumer set on services.hermes-agent.
 # Do not override the official package when both extra lists are empty
@@ -24,8 +30,6 @@ let
     optionalAttrs
     types
     ;
-
-  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv;
 
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;
@@ -166,10 +170,6 @@ in
   config = mkIf pnp.enable (mkMerge [
     {
       services.hermes-agent.environment = lib.mapAttrs (_: mkDefault) hermesRuntimeEnv;
-
-      services.hermes-agent.container.extraOptions = mkIf agent.container.enable (
-        mkDockerEnv hermesRuntimeEnv
-      );
 
       services.hermes-webui.extraEnvironment = mkIf pnp.webui.enable (
         lib.mapAttrs (_: mkDefault) hermesRuntimeEnv

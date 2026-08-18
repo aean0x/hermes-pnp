@@ -22,13 +22,21 @@ let
     mapAttrsToList
     types
     ;
-  inherit (import ../lib { inherit lib; }) containerData;
+  inherit (import ../lib { inherit lib; }) remapStatePath;
 
   cfg = config.services.hermesPnP;
   agent = config.services.hermes-agent;
   catalog = import ../skills/catalog.nix;
   allSkills = catalog // cfg.skills.extraSkills;
   skillsDir = "${agent.stateDir}/skills";
+  skillsExternalDir =
+    if agent.container.enable then
+      remapStatePath {
+        inherit (agent) stateDir;
+        path = skillsDir;
+      }
+    else
+      skillsDir;
 in
 {
   imports = [ ./enable.nix ];
@@ -47,16 +55,15 @@ in
       services.hermesPnP.skills.enable = mkDefault true;
     }
     (mkIf cfg.skills.enable {
-    # Host CLI sees $stateDir/skills; the container bind is $stateDir → /data.
+    # Official skills.external_dirs. One path: host stateDir, or /data/skills
+    # when the official jail remaps stateDir. Do not list both.
     # settings is deepConfigType — do not wrap leaves in mkIf/mkDefault.
-    services.hermes-agent.settings.skills.external_dirs =
-      [ skillsDir ] ++ lib.optional agent.container.enable "${containerData}/skills";
+    services.hermes-agent.settings.skills.external_dirs = [ skillsExternalDir ];
 
     systemd.services.hermes-agent-skills = {
       description = "Materialize hermes-pnp first-party skills";
       wantedBy = [ "multi-user.target" ];
       before = [ "hermes-agent.service" ];
-      after = [ "hermes-agent-setup.service" ];
 
       serviceConfig = {
         Type = "oneshot";

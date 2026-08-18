@@ -370,8 +370,9 @@ Responsibilities:
    `HERMES_BUNDLED_SKILLS`, `HERMES_OPTIONAL_SKILLS`,
    `HERMES_BUNDLED_LOCALES`, `HERMES_OPTIONAL_MCPS`, `HERMES_WEB_DIST`,
    `HERMES_TUI_DIR`) plus optional silence `PYTHONPATH`.
-4. Apply the map to `services.hermes-agent.environment` and, when
-   `container.enable`, to `container.extraOptions` as `docker --env`.
+4. Apply the map to `services.hermes-agent.environment` and
+   `services.hermes-webui.extraEnvironment`. Do not put those store
+   paths on official `container.extraOptions` (identity hash).
 
 `extraDependencyGroups` / `extraPythonPackages` stay official options.
 The wrap must *forward* whatever the consumer set on the service, not
@@ -440,16 +441,23 @@ state. Not hermes home, not `.hermes`, not `/etc`. Xvfb + browser
 + agent-browser dashboard share the container. `--no-sandbox` is fine: the
 container is the jail.
 
-When `services.hermes-agent.container.enable` is on, jail-visible
-paths go on `container.extraOptions --env` (`mkDockerEnv`), never
-written into `$HERMES_HOME/.env` (activation strips a leftover host
+When `services.hermes-agent.container.enable` is on, **stable**
+jail-visible paths go on `container.extraOptions --env` (`mkDockerEnv`),
+never written into `$HERMES_HOME/.env` (activation strips a leftover host
 `HERMES_BROWSER_PROFILE` if present):
 
 - `HERMES_BROWSER_PROFILE=/data/browser-profile`
 - `GBRAIN_TOKEN_FILE=/home/hermes/.gbrain/hermes-mcp.token`
+- toolbox `PATH` / `HERMES_PYTHON` under `/data/toolbox/bin`
+
+Official identity hashes `extraOptions`. Store-path `HERMES_BUNDLED_*`
+must **not** go there (a package rebuild would recreate the Ubuntu
+layer). Those stay on `environment{}` / WebUI `extraEnvironment`; the
+official wrapper already `--set`s them for the jailed gateway.
 
 CDP / gate URLs stay on `environment{}` (`127.0.0.1` + `--network=host`).
-Native mode keeps host paths on `environment{}`.
+Native mode keeps host paths on `environment{}`. Native toolbox lands
+on official `services.hermes-agent.extraPackages` (unit PATH).
 
 Takeover stays local: one browser, two control planes.
 - Agent: CDP `127.0.0.1:9222`

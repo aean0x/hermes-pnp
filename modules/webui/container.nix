@@ -88,8 +88,12 @@ let
     identity = {
       package = "${webui.package}";
     };
-    after = [ "hermes-agent.service" ] ++ optional pnp.gbrain.enable "gbrain-mcp-http.service";
-    wants = [ "hermes-agent.service" ] ++ optional pnp.gbrain.enable "gbrain-mcp-http.service";
+    after = [ "hermes-agent.service" ]
+      ++ optional pnp.gbrain.enable "gbrain-mcp-http.service"
+      ++ optional pnp.mcpProxy.enable "mcp-proxy.service";
+    wants = [ "hermes-agent.service" ]
+      ++ optional pnp.gbrain.enable "gbrain-mcp-http.service"
+      ++ optional pnp.mcpProxy.enable "mcp-proxy.service";
   };
 in
 {

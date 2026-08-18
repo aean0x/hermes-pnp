@@ -1,9 +1,9 @@
-# Opinionated everyday CLI toolkit for Hermes container mode.
+# Opinionated everyday CLI toolkit for Hermes.
 #
 # Pattern: buildEnv -> /var/lib/hermes/toolbox/bin, which the container
-# sees as /data/toolbox/bin (stateDir bind). Container PATH is pushed via
-# container.extraOptions --env (NOT persisted into .env, so host `hermes
-# chat` never inherits /data paths).
+# sees as /data/toolbox/bin (stateDir bind). Native gateway PATH is
+# official extraPackages. Container PATH is extraOptions --env (NOT
+# persisted into .env, so host `hermes chat` never inherits /data paths).
 #
 # This is the composer's "sauce": a curated ~40-package set + python3 +
 # login PATH. Browser-specific aliases live in the browser module.
@@ -217,6 +217,10 @@ in
     environment.systemPackages = [ pythonBins ];
 
     services.hermes-agent = {
+      # Native unit PATH. Official extraPackages do not appear inside the
+      # Ubuntu jail; that path is /data/toolbox/bin via extraOptions below.
+      extraPackages = [ hermesToolbox ];
+
       # Do NOT put PATH / HERMES_PY / AGENT_BROWSER in `environment` — the
       # module merges that into $HERMES_HOME/.env, which host `hermes chat`
       # loads and which breaks host terminal (container /data/toolbox paths).

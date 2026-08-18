@@ -77,6 +77,11 @@ let
     ../examples/gbrain.nix
   ];
 
+  containerMcpConfig = eval [
+    ../examples/container.nix
+    ../examples/mcp-proxy.nix
+  ];
+
   mcpProxyConfig = eval [ ../examples/mcp-proxy.nix ];
 
   browserConfig = eval [ ../examples/browser.nix ];
@@ -116,6 +121,7 @@ in
     test "${toString gbrainConfig.systemd.services.gbrain-mcp-http.unitConfig.StartLimitIntervalSec}" = "120"
     test "${toString gbrainConfig.systemd.services.gbrain-mcp-http.unitConfig.StartLimitBurst}" = "5"
     test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig ? StartLimitIntervalSec)}" = ""
+    test "${toString (lib.elem "hermes-agent-setup.service" gbrainConfig.systemd.services.gbrain-mcp-http.after)}" = ""
     test "${toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_TRUST_FORWARDED_PROTO)}" = "1"
     test "${toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_EXTENSION_DIR)}" = "1"
     test "${toString (builtins.elem "model-router" modulesConfig.services.hermesPnP.plugins)}" = "1"
@@ -131,6 +137,7 @@ in
     test "${modulesConfig.services.hermes-agent.settings.delegation.model}" = "${modulesConfig.services.hermesPnP.models.medium.model}"
     test "${modulesConfig.services.hermes-agent.settings.cron.model}" = "${modulesConfig.services.hermesPnP.models.low.model}"
     test "${modulesConfig.services.hermes-agent.settings.browser.cdp_url}" = "http://127.0.0.1:9222"
+    test "${modulesConfig.services.hermes-agent.settings.browser.engine}" = "${modulesConfig.services.hermesPnP.browser.engine}"
     test "${toString (modulesConfig.systemd.services ? hermes-browser)}" = "1"
     test "${toString (modulesConfig.systemd.services ? hermes-browser-gate)}" = "1"
     test "${toString (modulesConfig.systemd.services ? hermes-browser-vnc)}" = ""
@@ -138,6 +145,8 @@ in
     test "${toString (modulesConfig.systemd.services ? hermes-browser-env)}" = ""
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_URL}" = "http://127.0.0.1:4848"
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_PORT}" = "4848"
+    test "${modulesConfig.services.hermes-agent.environment.AGENT_BROWSER_ENGINE}" = "${modulesConfig.services.hermesPnP.browser.engine}"
+    test "${toString (modulesConfig.services.hermes-agent.extraPackages != [ ])}" = "1"
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_PROFILE}" = "${modulesConfig.services.hermes-agent.stateDir}/browser-profile"
     test "${gbrainConfig.services.hermes-agent.environment.GBRAIN_TOKEN_FILE}" = "${gbrainConfig.services.hermes-agent.stateDir}/home/.gbrain/hermes-mcp.token"
     test "${toString (builtins.elem 6080 modulesConfig.networking.firewall.allowedTCPPorts)}" = ""
@@ -147,7 +156,7 @@ in
     test "${toString modulesConfig.services.hermes-agent.container.enable}" = ""
     test "${lib.concatStringsSep "," modulesConfig.services.hermes-agent.settings.skills.external_dirs}" = "/var/lib/hermes/skills"
     test "${toString containerConfig.services.hermes-agent.container.enable}" = "1"
-    test "${lib.concatStringsSep "," containerConfig.services.hermes-agent.settings.skills.external_dirs}" = "/var/lib/hermes/skills,/data/skills"
+    test "${lib.concatStringsSep "," containerConfig.services.hermes-agent.settings.skills.external_dirs}" = "/data/skills"
     test "${containerConfig.services.hermes-agent.container.image}" = "ubuntu:24.04"
     test "${toString containerConfig.services.hermesPnP.webui.container.enable}" = "1"
     test "${toString (lib.hasInfix "/etc/ssl:/etc/ssl:ro" containerConfig.systemd.services.hermes-webui.preStart)}" = "1"
@@ -166,6 +175,7 @@ in
     test "${toString (lib.hasInfix "/etc/static" containerConfig.systemd.services.hermes-browser.preStart)}" = ""
     test "${toString (containerConfig.services.hermes-agent.environment ? HERMES_BROWSER_PROFILE)}" = ""
     test "${toString (lib.hasInfix "HERMES_BROWSER_PROFILE=/data/browser-profile" (lib.concatStringsSep " " containerConfig.services.hermes-agent.container.extraOptions))}" = "1"
+    test "${toString (lib.hasInfix "HERMES_BUNDLED_PLUGINS=" (lib.concatStringsSep " " containerConfig.services.hermes-agent.container.extraOptions))}" = ""
     test "${toString containerConfig.services.hermesPnP.browser.container.enable}" = "1"
     test "${toString (lib.elem "docker.service" containerConfig.systemd.services.hermes-webui.requires)}" = "1"
     test "${toString (lib.elem "docker.service" containerConfig.systemd.services.hermes-browser.requires)}" = "1"
@@ -182,6 +192,8 @@ in
     test "${containerConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_URL}" = "http://127.0.0.1:4848"
     test "${toString (containerGbrainConfig.services.hermes-agent.environment ? GBRAIN_TOKEN_FILE)}" = ""
     test "${toString (lib.hasInfix "GBRAIN_TOKEN_FILE=/home/hermes/.gbrain/hermes-mcp.token" (lib.concatStringsSep " " containerGbrainConfig.services.hermes-agent.container.extraOptions))}" = "1"
+    test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.after)}" = "1"
+    test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.wants)}" = "1"
     touch "$out"
   '';
 
