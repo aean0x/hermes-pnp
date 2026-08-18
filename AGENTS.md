@@ -5,7 +5,7 @@ modules or flake outputs.
 
 This is a **library flake**, not a host flake. Site identity, secrets,
 hostnames, Telegram IDs, mail policy, RAM caps, and SOUL.md / USER.md /
-MEMORY.md stay in the consumer. Browser CDP/noVNC provisioning *is* a
+MEMORY.md stay in the consumer. Browser CDP/dashboard provisioning *is* a
 composer opinion (`services.hermesPnP.browser`); the engine stays in the
 consumer.
 
@@ -61,7 +61,7 @@ nix/modules/models.nix    # seed official settings from models.*
 nix/modules/plugins.nix   # plugins list + extraPlugins + pluginInstall
 nix/modules/toolbox.nix   # everyday CLI buildEnv
 nix/modules/hmc.nix       # optional hermes-context-manager extraPlugin
-services/browser/          # CDP browser + noVNC handoff (services.hermesPnP.browser)
+services/browser/          # CDP browser + dashboard gate (services.hermesPnP.browser)
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
 services/mcp-proxy/       # services.hermesPnP.mcpProxy.* (alias: services.mcpProxy)

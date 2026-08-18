@@ -184,9 +184,10 @@ in
         default = true;
         description = ''
           Opinionated host browser: a persistent CDP browser (loopback
-          :9222) + optional noVNC for human captcha handoff. The native
-          hermes browser_* tools attach to it via browser.cdp_url /
-          BROWSER_CDP_URL.
+          :9222) + optional agent-browser dashboard for human captcha
+          handoff. The native hermes browser_* tools attach to it via
+          browser.cdp_url / BROWSER_CDP_URL. The dashboard is the phone
+          gate (CDP screencast); there is no VNC.
         '';
       };
 
@@ -246,31 +247,27 @@ in
         type = types.str;
         default = "${agent.stateDir}/browser-logs";
         defaultText = literalExpression ''"''${config.services.hermes-agent.stateDir}/browser-logs"'';
-        description = "Browser / x11vnc / noVNC log dir.";
+        description = "Browser / gate log dir.";
       };
 
-      noVNC = {
+      gate = {
         enable = mkOption {
           type = types.bool;
           default = true;
-          description = "Phone / LAN human captcha handoff via noVNC.";
+          description = "Phone / LAN human captcha handoff via the agent-browser dashboard.";
         };
         port = mkOption {
           type = types.port;
-          default = 6080;
-          description = "noVNC web port. Bound to listenAddress; not firewalled when loopback.";
-        };
-        vncPort = mkOption {
-          type = types.port;
-          default = 5900;
-          description = "Raw VNC port (loopback; not opened in the firewall).";
+          default = 4848;
+          description = "Dashboard port. Bound to listenAddress; not firewalled when loopback.";
         };
         listenAddress = mkOption {
           type = types.str;
           default = "127.0.0.1";
           description = ''
-            Address noVNC/x11vnc bind. Default loopback — expose via
-            Caddy (same auth as the WebUI), not a LAN-open 6080.
+            Advertised dashboard bind. The binary itself listens on
+            loopback. Expose via Caddy (same auth as the WebUI), not a
+            LAN-open 4848.
           '';
         };
         publicUrl = mkOption {
@@ -278,8 +275,8 @@ in
           default = null;
           description = ''
             URL the agent relays for captcha handoff, e.g.
-            https://browser.example.com/vnc.html. When null, relays
-            http://127.0.0.1:<port>/vnc.html.
+            https://browser.example.com/. When null, relays
+            http://127.0.0.1:<port>/.
           '';
         };
       };
@@ -289,8 +286,8 @@ in
           type = types.bool;
           default = false;
           description = ''
-            Run Xvfb + browser + x11vnc + noVNC in one OCI container.
-            Mounts workspace, profile, cookies, logs. Not hermes home.
+            Run Xvfb + browser + agent-browser gate in one OCI container.
+            Mounts workspace, profile, cookies, logs, gate state. Not hermes home.
             Defaults on when hermesPnP.container.enable is set.
           '';
         };

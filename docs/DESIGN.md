@@ -5,7 +5,7 @@ on top of the official `services.hermes-agent` surface. WebUI is part of
 the product. Site identity stays in the consumer flake.
 
 This is not a host flake. It does not own secrets, hostnames, Telegram
-IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/noVNC provisioning
+IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/dashboard provisioning
 *is* a composer opinion (`services.hermesPnP.browser`); the engine choice
 stays in the consumer.
 
@@ -109,7 +109,7 @@ hermes-pnp/
   skills/                        # first-party skills
   skills/catalog.nix             # skill name → path
   services/mcp-proxy/            # services.hermesPnP.mcpProxy.* (alias: services.mcpProxy)
-  services/browser/              # services.hermesPnP.browser (CDP + noVNC)
+  services/browser/              # services.hermesPnP.browser (CDP + dashboard gate)
 ```
 
 `services.hermesPnP.enable` turns on the composer opinions (WebUI
@@ -148,7 +148,7 @@ option PnP set via `mkDefault`.
    reference env vars; never raw tokens.
 8. **Site policy stays out.** Telegram allowlists, home channel, RAM
    Percentage, Composio tool/account filters, hostnames, sops paths —
-   consumer flake only. Browser CDP/noVNC provisioning is composer-owned;
+   consumer flake only. Browser CDP/dashboard provisioning is composer-owned;
    the engine (brave vs chromium) is a consumer choice.
 
 ### User-facing options
@@ -215,7 +215,7 @@ reads like a short list — comment a line to drop a thing.
   tree (site policy still writes backends here). `services.mcpProxy`
   is an alias.
 - `services.hermesPnP.browser.enable` / `package` / `engine` / `cdpPort`
-  / `novnc` — persistent CDP browser + optional noVNC phone handoff;
+  / `agent-browser` — persistent CDP browser + optional dashboard phone gate;
   seeds `BROWSER_CDP_URL` into the agent env. `runtime.*` is gone:
   consumers use official `container.extraVolumes` directly.
 - `services.hermesPnP.packageFixes.silenceMarkers` — default `true`.
@@ -419,24 +419,23 @@ agent home → `/home/hermes`, webui stateDir same-path, `/etc/ssl:ro`.
 Not `/etc/nixos`, not docker.sock. Terminal spawned from the WebUI
 runs inside this container.
 
-Browser container mounts: workspace, profile, cookies, logs, VNC
-pass file. Not hermes home, not `.hermes`, not `/etc`. Xvfb + browser
-+ x11vnc + noVNC share the container. `--no-sandbox` is fine: the
+Browser container mounts: workspace, profile, cookies, logs, gate
+state. Not hermes home, not `.hermes`, not `/etc`. Xvfb + browser
++ agent-browser dashboard share the container. `--no-sandbox` is fine: the
 container is the jail.
 
 Takeover stays local: one browser, two control planes.
 - Agent: CDP `127.0.0.1:9222`
-- Human: noVNC on `listenAddress` (default `127.0.0.1`), reverse-proxied
-  through Caddy with the same auth as the WebUI.
-Do not bind `0.0.0.0:6080`. Do not open the firewall when loopback.
-Set `browser.noVNC.publicUrl` to the Caddy URL the agent should relay
-(`https://browser.example.com/vnc.html`). VNC password stays as a
-second factor.
+- Human: agent-browser dashboard on `listenAddress` (default `127.0.0.1`),
+  reverse-proxied through Caddy with the same auth as the WebUI.
+Do not bind `0.0.0.0:4848`. Do not open the firewall when loopback.
+Set `browser.gate.publicUrl` to the Caddy URL the agent should relay
+(`https://browser.example.com/`). No VNC password, no framebuffer.
 
 Consumer recipe:
 
-    services.caddy.proxyServices."browser.${domain}" = 6080;
-    services.hermesPnP.browser.noVNC.publicUrl = "https://browser.${domain}/vnc.html";
+    services.caddy.proxyServices."browser.${domain}" = 4848;
+    services.hermesPnP.browser.gate.publicUrl = "https://browser.${domain}/";
 
 Do not Cloudflare-tunnel the browser host unless you want WAN
 captcha handoff.
@@ -530,7 +529,7 @@ Do not require a full container image build in default checks.
 4. `agent.nix` + `webui.nix` — pairing defaults, gated on
    `hermesPnP.enable`.
 5. `toolbox.nix` — everyday CLI buildEnv.
-6. `services/browser/` — persistent CDP browser + optional noVNC handoff.
+6. `services/browser/` — persistent CDP browser + optional dashboard gate.
 7. `gbrain.nix` — thin optional hook.
 8. Checks + example snippet in README.
 9. Do **not** migrate rk3588 in this repo.
@@ -598,8 +597,8 @@ the rk3588 cutover PR reworks the host tree to match.
   `extraPackages` passthrough). Materializes to
   `/var/lib/hermes/toolbox/bin`, container path `/data/toolbox/bin`;
   exports `hostPath` for consumers to wire into units.
-- `services/browser/nix/module.nix` is new: persistent CDP browser + optional noVNC
-  handoff. Seeds `BROWSER_CDP_URL` + `BU_CDP_URL` and the noVNC URL
+- `services/browser/nix/module.nix` is new: persistent CDP browser + optional dashboard
+  gate. Seeds `BROWSER_CDP_URL` + `BU_CDP_URL` and the gate URL
   into `services.hermes-agent.environment`. Engine (`package`/`engine`)
   is a consumer choice. Chromium-family PATH aliases live here.
 - `runtime.nix` is deleted. `runtime.extraBindMounts` was invented

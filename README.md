@@ -5,7 +5,7 @@ on top of the official `services.hermes-agent` surface. WebUI is part of
 the product. Site identity stays in the consumer flake.
 
 This is not a host flake. It does not own secrets, hostnames, Telegram
-IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/noVNC is a
+IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/dashboard is a
 composer opinion (`services.hermesPnP.browser`); the engine is a consumer
 choice.
 
@@ -254,7 +254,7 @@ turn `container.enable` on. Extra host mounts use the official
 `toolbox.enable` builds the everyday CLI `buildEnv` into
 `/var/lib/hermes/toolbox/bin` (container `/data/toolbox/bin`) and wires
 it onto the agent PATH. `browser.*` provisions a persistent CDP browser
-(+ optional noVNC phone handoff) and seeds `BROWSER_CDP_URL` into the
+(+ optional dashboard phone gate) and seeds `BROWSER_CDP_URL` into the
 agent env.
 
 ## Out of scope
