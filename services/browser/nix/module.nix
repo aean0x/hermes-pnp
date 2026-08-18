@@ -502,7 +502,6 @@ in
           pkgs.docker
           pkgs.coreutils
         ];
-        environment.PATH = lib.mkForce null;
 
         preStart = unit.preStart;
         script = unit.script;
