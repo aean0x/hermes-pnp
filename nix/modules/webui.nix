@@ -31,22 +31,44 @@ let
 
   entrypoint = oci.mkSlimEntrypoint "hermes-webui";
 
+  inferredPython =
+    if webui.agent.python != null then
+      webui.agent.python
+    else if webui.agent.package != null && webui.agent.package.passthru ? hermesVenv then
+      "${webui.agent.package.passthru.hermesVenv}/bin/python3"
+    else
+      null;
+
+  inferredAgentDir =
+    if webui.agent.dir != null then
+      webui.agent.dir
+    else if webui.agent.package != null && webui.agent.package.passthru ? hermesAgentDir then
+      webui.agent.package.passthru.hermesAgentDir
+    else
+      null;
+
   extraEnv =
     {
       HERMES_WEBUI_HOST = webui.host;
       HERMES_WEBUI_PORT = toString webui.port;
       HERMES_WEBUI_STATE_DIR = webui.stateDir;
+      HOME = "/home/hermes";
     }
     // optionalAttrs (webui.hermesHome != null) {
       HERMES_HOME = if wctr.enable then remappedHome else webui.hermesHome;
     }
-    // optionalAttrs (webui.agent.dir != null) {
-      HERMES_WEBUI_AGENT_DIR = webui.agent.dir;
+    // optionalAttrs (inferredAgentDir != null) {
+      HERMES_WEBUI_AGENT_DIR = inferredAgentDir;
     }
-    // optionalAttrs (webui.agent.python != null) {
-      HERMES_WEBUI_PYTHON = webui.agent.python;
+    // optionalAttrs (inferredPython != null) {
+      HERMES_WEBUI_PYTHON = inferredPython;
     }
-    // webui.extraEnvironment;
+    // webui.extraEnvironment
+    // optionalAttrs (webui.agent.package != null) {
+      PATH = "${webui.agent.package}/bin:${
+        webui.extraEnvironment.PATH or "/data/toolbox/bin:/usr/bin:/bin"
+      }";
+    };
 
   unit = oci.mkUnitScripts {
     backend = wctr.backend;
