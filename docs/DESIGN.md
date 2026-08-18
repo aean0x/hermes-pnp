@@ -89,7 +89,7 @@ Re-export the official modules for consumers who want them unbundled:
 ```
 hermes-pnp/
   flake.nix                      # inputs + output map
-  lib/                           # flake.lib (mkDockerEnv, mkOciJail)
+  lib/                           # flake.lib (mkDockerEnv, remapStatePath, mkOciJail)
   modules/                       # nixosModules — options live next to config
     default.nix                  # composer: enable + pairing + first-party
     enable.nix                   # enable, environmentFiles, container.*
@@ -187,8 +187,9 @@ reads like a short list — comment a line to drop a thing.
   `/var/lib/hermes/toolbox/bin` (container sees `/data/toolbox/bin` via the
   stateDir bind) and wires it onto the agent PATH.
 - `services.hermesPnP.toolbox.extraPackages` — append-only.
-- `services.hermesPnP.toolbox.hostPath` / `toolbox.binDir` — resolved
-  host/container paths, exported for consumers to wire into units.
+- `services.hermesPnP.toolbox.hostPath` / `containerPath` /
+  `toolboxDir` / `containerToolboxDir` — resolved host/container
+  paths, exported for consumers to wire into units.
 - `services.hermesPnP.container.enable` — default `false`. Sets official
   `services.hermes-agent.container.enable` + `backend` / `image`
   (`ubuntu:24.04`, docker). RAM caps and extra volumes stay official.
@@ -404,11 +405,20 @@ adds `hermesPnP.webui.container` and `hermesPnP.browser.container`
 + `start -a` as official). Both default on when
 `hermesPnP.container.enable` is set. Opt out per-service.
 
-One helper, two first-party services: `lib/oci-container.nix`
+One jail helper, two first-party services: `lib/oci-container.nix`
 (`mkOciJail`, `mkOciServiceOptions`, `followComposerContainer`,
-`nixosCaBinds`, `hardenHost`). Slim entrypoint (UID/GID + setpriv,
-no sudo/apt). Upstream-shaped — lift into nesquena/hermes-webui as
-`container.enable` when it lands.
+`nixStoreBind`). Create uses `--user` host hermes uid, `--cap-drop=ALL`,
+`--read-only`, nosuid tmpfs `/tmp`+`/run`, and always injects
+`--security-opt=no-new-privileges` after `extraOptions` so a consumer
+list cannot drop it. Entrypoint only sets HOME and `setpriv --no-new-privs`.
+Identity is `/var/lib/hermes-oci/<name>` (root 0700), not under a
+hermes-writable bind. Docker backend always `requires docker.service`.
+`--network=host` stays — official agent create hardcodes it, and WebUI
+is meant to reach the same loopback services as native hermes.
+Host-native flags live in `lib/harden-host.nix`. Official path remaps
+(`stateDir` → `/data`, `${stateDir}/home` → `/home/hermes`) live in
+`lib.remapStatePath`. WebUI CA/gitconfig binds stay in
+`modules/webui/container.nix`.
 
 Do **not** point `container.image` at `ghcr.io/nesquena/hermes-webui`
 or `nousresearch/hermes-agent`. Do **not** treat
@@ -432,7 +442,8 @@ container is the jail.
 
 When `services.hermes-agent.container.enable` is on, jail-visible
 paths go on `container.extraOptions --env` (`mkDockerEnv`), never
-persisted into `$HERMES_HOME/.env`:
+written into `$HERMES_HOME/.env` (activation strips a leftover host
+`HERMES_BROWSER_PROFILE` if present):
 
 - `HERMES_BROWSER_PROFILE=/data/browser-profile`
 - `GBRAIN_TOKEN_FILE=/home/hermes/.gbrain/hermes-mcp.token`
@@ -469,8 +480,9 @@ any host unit that sources it.
 The opinion is "the agent can do real unix work" — not a bare-minimum set
 and not "here is one person's workstation." The default set includes git, curl,
 jq, ripgrep, file, unzip, python3 (with requests/pyyaml/toml). Browser
-PATH aliases live in the browser module. `gh`, `docker`, `sops`, `age`, `nmap`, and
-language toolchains are consumer `extraPackages`.
+PATH aliases live in the browser module. `gh` and `age` are in the
+default set. `docker`, `sops`, `nmap`, and language toolchains are
+consumer `extraPackages`.
 
 ## GBrain (tertiary)
 
@@ -615,8 +627,11 @@ the rk3588 cutover PR reworks the host tree to match.
   exports `hostPath` for consumers to wire into units.
 - `modules/browser/` is new: persistent CDP browser + optional dashboard
   gate. Seeds `BROWSER_CDP_URL` + `BU_CDP_URL` and the gate URL
-  into `services.hermes-agent.environment`. Engine (`package`/`engine`)
-  is a consumer choice. Chromium-family PATH aliases live here.
+  into `services.hermes-agent.environment` (official setup persists
+  that map into `.env`). No boot oneshot restamps `.env`. Activation
+  only deletes dead VNC keys and, in container mode, a leftover host
+  `HERMES_BROWSER_PROFILE`. Engine (`package`/`engine`) is a consumer
+  choice. Chromium-family PATH aliases live here.
 - `runtime.nix` is deleted. `runtime.extraBindMounts` was invented
   scaffolding; the official `container.extraVolumes` is used directly.
   There is no `runtime.mode`; the s6 port is abandoned.
@@ -630,9 +645,15 @@ Shipped as `refactor(oci): one jail helper for webui + browser`.
 
 - WebUI and browser Nix live under `modules/{webui,browser}/`
   (`default.nix` + `host.nix` + `container.nix`). Both container
-  files call `mkOciJail`.
-- CA binds asserted on `preStart` / returned `volumes`, not `script`
-  (`docker start -a` does not mention volumes).
+  files call `mkOciJail`. Browser host/container share `launchXvfb`
+  + `waitForDisplay` + `chromiumExec` from `shared.nix`.
+- CA binds and privilege locks (`no-new-privileges`, `--read-only`,
+  `--cap-drop=ALL`, `/var/lib/hermes-oci/`) are asserted on `preStart`,
+  not `script`. CA binds are declared in the WebUI container module.
+  `stateDir` mode stays official (`2770`).
+- `remapStatePath` is the official container path convention;
+  WebUI `HERMES_HOME`, browser `HERMES_BROWSER_PROFILE`, and
+  gbrain `GBRAIN_TOKEN_FILE` all go through it.
 - No GHCR webui image, no agent-browser build-docker runtime, no
   `runtime.*`.
 
@@ -643,7 +664,8 @@ Shipped as `refactor: library-flake layout (modules/, lib/, pkgs/, examples/)`.
 - One module tree: `modules/`. Options live next to the implementer.
   No god `options.nix`. À-la-carte exports (`plugins`, `toolbox`,
   `browser`, `skills`, `mcp-proxy`) no longer import unused options.
-- `lib/` is the public helper (`flake.lib.mkDockerEnv`, `flake.lib.forPkgs`).
+- `lib/` is the public helper (`flake.lib.mkDockerEnv`,
+  `flake.lib.remapStatePath`, `flake.lib.forPkgs`).
 - `pkgs/` is the overlay/package source. Modules use `pkgs.mcp-proxy` /
   `pkgs.agent-browser` with a `callPackage` fallback.
 - `_module.args.hermesPnPFlake` is gone. The composer sets

@@ -51,6 +51,7 @@ def _audit_paths() -> tuple[Path, ...]:
         paths.append(Path(home) / ".gbrain" / "retrieval-reflex-last.json")
     paths.extend(
         [
+            Path("/var/lib/hermes/home/.gbrain/retrieval-reflex-last.json"),
             Path("/tmp/gbrain-retrieval-reflex-last.json"),
         ]
     )
@@ -78,6 +79,7 @@ def _token_paths() -> tuple[Path | None, ...]:
         paths.append(Path(os.environ["HOME"]) / ".gbrain" / "hermes-mcp.token")
     paths.extend(
         [
+            Path("/var/lib/hermes/home/.gbrain/hermes-mcp.token"),
             Path("/home/hermes/.gbrain/hermes-mcp.token"),
         ]
     )
@@ -90,6 +92,7 @@ def _env_paths() -> tuple[Path | None, ...]:
         paths.append(Path(os.environ["HERMES_HOME"]) / ".env")
     paths.extend(
         [
+            Path("/var/lib/hermes/.hermes/.env"),
             Path("/home/hermes/.hermes/.env"),
         ]
     )
@@ -657,6 +660,7 @@ def _socket_candidates() -> List[Path]:
     bases.extend(
         [
             Path("/home/hermes/.gbrain"),
+            Path("/var/lib/hermes/home/.gbrain"),
         ]
     )
     for base in bases:

@@ -89,6 +89,7 @@ def _memory_path() -> Optional[Path]:
     candidates.extend(
         [
             Path("/data/.hermes/memories/MEMORY.md"),
+            Path("/var/lib/hermes/.hermes/memories/MEMORY.md"),
         ]
     )
     for p in candidates:

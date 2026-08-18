@@ -121,7 +121,7 @@ PnP does **not** default `extraDependencyGroups` to `["mcp"]`. Native
 - `nixosModules.mcp-proxy` — `services.hermesPnP.mcpProxy` only (`services.mcpProxy` alias)
 - `nixosModules.toolbox` / `nixosModules.browser` / `nixosModules.skills`
 - `packages.<system>.mcp-proxy` / `agent-browser` and `overlays.default`
-- `lib.mkDockerEnv` / `lib.forPkgs` — OCI + env helpers
+- `lib.mkDockerEnv` / `lib.remapStatePath` / `lib.forPkgs` — env + jail helpers
 - `plugins.<name>` — raw plugin source paths
 
 Double-import of the official modules is fine: they merge.

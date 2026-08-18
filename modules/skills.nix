@@ -22,6 +22,8 @@ let
     mapAttrsToList
     types
     ;
+  inherit (import ../lib { inherit lib; }) containerData;
+
   cfg = config.services.hermesPnP;
   agent = config.services.hermes-agent;
   catalog = import ../skills/catalog.nix;
@@ -48,7 +50,7 @@ in
     # Host CLI sees $stateDir/skills; the container bind is $stateDir → /data.
     # settings is deepConfigType — do not wrap leaves in mkIf/mkDefault.
     services.hermes-agent.settings.skills.external_dirs =
-      [ skillsDir ] ++ lib.optional agent.container.enable "/data/skills";
+      [ skillsDir ] ++ lib.optional agent.container.enable "${containerData}/skills";
 
     systemd.services.hermes-agent-skills = {
       description = "Materialize hermes-pnp first-party skills";
@@ -70,10 +72,10 @@ in
 
       script = ''
         set -euo pipefail
-        install -d -m 0755 "${skillsDir}"
+        install -d -m 2770 "${skillsDir}"
         ${lib.concatStringsSep "\n" (
           mapAttrsToList (name: src: ''
-            install -d -m 0755 "${skillsDir}/${name}"
+            install -d -m 2770 "${skillsDir}/${name}"
             rsync -a --delete "${src}/" "${skillsDir}/${name}/"
           '') allSkills
         )}

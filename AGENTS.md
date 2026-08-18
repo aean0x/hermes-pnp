@@ -54,7 +54,7 @@ consumer.
 ## Layout
 
 ```
-lib/                      # flake.lib — mkOciJail, mkDockerEnv
+lib/                      # flake.lib — mkOciJail, mkDockerEnv, remapStatePath
 modules/                  # composer + pairing; options live next to config
 modules/webui/            # official WebUI pairing + host harden + OCI jail
 modules/browser/          # CDP browser + dashboard + cookie import

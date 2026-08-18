@@ -1,11 +1,11 @@
-# Shared browser derivations and paths. Imported by module/host/container.
+# Shared browser derivations, paths, and the Xvfb + Chromium launch.
+# Imported by module/host/container. Does not re-export config aliases.
 { config, lib, pkgs }:
 
 let
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;
   cfg = pnp.browser;
-  bctr = cfg.container;
 
   profileDir = cfg.profileDir;
   cookiesDir = cfg.cookiesDir;
@@ -17,11 +17,10 @@ let
   displayNum = "99";
   display = ":${displayNum}";
   cdpAddr = "127.0.0.1";
+  cdpUrl = "http://${cdpAddr}:${toString cdpPort}";
 
   home = "${agent.stateDir}/home";
-  hermesEnv = "${agent.stateDir}/.hermes/.env";
   gateHome = "${agent.stateDir}/browser-gate";
-  cdpEnvFile = "/run/hermes-browser.env";
 
   browserBin = "${cfg.package}/bin/${cfg.engine}";
 
@@ -49,7 +48,7 @@ let
     ];
     text = ''
       set -euo pipefail
-      exec python3 ${importCookiesPy} --cdp "http://${cdpAddr}:${toString cdpPort}" "$@"
+      exec python3 ${importCookiesPy} --cdp "${cdpUrl}" "$@"
     '';
   };
 
@@ -76,7 +75,7 @@ let
       export XDG_STATE_HOME=${gateHome}/.local/state
       mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" ${logDir}
 
-      cdp="http://${cdpAddr}:${toString cdpPort}"
+      cdp="${cdpUrl}"
       dash="http://127.0.0.1:${toString gatePort}"
 
       cleanup() {
@@ -126,13 +125,40 @@ let
       done
     '';
   };
+
+  launchXvfb = ''
+    rm -f /tmp/.X${displayNum}-lock /tmp/.X11-unix/X${displayNum} || true
+    ${pkgs.xvfb}/bin/Xvfb ${display} -screen 0 1400x900x24 -ac +extension GLX +render -noreset &
+  '';
+
+  waitForDisplay = ''
+    for _ in $(seq 1 50); do
+      if ${pkgs.xdpyinfo}/bin/xdpyinfo -display ${display} >/dev/null 2>&1; then break; fi
+      sleep 0.1
+    done
+  '';
+
+  chromiumExec = ''
+    exec ${browserBin} \
+      --user-data-dir=${profileDir} \
+      --remote-debugging-address=${cdpAddr} \
+      --remote-debugging-port=${toString cdpPort} \
+      --remote-allow-origins=* \
+      --no-first-run \
+      --no-default-browser-check \
+      --no-sandbox \
+      --disable-setuid-sandbox \
+      --disable-dev-shm-usage \
+      --disable-gpu \
+      --password-store=basic \
+      --window-size=1400,900 \
+      --disable-features=TranslateUI \
+      ${lib.concatStringsSep " " cfg.extraArgs} \
+      about:blank
+  '';
 in
 {
   inherit
-    pnp
-    agent
-    cfg
-    bctr
     profileDir
     cookiesDir
     logDir
@@ -143,15 +169,17 @@ in
     displayNum
     display
     cdpAddr
+    cdpUrl
     home
-    hermesEnv
     gateHome
-    cdpEnvFile
     browserBin
     agentBrowser
     gateUrl
     chromiumAliases
     hermesBrowserImportCookies
     hermesBrowserGate
+    launchXvfb
+    waitForDisplay
+    chromiumExec
     ;
 }

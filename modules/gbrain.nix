@@ -22,21 +22,16 @@ let
     types
     ;
 
-  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv;
+  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv remapStatePath;
 
   pnp = config.services.hermesPnP;
   cfg = pnp.gbrain;
   agent = config.services.hermes-agent;
 
-  containerTokenFile =
-    if cfg.tokenFile == null then
-      null
-    else if lib.hasPrefix "${agent.stateDir}/home" cfg.tokenFile then
-      "/home/hermes" + lib.removePrefix "${agent.stateDir}/home" cfg.tokenFile
-    else if lib.hasPrefix agent.stateDir cfg.tokenFile then
-      "/data" + lib.removePrefix agent.stateDir cfg.tokenFile
-    else
-      cfg.tokenFile;
+  containerTokenFile = remapStatePath {
+    inherit (agent) stateDir;
+    path = cfg.tokenFile;
+  };
   home = "${agent.stateDir}/home";
   hostPath =
     if pnp.enable && pnp.toolbox.enable then
@@ -155,9 +150,9 @@ in
     # HOME layout the serve process expects. No registry, no MEMORY.md,
     # no config.yaml rewrite.
     system.activationScripts.hermes-gbrain = lib.stringAfter [ "hermes-agent-setup" ] ''
-      install -d -m 0755 -o ${agent.user} -g ${agent.group} ${home}
-      install -d -m 0755 -o ${agent.user} -g ${agent.group} ${home}/.gbrain
-      install -d -m 0755 -o ${agent.user} -g ${agent.group} ${home}/brain
+      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}
+      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.gbrain
+      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/brain
       if [ ! -e /home/hermes ]; then
         ln -sfn ${home} /home/hermes
       elif [ ! -L /home/hermes ] && [ ! -d /home/hermes ]; then

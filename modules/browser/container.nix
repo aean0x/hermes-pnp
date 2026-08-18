@@ -11,32 +11,29 @@ let
   inherit (lib) mkDefault mkIf;
 
   oci = import ../../lib { inherit pkgs lib; };
+  pnp = config.services.hermesPnP;
+  agent = config.services.hermes-agent;
+  cfg = pnp.browser;
+  bctr = cfg.container;
+
   shared = import ./shared.nix { inherit config lib pkgs; };
   inherit (shared)
-    pnp
-    agent
-    cfg
-    bctr
     profileDir
     cookiesDir
     logDir
     workspaceDir
     gateHome
     display
-    displayNum
-    cdpAddr
-    cdpPort
-    browserBin
     hermesBrowserGate
+    launchXvfb
+    waitForDisplay
+    chromiumExec
     ;
 
   supervisor = pkgs.writeShellApplication {
     name = "hermes-browser-supervisor";
     runtimeInputs = [
-      pkgs.xvfb
-      pkgs.xorg.xdpyinfo
       pkgs.coreutils
-      pkgs.curl
       cfg.package
       hermesBrowserGate
     ];
@@ -51,12 +48,8 @@ let
       touch "$XAUTHORITY"
       chmod 600 "$XAUTHORITY"
 
-      rm -f /tmp/.X${displayNum}-lock /tmp/.X11-unix/X${displayNum} || true
-      Xvfb ${display} -screen 0 1400x900x24 -ac +extension GLX +render -noreset &
-      for _ in $(seq 1 50); do
-        if xdpyinfo -display ${display} >/dev/null 2>&1; then break; fi
-        sleep 0.1
-      done
+      ${launchXvfb}
+      ${waitForDisplay}
 
       ${
         if cfg.gate.enable then ''
@@ -65,22 +58,7 @@ let
       }
 
       # --no-sandbox: container is the jail (no chrome-sandbox SUID).
-      exec ${browserBin} \
-        --user-data-dir=${profileDir} \
-        --remote-debugging-address=${cdpAddr} \
-        --remote-debugging-port=${toString cdpPort} \
-        --remote-allow-origins=* \
-        --no-first-run \
-        --no-default-browser-check \
-        --no-sandbox \
-        --disable-setuid-sandbox \
-        --disable-dev-shm-usage \
-        --disable-gpu \
-        --password-store=basic \
-        --window-size=1400,900 \
-        --disable-features=TranslateUI \
-        ${lib.concatStringsSep " " cfg.extraArgs} \
-        about:blank
+      ${chromiumExec}
     '';
   };
 
@@ -97,16 +75,10 @@ let
       "${logDir}:${logDir}"
       "${gateHome}:${gateHome}"
     ];
-    extraEnv = { };
-    envFiles = [ ];
     command = [ "${supervisor}/bin/hermes-browser-supervisor" ];
-    identityFile = "${profileDir}/.oci-identity";
     identity = {
       package = "${supervisor}";
     };
-    after = [ "hermes-browser-env.service" ];
-    wants = [ "hermes-browser-env.service" ];
-    requiresDocker = false;
   };
 in
 {

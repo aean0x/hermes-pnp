@@ -43,7 +43,7 @@
     in
     {
       lib = {
-        inherit (import ./lib/env.nix { inherit lib; }) mkDockerEnv;
+        inherit (import ./lib/env.nix { inherit lib; }) mkDockerEnv remapStatePath;
         forPkgs = pkgs: import ./lib { inherit pkgs lib; };
       };
 

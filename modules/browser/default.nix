@@ -36,27 +36,23 @@ let
     types
     ;
 
-  inherit (import ../../lib { inherit pkgs lib; }) mkDockerEnv;
-
   oci = import ../../lib { inherit pkgs lib; };
+  pnp = config.services.hermesPnP;
+  agent = config.services.hermes-agent;
+  cfg = pnp.browser;
+  bctr = cfg.container;
+
   shared = import ./shared.nix { inherit config lib pkgs; };
   inherit (shared)
-    pnp
-    agent
-    cfg
-    bctr
     profileDir
     cookiesDir
     logDir
     workspaceDir
     gatePort
     listenAddr
-    cdpAddr
-    cdpPort
+    cdpUrl
     home
-    hermesEnv
     gateHome
-    cdpEnvFile
     agentBrowser
     gateUrl
     chromiumAliases
@@ -64,11 +60,10 @@ let
     hermesBrowserGate
     ;
 
-  containerProfile =
-    if lib.hasPrefix agent.stateDir profileDir then
-      "/data" + lib.removePrefix agent.stateDir profileDir
-    else
-      profileDir;
+  containerProfile = oci.remapStatePath {
+    inherit (agent) stateDir;
+    path = profileDir;
+  };
 in
 {
   imports = [
@@ -182,11 +177,10 @@ in
 
     container = oci.mkOciServiceOptions {
       extraOptions = [
-        "--security-opt=no-new-privileges"
         "--shm-size=2g"
         "--init"
       ];
-      extraOptionsDescription = "Extra docker create args.";
+      extraOptionsDescription = "Extra docker create args. Privilege-regain locks are always injected.";
       description = ''
         Run Xvfb + browser + agent-browser gate in one OCI container.
         Mounts workspace, profile, cookies, logs, gate state. Not hermes home.
@@ -228,9 +222,9 @@ in
           echo "profile:  ${profileDir}"
           echo "workspace:${workspaceDir}"
           echo "cookies:  ${cookiesDir}  (drop Netscape/JSON; import with hermes-browser-import-cookies)"
-          echo "cdp:      http://${cdpAddr}:${toString cdpPort}"
+          echo "cdp:      ${cdpUrl}"
           echo "gate:     ${gateUrl}"
-          if ${pkgs.curl}/bin/curl -fsS --max-time 2 "http://${cdpAddr}:${toString cdpPort}/json/version"; then
+          if ${pkgs.curl}/bin/curl -fsS --max-time 2 "${cdpUrl}/json/version"; then
             echo
             echo "cdp:      up"
           else
@@ -254,17 +248,16 @@ in
         "d ${profileDir} 0750 ${agent.user} ${agent.group} - -"
         "d ${cookiesDir} 0750 ${agent.user} ${agent.group} - -"
         "d ${logDir} 0750 ${agent.user} ${agent.group} - -"
-        "d ${workspaceDir} 0755 ${agent.user} ${agent.group} - -"
+        "d ${workspaceDir} 2770 ${agent.user} ${agent.group} - -"
         "d ${gateHome} 0750 ${agent.user} ${agent.group} - -"
-        "d ${home} 0755 ${agent.user} ${agent.group} - -"
-        "f ${cdpEnvFile} 0640 ${agent.user} ${agent.group} - "
+        "d ${home} 0750 ${agent.user} ${agent.group} - -"
       ];
 
       services.hermes-agent = {
         environment = {
-          BROWSER_CDP_URL = "http://${cdpAddr}:${toString cdpPort}";
-          BU_CDP_URL = "http://${cdpAddr}:${toString cdpPort}";
-          HERMES_BROWSER_CDP_URL = "http://${cdpAddr}:${toString cdpPort}";
+          BROWSER_CDP_URL = cdpUrl;
+          BU_CDP_URL = cdpUrl;
+          HERMES_BROWSER_CDP_URL = cdpUrl;
           HERMES_BROWSER_GATE_URL = gateUrl;
           HERMES_BROWSER_GATE_PORT = toString gatePort;
           HERMES_BROWSER_ENGINE = cfg.engine;
@@ -273,63 +266,28 @@ in
           HERMES_BROWSER_PROFILE = profileDir;
         };
         settings.browser = {
-          cdp_url = "http://${cdpAddr}:${toString cdpPort}";
+          cdp_url = cdpUrl;
         };
         container.extraOptions = mkIf agent.container.enable (
-          mkDockerEnv { HERMES_BROWSER_PROFILE = containerProfile; }
+          oci.mkDockerEnv { HERMES_BROWSER_PROFILE = containerProfile; }
         );
       };
 
-      systemd.services.hermes-browser-env = {
-        description = "Seed Hermes browser CDP + gate env";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "hermes-browser.service" ];
-
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = "root";
-        };
-
-        script = ''
-          set -euo pipefail
-          umask 027
-          cat > ${cdpEnvFile} <<EOF
-          BROWSER_CDP_URL=http://${cdpAddr}:${toString cdpPort}
-          BU_CDP_URL=http://${cdpAddr}:${toString cdpPort}
-          HERMES_BROWSER_CDP_URL=http://${cdpAddr}:${toString cdpPort}
-          HERMES_BROWSER_GATE_URL=${gateUrl}
-          HERMES_BROWSER_GATE_PORT=${toString gatePort}
-          HERMES_BROWSER_ENGINE=${cfg.engine}
-          EOF
-          chown ${agent.user}:${agent.group} ${cdpEnvFile}
-
-          if [[ -f ${hermesEnv} ]]; then
-            ${pkgs.gnused}/bin/sed -i \
-              -e '/^BROWSER_CDP_URL=/d' \
-              -e '/^BU_CDP_URL=/d' \
-              -e '/^HERMES_BROWSER_CDP_URL=/d' \
-              -e '/^HERMES_BROWSER_PROFILE=/d' \
-              -e '/^HERMES_BROWSER_GATE_URL=/d' \
-              -e '/^HERMES_BROWSER_GATE_PORT=/d' \
-              -e '/^HERMES_BROWSER_ENGINE=/d' \
-              -e '/^HERMES_BROWSER_NOVNC_URL=/d' \
-              -e '/^HERMES_BROWSER_NOVNC_PORT=/d' \
-              -e '/^HERMES_BROWSER_NOVNC_PASSWORD=/d' \
-              -e '/^HERMES_BROWSER_VNC_PASSWORD=/d' \
-              ${hermesEnv}
-            cat >> ${hermesEnv} <<EOF
-          BROWSER_CDP_URL=http://${cdpAddr}:${toString cdpPort}
-          BU_CDP_URL=http://${cdpAddr}:${toString cdpPort}
-          HERMES_BROWSER_CDP_URL=http://${cdpAddr}:${toString cdpPort}
-          HERMES_BROWSER_GATE_URL=${gateUrl}
-          HERMES_BROWSER_GATE_PORT=${toString gatePort}
-          HERMES_BROWSER_ENGINE=${cfg.engine}
-          EOF
-            chown ${agent.user}:${agent.group} ${hermesEnv}
-          fi
-        '';
-      };
+      # Official setup already persists environment{} into .env.
+      # Delete-only: dead VNC keys, and host profile if the jail remap
+      # must not leak back into the file the container also reads.
+      system.activationScripts.hermes-browser-dotenv = lib.stringAfter [ "hermes-agent-setup" ] ''
+        env_file=${agent.stateDir}/.hermes/.env
+        if [ -f "$env_file" ]; then
+          ${pkgs.gnused}/bin/sed -i \
+            -e '/^HERMES_BROWSER_NOVNC_URL=/d' \
+            -e '/^HERMES_BROWSER_NOVNC_PORT=/d' \
+            -e '/^HERMES_BROWSER_NOVNC_PASSWORD=/d' \
+            -e '/^HERMES_BROWSER_VNC_PASSWORD=/d' \
+            ${lib.optionalString agent.container.enable "-e '/^HERMES_BROWSER_PROFILE=/d'"} \
+            "$env_file" || true
+        fi
+      '';
     })
   ];
 }

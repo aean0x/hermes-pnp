@@ -19,10 +19,18 @@ let
 
   oci = import ../../lib { inherit pkgs lib; };
 
-  remappedHome =
-    if webui.hermesHome != null && lib.hasPrefix agent.stateDir webui.hermesHome
-    then "/data" + lib.removePrefix agent.stateDir webui.hermesHome
-    else webui.hermesHome;
+  remappedHome = oci.remapStatePath {
+    inherit (agent) stateDir;
+    path = webui.hermesHome;
+  };
+
+  # NixOS /etc/ssl/certs is a symlink farm into /etc/static. Binding
+  # only /etc/ssl leaves ca-certificates.crt dangling in Ubuntu.
+  nixosCaBinds = [
+    "/etc/ssl:/etc/ssl:ro"
+    "/etc/static:/etc/static:ro"
+  ];
+  gitconfigBind = "/etc/gitconfig:/etc/gitconfig:ro";
 
   inferredPython =
     if webui.agent.python != null then
@@ -45,10 +53,10 @@ let
       HERMES_WEBUI_HOST = webui.host;
       HERMES_WEBUI_PORT = toString webui.port;
       HERMES_WEBUI_STATE_DIR = webui.stateDir;
-      HOME = "/home/hermes";
+      HOME = oci.containerHome;
     }
     // optionalAttrs (webui.hermesHome != null) {
-      HERMES_HOME = if wctr.enable then remappedHome else webui.hermesHome;
+      HERMES_HOME = remappedHome;
     }
     // optionalAttrs (inferredAgentDir != null) {
       HERMES_WEBUI_AGENT_DIR = inferredAgentDir;
@@ -59,7 +67,7 @@ let
     // webui.extraEnvironment
     // optionalAttrs (webui.agent.package != null) {
       PATH = "${webui.agent.package}/bin:${
-        webui.extraEnvironment.PATH or "/data/toolbox/bin:/usr/bin:/bin"
+        webui.extraEnvironment.PATH or "${oci.containerData}/toolbox/bin:/usr/bin:/bin"
       }";
     };
 
@@ -70,20 +78,18 @@ let
     cfg = wctr;
     volumes = [
       oci.nixStoreBind
-      "${agent.stateDir}:/data"
-      "${agent.stateDir}/home:/home/hermes"
+      (oci.stateDirBind agent.stateDir)
+      (oci.homeBind agent.stateDir)
       "${webui.stateDir}:${webui.stateDir}"
-    ] ++ oci.nixosCaBinds ++ [ oci.gitconfigBind ];
+    ] ++ nixosCaBinds ++ [ gitconfigBind ];
     inherit extraEnv;
     envFiles = webui.environmentFiles;
     command = [ "${webui.package}/bin/hermes-webui" ];
-    identityFile = "${webui.stateDir}/.oci-identity";
     identity = {
       package = "${webui.package}";
     };
     after = [ "hermes-agent.service" ] ++ optional pnp.gbrain.enable "gbrain-mcp-http.service";
     wants = [ "hermes-agent.service" ] ++ optional pnp.gbrain.enable "gbrain-mcp-http.service";
-    requiresDocker = true;
   };
 in
 {
@@ -92,7 +98,7 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${webui.stateDir} 0700 ${webui.user} ${webui.group} - -"
-      "d ${agent.stateDir}/home 0755 ${webui.user} ${webui.group} - -"
+      "d ${agent.stateDir}/home 0750 ${webui.user} ${webui.group} - -"
     ];
 
     systemd.services.hermes-webui = mkForce jail.unit;

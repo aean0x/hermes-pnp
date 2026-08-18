@@ -23,22 +23,19 @@ let
     types
     ;
 
-  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv;
+  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv containerData containerHome;
 
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;
   cfg = pnp.toolbox;
 
-  # Official container conventions (see hermes-agent nixos module):
-  # stateDir -> /data, container home /home/hermes.
+  # Official container conventions (see hermes-agent nixos module).
   stateDir = agent.stateDir;
-  data = "/data";
-  containerHome = "/home/hermes";
   home = "${stateDir}/home";
   hermesHome = "${stateDir}/.hermes";
 
   toolboxDir = "${stateDir}/toolbox/bin";
-  containerToolboxDir = "${data}/toolbox/bin";
+  containerToolboxDir = "${containerData}/toolbox/bin";
   skillsDir = "${stateDir}/skills";
   pluginsDir = "${stateDir}/plugins";
 
@@ -121,11 +118,7 @@ let
       pkgs.htop
       pkgs.ncdu
       pkgs.lsof
-      pkgs.strace
-      pkgs.tcpdump
-      pkgs.nmap
       pkgs.netcat-gnu
-      pkgs.socat
       pkgs.gh
     ] ++ cfg.extraPackages;
   };

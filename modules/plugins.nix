@@ -195,8 +195,8 @@ in
       services.hermes-agent.settings.plugins.enabled = enabledNames;
 
       systemd.tmpfiles.rules = [
-        "d ${materializeRoot} 0750 ${install.user} ${install.group} -"
-        "d ${hermesHomePlugins} 0750 ${install.user} ${install.group} -"
+        "d ${materializeRoot} 2770 ${install.user} ${install.group} -"
+        "d ${hermesHomePlugins} 2770 ${install.user} ${install.group} -"
       ];
 
       systemd.services.hermes-agent-plugins = {
@@ -231,7 +231,7 @@ in
           done
 
           ${lib.concatMapStrings (name: ''
-            ${pkgs.rsync}/bin/rsync -a --delete --chmod=D0750,F0640 \
+            ${pkgs.rsync}/bin/rsync -a --delete --chmod=D2770,F0640 \
               --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
               ${resolvedSources.${name}}/ "$dest/${name}/"
             ln -sfn "../../plugins/${name}" "$linkroot/${name}"
