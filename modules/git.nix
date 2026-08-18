@@ -46,9 +46,11 @@ in
 
     (mkIf cfg.enable {
       programs.git.enable = mkDefault true;
-      programs.git.config.credential = {
-        helper = "${helper}/bin/git-credential-github-env";
-        useHttpPath = true;
+      programs.git.config = {
+        credential = {
+          helper = "${helper}/bin/git-credential-github-env";
+          useHttpPath = true;
+        };
       };
     })
 
