@@ -29,6 +29,8 @@ let
     then "/data" + lib.removePrefix agent.stateDir webui.hermesHome
     else webui.hermesHome;
 
+  entrypoint = oci.mkSlimEntrypoint "hermes-webui";
+
   extraEnv =
     {
       HERMES_WEBUI_HOST = webui.host;
@@ -62,7 +64,7 @@ let
     extraEnv = extraEnv;
     extraOptions = wctr.extraOptions;
     envFiles = webui.environmentFiles;
-    entrypoint = oci.mkSlimEntrypoint "hermes-webui";
+    inherit entrypoint;
     command = [ "${webui.package}/bin/hermes-webui" ];
     identityFile = "${webui.stateDir}/.oci-identity";
     identity = {
