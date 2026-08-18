@@ -4,8 +4,8 @@ Off by default. `services.hermesPnP.gbrain.enable = true` starts loopback
 `gbrain serve` (`gbrain-mcp-http`), sets `mcpServers.gbrain.url`, and
 installs `gbrain-retrieval-reflex` + `gbrain-memory-flush`.
 
-The CLI is still a consumer bootstrap (`bun install -g`). Nix does not
-ship PGLite, sources, or a memory registry.
+The CLI is a consumer bootstrap (`bun install -g`). Nix does not ship
+PGLite, sources, or a memory registry.
 
 **Setup:** `scripts/gbrain-setup.sh` (root on the device; consumer
 `./deploy gbrain-setup` copies it from this flake).  
@@ -15,9 +15,8 @@ ship PGLite, sources, or a memory registry.
 ## Rules
 
 - **MCP via shared HTTP** to `http://127.0.0.1:3131/mcp` (put_page / query / get_page / volunteer_context).
-- **Never** spawn concurrent stdio `gbrain serve` (PGLite single-writer).
-- **No** host exclusive CLI (consolidate / dream / embed).
-- **No** static pointer index — ambient reflex uses resolve IPC on the HTTP serve.
+- **Never** spawn a second `gbrain serve` (PGLite single-writer).
+- Maintenance is MCP tools on the live serve, not exclusive CLI.
 
 ## Day path
 
