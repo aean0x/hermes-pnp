@@ -1,4 +1,4 @@
-# Host-native: Brave independently supervised; gate is a CDP client.
+# Host-native engine unit; gate is a separate CDP client.
 {
   config,
   lib,
@@ -54,8 +54,6 @@ in
         TimeoutStartSec = 90;
         StandardOutput = "append:${logDir}/browser.stdout";
         StandardError = "append:${logDir}/browser.stderr";
-        # Xvfb + engine share this unit, so PrivateTmp is safe now
-        # that x11vnc no longer needs the host /tmp/.X11-unix.
         PrivateTmp = true;
       } // hostHarden;
 

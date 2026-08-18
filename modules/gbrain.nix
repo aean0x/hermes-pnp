@@ -1,10 +1,5 @@
-# Optional GBrain HTTP MCP. Off by default (mkEnableOption).
-# Starts loopback `gbrain serve` when enabled. Does not ship PGLite,
-# sources, a memory registry, or config.yaml mutation — those stay
-# with the consumer / bootstrap.
-#
-# Enabling first-party gbrain-* plugins does not require this hook;
-# the plugins no-op if GBRAIN_MCP_URL is unset.
+# Optional loopback `gbrain serve`. Off by default.
+# Plugins work without this hook and no-op if GBRAIN_MCP_URL is unset.
 {
   config,
   lib,
@@ -88,9 +83,8 @@ in
   };
 
   config = mkIf cfg.enable {
-    # Official typed option; the agent module merges this into
-    # settings.mcp_servers. mkDefault inside settings would be stored
-    # as a literal (_type = override) because settings is deepConfigType.
+    # Typed mcpServers option; official merges it into settings.mcp_servers.
+    # mkDefault inside settings is stored as a literal.
     services.hermes-agent.mcpServers.gbrain = {
       url = mkDefault cfg.url;
       connect_timeout = mkDefault 120;
@@ -146,8 +140,7 @@ in
       wants = [ "gbrain-mcp-http.service" ];
     };
 
-    # HOME layout the serve process expects. No registry, no MEMORY.md,
-    # no config.yaml rewrite.
+    # Directories gbrain serve expects.
     system.activationScripts.hermes-gbrain = lib.stringAfter [ "hermes-agent-setup" ] ''
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.gbrain

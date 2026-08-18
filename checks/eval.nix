@@ -1,5 +1,4 @@
-# Eval-only composer checks. Dummy packages — do not realize official
-# hermes-agent / hermes-webui builds.
+# Eval-only composer checks. Dummy packages; do not realize official builds.
 { self
 , nixpkgs
 , system
@@ -50,7 +49,7 @@ let
       documentation.enable = false;
       services.hermes-agent.package = dummyAgent;
       services.hermes-webui.package = dummyWebui;
-      # Keep official package wrap unevaluated (see package.nix).
+      # Skip the official package wrap.
       services.hermesPnP.packageFixes.silenceMarkers = false;
     }
   ];
@@ -90,7 +89,7 @@ let
 
   skillsConfig = eval [ ../examples/skills.nix ];
 
-  # hmc.enable fetches GitHub; keep the pin options, skip the fetch.
+  # Skip the GitHub fetch; keep the pin options.
   hmcConfig = eval [
     ../examples/hmc.nix
     { services.hermesPnP.hmc.enable = lib.mkForce false; }
@@ -100,7 +99,7 @@ let
 
   dropAux = (dropInConfig.services.hermes-agent.settings.auxiliary or { }).triage_specifier or { };
 
-  # plugins is listOf, not a submodule — these children must not exist.
+  # plugins is listOf, not a submodule.
   pluginsOpt = optionsEval.options.services.hermesPnP.plugins;
 in
 {

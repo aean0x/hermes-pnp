@@ -1,7 +1,6 @@
-# Official container path/env convention.
-# Container entrypoints do not exec the upstream hermes wrapper, so
-# extraOptions --env (mkDockerEnv) carries what environment{} cannot.
-# Official binds: stateDir → /data, ${stateDir}/home → /home/hermes.
+# Official jail binds: stateDir → /data, ${stateDir}/home → /home/hermes.
+# Remapped paths go on extraOptions --env (mkDockerEnv). Host paths go
+# on environment{} (official writes that map into $HERMES_HOME/.env).
 { lib }:
 
 rec {

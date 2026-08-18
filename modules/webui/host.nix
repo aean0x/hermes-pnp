@@ -1,4 +1,4 @@
-# Harden the official hermes-webui unit. Do not replace it.
+# Harden the official hermes-webui unit.
 {
   config,
   lib,

@@ -1,23 +1,8 @@
-# Slim official-Hermes-shaped OCI helper.
-#
-# Matches services.hermes-agent.container:
-#   docker create --network=host
-#   /nix/store bind + identity hash + start -a
-#
-# No root window: docker --user host-hermes-uid, --cap-drop=ALL,
-# --read-only, no-new-privileges. Entrypoint only sets HOME and
-# setpriv --no-new-privs. No sudo, no apt, no useradd.
-#
-# Identity lives in /var/lib/hermes-oci/<name> (root 0700), never
-# under a hermes-writable bind. Otherwise the jail can pin a stale
-# docker object and skip recreate.
-#
-# --network=host stays. Official agent create hardcodes it; WebUI is
-# supposed to reach the same loopback services as native hermes.
-# Bridging would need URL rewrites that will not survive upstream.
-#
-# Service-specific binds (WebUI CAs/gitconfig, browser workspace) stay
-# at the call site. Host-native systemd flags live in harden-host.nix.
+# WebUI / browser OCI jail: docker create --network=host, /nix/store:ro,
+# identity hash, start -a. Runs as the host hermes uid with --cap-drop=ALL,
+# --read-only, no-new-privileges. Identity is /var/lib/hermes-oci/<name>
+# (root 0700). Host-network so the jail reaches the same loopback services
+# as native hermes. Service binds stay at the call site.
 { pkgs, lib }:
 
 let
@@ -35,8 +20,7 @@ let
 
   identityDir = "/var/lib/hermes-oci";
 
-  # Always applied, after cfg.extraOptions, so a consumer list cannot
-  # drop the privilege-regain locks.
+  # After extraOptions so the consumer list cannot drop these.
   forcedCreateArgs = [
     "--security-opt=no-new-privileges"
     "--cap-drop=ALL"
@@ -143,9 +127,8 @@ in
     {
       extraOptions ? [ ],
       description ? ''
-        Run inside an OCI container (same docker create --network=host
-        + /nix/store pattern as services.hermes-agent.container).
-        Defaults on when hermesPnP.container.enable is set.
+        Run inside an OCI container (docker create --network=host,
+        /nix/store:ro). Defaults on when hermesPnP.container.enable is set.
       '',
       extraOptionsDescription ? "Extra docker create args. Privilege-regain locks are always injected.",
     }:
@@ -186,11 +169,8 @@ in
     image = mkDefault pnp.container.image;
   };
 
-  # One attrset in, systemd fragment out. Callers build service-specific
-  # volumes / extraEnv / command / identity extras; this owns the unit
-  # skeleton, forced create locks, and the root-only identity file.
-  #
-  # → { dockerEnable, unit, preStart, script, preStop, volumes, identityFile }
+  # Callers supply volumes / extraEnv / command / identity extras.
+  # Returns { dockerEnable, unit, preStart, script, preStop, volumes, identityFile }.
   mkOciJail = {
     name,
     description,

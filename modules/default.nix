@@ -1,5 +1,4 @@
-# Hermes PnP composer. Official agent/webui modules are imported from
-# flake.nix (nixosModules.default) so this file stays a plain module.
+# Composer module list. Official agent/webui modules are imported in flake.nix.
 { ... }:
 {
   imports = [

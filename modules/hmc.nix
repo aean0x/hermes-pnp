@@ -1,6 +1,5 @@
-# Optional hermes-context-manager extra plugin.
-# Not in the first-party catalog — upstream pin + generated config.yaml.
-# Native Hermes owns LLM compact; HMC does cheap per-tool work only.
+# Optional hermes-context-manager. Upstream pin + generated config.yaml.
+# Hermes compact stays on; HMC does per-tool work only.
 {
   config,
   lib,
@@ -62,7 +61,7 @@ let
       tail_lines: 6
       min_content_length: 500
 
-    # Native ContextCompressor owns LLM summarization. Do not double-fire.
+    # Hermes compact stays on.
     background_compression:
       enabled: false
       protect_recent_turns: 3

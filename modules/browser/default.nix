@@ -1,23 +1,9 @@
-# Persistent CDP browser + agent-browser dashboard gate.
-#
-# Two modes:
-# - host-native (default unless hermesPnP.container.enable): systemd
-#   units as the hermes user, hardened. Brave is independently
-#   supervised so a gate crash does not kill the warm profile.
-# - container: one Ubuntu OCI container (same docker create --network=host
-#   + /nix/store pattern as official hermes-agent.container). Mounts
-#   workspace + profile + cookies + logs + gate state. Not hermes home,
-#   not .hermes, not /etc. Xvfb + engine + gate share the container.
-#
-# Takeover: same local browser, two control planes.
-#   Agent  = CDP 127.0.0.1:9222  (browser_* tools, unchanged)
-#   Human  = agent-browser dashboard on listenAddress (default 127.0.0.1)
-#            via Caddy. CDP screencast + input injection. No VNC, no
-#            password, no framebuffer.
-#
-# agent-browser connect ATTACHES to the existing engine. It will launch
-# its own Chrome if CDP is down — the gate refuses to connect until
-# /json/version answers.
+# Persistent CDP browser + agent-browser dashboard.
+# Host-native: separate engine and gate units as the hermes user.
+# Container: one jail (workspace, profile, cookies, logs, gate).
+# Agent attaches at 127.0.0.1:9222. Humans use the dashboard
+# (listenAddress, default 127.0.0.1) via Caddy.
+# Gate waits for /json/version before `agent-browser connect`.
 {
   config,
   lib,
@@ -77,11 +63,9 @@ in
       type = types.bool;
       default = true;
       description = ''
-        Opinionated host browser: a persistent CDP browser (loopback
-        :9222) + optional agent-browser dashboard for human captcha
-        handoff. The native hermes browser_* tools attach to it via
-        browser.cdp_url / BROWSER_CDP_URL. The dashboard is the phone
-        gate (CDP screencast); there is no VNC.
+        Persistent CDP browser on loopback :9222 plus an optional
+        agent-browser dashboard. Hermes attaches via browser.cdp_url /
+        BROWSER_CDP_URL.
       '';
     };
 
@@ -182,9 +166,9 @@ in
       ];
       extraOptionsDescription = "Extra docker create args. Privilege-regain locks are always injected.";
       description = ''
-        Run Xvfb + browser + agent-browser gate in one OCI container.
-        Mounts workspace, profile, cookies, logs, gate state. Not hermes home.
-        Defaults on when hermesPnP.container.enable is set.
+        Run Xvfb + browser + gate in one OCI jail (workspace, profile,
+        cookies, logs, gate). Defaults on when hermesPnP.container.enable
+        is set.
       '';
     };
 
@@ -239,8 +223,7 @@ in
         '')
       ];
 
-      # Dashboard binds loopback. Only punch the firewall if someone
-      # explicitly binds off-loopback (not recommended; Caddy instead).
+      # Loopback dashboard. Open the firewall only for a non-loopback bind.
       networking.firewall.allowedTCPPorts =
         optionals (cfg.gate.enable && listenAddr != "127.0.0.1" && listenAddr != "localhost") [ gatePort ];
 
@@ -275,21 +258,16 @@ in
         );
       };
 
-      # Official setup already persists environment{} into .env.
-      # Delete-only: dead VNC keys, and host profile if the jail remap
-      # must not leak back into the file the container also reads.
-      system.activationScripts.hermes-browser-dotenv = lib.stringAfter [ "hermes-agent-setup" ] ''
-        env_file=${agent.stateDir}/.hermes/.env
-        if [ -f "$env_file" ]; then
-          ${pkgs.gnused}/bin/sed -i \
-            -e '/^HERMES_BROWSER_NOVNC_URL=/d' \
-            -e '/^HERMES_BROWSER_NOVNC_PORT=/d' \
-            -e '/^HERMES_BROWSER_NOVNC_PASSWORD=/d' \
-            -e '/^HERMES_BROWSER_VNC_PASSWORD=/d' \
-            ${lib.optionalString agent.container.enable "-e '/^HERMES_BROWSER_PROFILE=/d'"} \
-            "$env_file" || true
-        fi
-      '';
+      # Official activation writes environment{} into .env. In jail mode
+      # drop a host HERMES_BROWSER_PROFILE so the remapped --env wins.
+      system.activationScripts.hermes-browser-dotenv = mkIf agent.container.enable (
+        lib.stringAfter [ "hermes-agent-setup" ] ''
+          env_file=${agent.stateDir}/.hermes/.env
+          if [ -f "$env_file" ]; then
+            ${pkgs.gnused}/bin/sed -i -e '/^HERMES_BROWSER_PROFILE=/d' "$env_file" || true
+          fi
+        ''
+      );
     })
   ];
 }

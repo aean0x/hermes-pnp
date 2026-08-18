@@ -1,5 +1,4 @@
-# Full OCI jail: official agent container + composer WebUI/browser jails.
-# ubuntu + /nix/store:ro + slim entrypoint. Not the GHCR WebUI image.
+# Official agent container + composer WebUI/browser jails.
 #
 # Import: inputs.hermes-pnp.nixosModules.default
 {

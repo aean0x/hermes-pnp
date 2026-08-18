@@ -1,13 +1,6 @@
-# Opinionated everyday CLI toolkit for Hermes.
-#
-# Pattern: buildEnv -> /var/lib/hermes/toolbox/bin, which the container
-# sees as /data/toolbox/bin (stateDir bind). Native gateway PATH is
-# official extraPackages. Container PATH is extraOptions --env (NOT
-# persisted into .env, so host `hermes chat` never inherits /data paths).
-#
-# This is the composer's "sauce": a curated ~40-package set + python3 +
-# login PATH. Browser-specific aliases live in the browser module.
-# Extend with toolbox.extraPackages. Disable with toolbox.enable = false.
+# Everyday CLI buildEnv at $stateDir/toolbox/bin (/data/toolbox/bin in
+# the jail). Native gateway PATH is extraPackages. Jail PATH is
+# extraOptions --env. Browser aliases live in the browser module.
 { config
 , lib
 , pkgs
@@ -29,7 +22,7 @@ let
   agent = config.services.hermes-agent;
   cfg = pnp.toolbox;
 
-  # Official container conventions (see hermes-agent nixos module).
+  # Official jail binds.
   stateDir = agent.stateDir;
   home = "${stateDir}/home";
   hermesHome = "${stateDir}/.hermes";
@@ -68,11 +61,10 @@ let
     HERMES_PYTHON = "${containerToolboxDir}/python3";
   };
 
-  # withPackages already ships `python` and `python3`; keep both names
-  # explicit so a nixpkgs change cannot drop one.
+  # Keep both python and python3 names explicit.
   pythonEnv = pkgs.python3.withPackages cfg.pythonPackages;
 
-  # Explicit python/python3 symlinks so the buildEnv path always has both.
+  # Symlink both names onto the system PATH for login shells.
   pythonBins = pkgs.runCommand "hermes-python" { } ''
     mkdir -p "$out/bin"
     ln -s ${pythonEnv}/bin/python3 "$out/bin/python3"
@@ -123,15 +115,12 @@ let
     ] ++ cfg.extraPackages;
   };
 
-  # The official module merges environmentFiles into $HERMES_HOME/.env;
-  # strip container-only PATH entries so the host `hermes chat` CLI does
-  # not inherit /data/toolbox paths.
+  # Official activation writes environment{} into .env. Strip jail PATH
+  # so a host hermes CLI does not inherit /data/toolbox.
   dotenvSanitize = pkgs.writeShellScript "hermes-toolbox-dotenv-sanitize" ''
     env_file=${hermesHome}/.env
     if [ -f "$env_file" ]; then
-      sed -i \
-        '/^MESSAGING_CWD=/d;/^TERMINAL_CWD=/d;/^PATH=/d;/^HERMES_PY=/d;/^HERMES_PYTHON=/d;/^AGENT_BROWSER_EXECUTABLE_PATH=/d' \
-        "$env_file" 2>/dev/null || true
+      sed -i '/^PATH=/d;/^HERMES_PYTHON=/d' "$env_file" 2>/dev/null || true
       chown ${agent.user}:${agent.group} "$env_file" 2>/dev/null || true
       chmod 640 "$env_file" 2>/dev/null || true
     fi
@@ -183,8 +172,7 @@ in
       description = "Python packages baked into the toolbox python3/python.";
     };
 
-    # Read-only paths computed by this module; host modules may reference
-    # these instead of re-deriving PATH.
+    # Resolved paths for other modules.
     toolboxDir = mkOption { type = types.str; readOnly = true; };
     containerToolboxDir = mkOption { type = types.str; readOnly = true; };
     hostPath = mkOption { type = types.str; readOnly = true; };
@@ -201,7 +189,7 @@ in
         ;
     };
 
-    # Host login shells for `sudo -u hermes` / doctor.
+    # Host login PATH.
     environment.etc."profile.d/hermes-agent-cli.sh" = {
       text = ''
         if [ -d ${toolboxDir} ]; then
@@ -211,19 +199,13 @@ in
       mode = "0644";
     };
 
-    # Login-shell snapshots (WebUI terminal uses bash -l) only reliably see
-    # /run/current-system/sw/bin — not /var/lib/hermes/toolbox/bin.
-    # pythonBins guarantees both `python` and `python3` on that path.
+    # bash -l sees /run/current-system/sw/bin; ship python and python3 there.
     environment.systemPackages = [ pythonBins ];
 
     services.hermes-agent = {
-      # Native unit PATH. Official extraPackages do not appear inside the
-      # Ubuntu jail; that path is /data/toolbox/bin via extraOptions below.
       extraPackages = [ hermesToolbox ];
 
-      # Do NOT put PATH / HERMES_PY / AGENT_BROWSER in `environment` — the
-      # module merges that into $HERMES_HOME/.env, which host `hermes chat`
-      # loads and which breaks host terminal (container /data/toolbox paths).
+      # Jail PATH / HERMES_PYTHON stay off environment{} (.env).
       environment = { };
 
       container.extraOptions = mkIf agent.container.enable (
@@ -239,17 +221,15 @@ in
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.npm-global
       install -d -m 0755 -o ${agent.user} -g ${agent.group} ${home}/.local/bin
 
-      # Interactive / docker-exec shells inside the container.
       install -m 0644 -o ${agent.user} -g ${agent.group} ${containerProfile} ${home}/.profile
       install -m 0644 -o ${agent.user} -g ${agent.group} ${containerBashrc} ${home}/.bashrc
-      # Host hermes user HOME (${stateDir}) — WebUI bash -l snapshot.
       install -m 0644 -o ${agent.user} -g ${agent.group} ${hostProfile} ${stateDir}/.profile
 
       install -d -m 2770 -o ${agent.user} -g ${agent.group} ${skillsDir}
       install -d -m 2770 -o ${agent.user} -g ${agent.group} ${pluginsDir}
     '';
 
-    # Run after setup merges environmentFiles into .env so we can strip PATH again.
+    # After official .env merge.
     system.activationScripts.hermes-toolbox-dotenv = lib.stringAfter [
       "hermes-agent-setup"
       "hermes-toolbox"

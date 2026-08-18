@@ -1,6 +1,5 @@
-# Install first-party + extra plugins. Catalog names in `plugins`;
-# extra trees in `extraPlugins`. Comment a line to drop it.
-# Dest is $stateDir/plugins/<name> + relative symlink under .hermes/plugins.
+# Install catalog + extraPlugins to $stateDir/plugins/<name>
+# and symlink $stateDir/.hermes/plugins/<name> → ../../plugins/<name>.
 {
   config,
   lib,
@@ -30,9 +29,8 @@ let
     "gbrain-memory-flush"
   ];
 
-  # User list + extras + gbrain pair (only when gbrain.enable).
-  # Do not assign those names back onto `plugins` — that would clobber
-  # the composer mkDefault at definition priority 100.
+  # Do not write gbrain names back onto `plugins` — that clobbers the
+  # composer mkDefault.
   enabledNames = lib.unique (
     pnp.plugins
     ++ lib.optionals gbrainOn gbrainPlugins

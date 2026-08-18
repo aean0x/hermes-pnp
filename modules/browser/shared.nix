@@ -1,5 +1,4 @@
-# Shared browser derivations, paths, and the Xvfb + Chromium launch.
-# Imported by module/host/container. Does not re-export config aliases.
+# Shared paths and Xvfb + Chromium launch for host and container.
 { config, lib, pkgs }:
 
 let
@@ -52,10 +51,8 @@ let
     '';
   };
 
-  # Foreground supervisor around a daemonizing dashboard.
-  # dashboard start returns immediately; we health-check and stay
-  # in the foreground so systemd can restart us. Never `connect`
-  # unless CDP is up — connect would otherwise spawn a second browser.
+  # Foreground supervisor: dashboard start returns immediately.
+  # Wait for CDP before connect or agent-browser starts a second browser.
   hermesBrowserGate = pkgs.writeShellApplication {
     name = "hermes-browser-gate";
     runtimeInputs = [
@@ -98,7 +95,7 @@ let
         exit 1
       fi
 
-      # Stale-daemon quirk: "already running" while the port is dead.
+      # Stop a stale dashboard that still reports running.
       if ! curl -sf --max-time 1 -o /dev/null "$dash/"; then
         agent-browser dashboard stop >/dev/null 2>&1 || true
       fi

@@ -465,7 +465,7 @@ Takeover stays local: one browser, two control planes.
   reverse-proxied through Caddy with the same auth as the WebUI.
 Do not bind `0.0.0.0:4848`. Do not open the firewall when loopback.
 Set `browser.gate.publicUrl` to the Caddy URL the agent should relay
-(`https://browser.example.com/`). No VNC password, no framebuffer.
+(`https://browser.example.com/`).
 
 Consumer recipe:
 
@@ -636,10 +636,10 @@ the rk3588 cutover PR reworks the host tree to match.
 - `modules/browser/` is new: persistent CDP browser + optional dashboard
   gate. Seeds `BROWSER_CDP_URL` + `BU_CDP_URL` and the gate URL
   into `services.hermes-agent.environment` (official setup persists
-  that map into `.env`). No boot oneshot restamps `.env`. Activation
-  only deletes dead VNC keys and, in container mode, a leftover host
-  `HERMES_BROWSER_PROFILE`. Engine (`package`/`engine`) is a consumer
-  choice. Chromium-family PATH aliases live here.
+  that map into `.env`). In jail mode, activation drops a host
+  `HERMES_BROWSER_PROFILE` so the remapped `--env` wins. Engine
+  (`package`/`engine`) is a consumer choice. Chromium-family PATH
+  aliases live here.
 - `runtime.nix` is deleted. `runtime.extraBindMounts` was invented
   scaffolding; the official `container.extraVolumes` is used directly.
   There is no `runtime.mode`; the s6 port is abandoned.

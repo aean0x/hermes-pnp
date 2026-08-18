@@ -1,9 +1,5 @@
-# First-party skills shipped by hermes-pnp. Materialized into the
-# agent skills dir ($stateDir/skills/<name>) — same destination Hermes
-# already reads. No symlink layer.
-#
-# On when the composer is on (`mkDefault cfg.enable`). Extra consumer
-# skills merge via skills.extraSkills.
+# First-party skills at $stateDir/skills/<name>.
+# On with the composer (mkDefault). extraSkills merge beside the catalog.
 
 {
   config,
@@ -55,9 +51,7 @@ in
       services.hermesPnP.skills.enable = mkDefault true;
     }
     (mkIf cfg.skills.enable {
-    # Official skills.external_dirs. One path: host stateDir, or /data/skills
-    # when the official jail remaps stateDir. Do not list both.
-    # settings is deepConfigType — do not wrap leaves in mkIf/mkDefault.
+    # One skills.external_dirs entry. deepConfigType: no mkDefault on leaves.
     services.hermes-agent.settings.skills.external_dirs = [ skillsExternalDir ];
 
     systemd.services.hermes-agent-skills = {

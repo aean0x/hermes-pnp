@@ -1,19 +1,10 @@
-# Shared agent package + store-safe env for every Hermes entrypoint.
-#
-# Official agent container execs current-package/bin/hermes (the wrapper)
-# which already --set HERMES_BUNDLED_*. WebUI does not exec that wrapper,
-# so the share map is injected into extraEnvironment. environment{} also
-# gets it so native gateway / .env see the same store paths.
-#
-# Do not put store-path HERMES_BUNDLED_* on container.extraOptions:
-# official identity hashes extraOptions, so a package rebuild would
-# recreate the jail and wipe the writable apt/uv layer. Remapped jail
-# paths (profile, token, /data/toolbox PATH) stay on extraOptions
-# because those strings are stable.
-#
-# extras: forward whatever the consumer set on services.hermes-agent.
-# Do not override the official package when both extra lists are empty
-# (that would replace `full` with []).
+# Same agent derivation for gateway and WebUI.
+# HERMES_BUNDLED_* and optional PYTHONPATH go on environment{} and WebUI
+# extraEnvironment. The official wrapper --set those for the jailed
+# gateway. extraOptions is only for stable remapped paths — official
+# identity hashes it.
+# Forward extraPythonPackages / extraDependencyGroups. Leave package
+# alone when both lists are empty.
 {
   config,
   lib,
@@ -153,8 +144,7 @@ in
       type = types.bool;
       default = true;
       description = ''
-        Patch gateway silence-token matching via PYTHONPATH.
-        Turn off when upstream ships the plural form.
+        Patch autonomous gateway silence matching via PYTHONPATH.
       '';
     };
 
@@ -176,8 +166,7 @@ in
       );
     }
     (mkIf (pnp.packageFixes.silenceMarkers || extrasNonEmpty) {
-      # mkDefault so a consumer (or eval check) package assignment wins
-      # and this branch is the only place officialPkg is referenced.
+      # mkDefault so a consumer package assignment wins.
       services.hermes-agent.package = mkDefault wrapped;
     })
   ]);

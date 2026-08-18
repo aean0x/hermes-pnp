@@ -1,5 +1,4 @@
-# OCI mode: one container, one unit. Gate runs inside next to Brave.
-# No /etc binds — workspace/profile/cookies/logs/gate only.
+# One jail: Xvfb + engine + gate. Workspace/profile/cookies/logs/gate only.
 {
   config,
   lib,
@@ -57,7 +56,7 @@ let
         '' else ""
       }
 
-      # --no-sandbox: container is the jail (no chrome-sandbox SUID).
+      # --no-sandbox: the container is the jail.
       ${chromiumExec}
     '';
   };

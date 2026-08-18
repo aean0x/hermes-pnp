@@ -1,6 +1,4 @@
-# Official-container-shaped WebUI jail. mkForce over official ExecStart.
-#
-# ubuntu + /nix/store:ro + slim entrypoint. Not ghcr.io/nesquena/hermes-webui.
+# WebUI OCI jail. Replaces the official unit with mkOciJail.
 {
   config,
   lib,

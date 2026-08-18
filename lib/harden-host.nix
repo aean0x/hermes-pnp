@@ -1,6 +1,5 @@
-# Shared host-native hardening. No PrivateTmp / ProtectSystem /
-# ProtectHome — official webui already has a home; browser adds those
-# on its own units.
+# Host-native hardening shared by WebUI and the browser units.
+# PrivateTmp / ProtectSystem / ProtectHome stay on the units that need them.
 {
   hardenHost = {
     NoNewPrivileges = true;

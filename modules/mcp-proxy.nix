@@ -1,7 +1,4 @@
-# Declarative loopback MCP reverse proxy.
-# Clients talk to 127.0.0.1; this process injects secrets and applies filters.
-# Canonical option tree is services.hermesPnP.mcpProxy; services.mcpProxy
-# is an alias so library-path consumers keep working.
+# Loopback MCP reverse proxy. services.mcpProxy aliases this tree.
 {
   config,
   lib,

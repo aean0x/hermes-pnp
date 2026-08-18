@@ -1,8 +1,5 @@
-# Official hermes-webui pairing opinions.
-#
-# Official services.hermes-webui has no container.* (unlike
-# services.hermes-agent.container). Host harden and OCI jail live in
-# host.nix / container.nix.
+# Pair official hermes-webui. Jail and host harden live in
+# container.nix / host.nix.
 {
   config,
   lib,
@@ -36,12 +33,9 @@ in
 
     container = oci.mkOciServiceOptions {
       description = ''
-        Run official hermes-webui inside an OCI container (same
-        docker create --network=host + /nix/store pattern as
-        services.hermes-agent.container). The WebUI process and any
-        terminal it spawns cannot see /etc/nixos. Defaults on when
-        hermesPnP.container.enable is set. extraVolumes is independent
-        of services.hermes-agent.container.extraVolumes.
+        Run hermes-webui in an OCI jail (host network, /nix/store:ro).
+        The process and any terminal it spawns cannot see /etc/nixos.
+        Defaults on when hermesPnP.container.enable is set.
       '';
     };
   };

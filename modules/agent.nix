@@ -1,9 +1,6 @@
-# Official hermes-agent pairing: plugin dest follows the agent identity.
-# First-party plugins are not installed via services.hermes-agent.extraPlugins:
-# that option is listOf package and names links nix-managed-<pname>, while
-# PnP materializes catalog names (and generated model-router config) under
-# $stateDir/plugins. Official extraPlugins still works beside this for
-# consumer packages.
+# Pair plugin dest with the official agent identity.
+# First-party plugins materialize to $stateDir/plugins/<name>.
+# services.hermes-agent.extraPlugins remains the official listOf package path.
 { config
 , lib
 , ...

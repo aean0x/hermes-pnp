@@ -1,7 +1,6 @@
-# Seed official hermes-agent.settings from hermesPnP.models.
-# Composer on only. settings is deepConfigType — do not wrap leaves
-# in mkDefault (those become literals in the YAML). Last writer wins
-# via recursiveUpdate; put consumer settings after the PnP import.
+# Seed services.hermes-agent.settings from hermesPnP.models.
+# settings is deepConfigType: do not wrap leaves in mkDefault.
+# Last writer wins; assign consumer settings after the PnP import.
 { config
 , lib
 , ...
@@ -54,7 +53,7 @@ let
     reasoning_effort = "none";
   };
 
-  # Mechanical slots — cheap tier is enough.
+  # Mechanical auxiliary tasks.
   auxiliaryLowSlots = [
     "title_generation"
     "compression"
@@ -68,8 +67,7 @@ let
     "memory_query_rewrite"
   ];
 
-  # Reasoning / quality slots — workhorse tier. Not STT / TTS / vision /
-  # moa / goal_judge.
+  # Reasoning auxiliary tasks. Vision, tts, moa, and goal_judge stay unset.
   auxiliaryMediumSlots = [
     "background_review"
     "curator"
