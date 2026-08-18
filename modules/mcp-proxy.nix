@@ -425,7 +425,9 @@ let
 
   configFile = pkgs.writeText "mcp-proxy.json" (builtins.toJSON proxyConfig);
 
-  mcpProxy = pkgs.mcp-proxy or (pkgs.callPackage ../pkgs/mcp-proxy { });
+  # Always the in-tree package. nixpkgs.mcp-proxy is a different CLI
+  # (no --config) and wins if we prefer pkgs.mcp-proxy.
+  mcpProxy = pkgs.callPackage ../pkgs/mcp-proxy { };
 
   loadCredentials = lib.flatten (
     lib.mapAttrsToList (

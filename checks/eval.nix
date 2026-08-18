@@ -255,6 +255,8 @@ in
     test "${mcpProxyConfig.services.hermesPnP.mcpProxy.backends.docs.upstream}" = "https://example.invalid/mcp"
     test "${mcpProxyConfig.services.hermes-agent.mcpServers.github.url}" = "http://127.0.0.1:3140/github"
     test "${toString (mcpProxyConfig.systemd.services ? mcp-proxy)}" = "1"
+    test "${toString (lib.hasInfix "--config" (toString mcpProxyConfig.systemd.services.mcp-proxy.serviceConfig.ExecStart))}" = "1"
+    test "${toString (lib.hasInfix "mcp-proxy-0." (toString mcpProxyConfig.systemd.services.mcp-proxy.serviceConfig.ExecStart))}" = ""
     test "${browserConfig.services.hermesPnP.browser.gate.publicUrl}" = "https://browser.example.com/"
     test "${toString (browserConfig.services.hermesPnP.browser.package == pkgs.brave)}" = "1"
     test "${toString (builtins.elem pkgs.sops toolboxConfig.services.hermesPnP.toolbox.extraPackages)}" = "1"
