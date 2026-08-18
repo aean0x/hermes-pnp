@@ -36,12 +36,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:3140/composio")
     parser.add_argument("--bearer", default="", help="Optional Authorization Bearer (usually unused; proxy injects secrets)")
+    parser.add_argument("--proxy-token", default="", help="X-MCP-Proxy-Token when the proxy has clientAuth = token")
     parser.add_argument("--call", default="", help="Optional tools/call name")
     parser.add_argument("--args", default="{}", help="JSON object for tools/call arguments")
     args = parser.parse_args()
     headers = {}
     if args.bearer:
         headers["Authorization"] = f"Bearer {args.bearer}"
+    if args.proxy_token:
+        headers["X-MCP-Proxy-Token"] = args.proxy_token
 
     _, hdrs = post(
         args.url,

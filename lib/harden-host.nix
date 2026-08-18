@@ -2,6 +2,7 @@
 # PrivateTmp / ProtectSystem / ProtectHome stay on the units that need them.
 {
   hardenHost = {
+    UMask = "0077";
     NoNewPrivileges = true;
     CapabilityBoundingSet = [ ];
     ProtectKernelTunables = true;

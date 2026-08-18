@@ -1,6 +1,8 @@
 # Loopback MCP reverse proxy. Composer does not auto-enable this.
 # Clients call 127.0.0.1; this process injects secrets and applies
 # filters. Point official mcpServers at the proxy paths.
+# À-la-carte (composer off): clientAuth stays none.
+# Composer on: clientAuth defaults to token; disable with clientAuth = "none".
 #
 # Import: inputs.hermes-pnp.nixosModules.mcp-proxy
 # (or nixosModules.default)

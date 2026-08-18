@@ -2,9 +2,16 @@ import json
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from http_proxy import apply_rpc_request, backend_for_path, resolve_headers, serve
+from http_proxy import (
+    apply_rpc_request,
+    backend_for_path,
+    load_client_token,
+    resolve_headers,
+    serve,
+)
 
 
 class AuthHeaders(unittest.TestCase):
@@ -28,6 +35,19 @@ class AuthHeaders(unittest.TestCase):
         )
         self.assertNotIn("Authorization", headers)
         self.assertEqual(headers["X-Static"], "1")
+
+
+class ClientToken(unittest.TestCase):
+    def test_none_mode_returns_none(self):
+        self.assertIsNone(load_client_token(None, None))
+        self.assertIsNone(load_client_token({"mode": "none"}, None))
+
+    def test_token_value(self):
+        self.assertEqual(load_client_token({"mode": "token", "value": "abc"}, None), "abc")
+
+    def test_token_empty_value_raises(self):
+        with self.assertRaises(RuntimeError):
+            load_client_token({"mode": "token", "value": "  "}, None)
 
 
 class PathMatch(unittest.TestCase):
@@ -114,6 +134,7 @@ class EchoUpstream(BaseHTTPRequestHandler):
                 "result": {
                     "echo": msg,
                     "auth": self.headers.get("Authorization"),
+                    "proxy_token": self.headers.get("X-MCP-Proxy-Token"),
                 },
             }
         body = json.dumps(result).encode("utf-8")
@@ -217,6 +238,56 @@ class EndToEnd(unittest.TestCase):
             with urlopen(req, timeout=5) as resp:
                 out = json.loads(resp.read().decode("utf-8"))
             self.assertEqual(out["result"]["auth"], "Bearer client-token")
+        finally:
+            proxy.shutdown()
+            upstream.shutdown()
+
+    def test_client_token_required_and_stripped(self):
+        upstream = HTTPServer(("127.0.0.1", 0), EchoUpstream)
+        threading.Thread(target=upstream.serve_forever, daemon=True).start()
+        backend = {
+            "path": "/composio",
+            "upstream": f"http://127.0.0.1:{upstream.server_address[1]}/mcp",
+            "auth": {"mode": "passthrough"},
+        }
+        proxy = serve(
+            "127.0.0.1:0",
+            {"composio": backend},
+            None,
+            {"mode": "token", "value": "proxy-secret"},
+        )
+        threading.Thread(target=proxy.serve_forever, daemon=True).start()
+        ping = {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}
+        try:
+            denied = Request(
+                f"http://127.0.0.1:{proxy.server_address[1]}/composio",
+                data=json.dumps(ping).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with self.assertRaises(HTTPError) as raised:
+                urlopen(denied, timeout=5)
+            self.assertEqual(raised.exception.code, 401)
+            health = Request(
+                f"http://127.0.0.1:{proxy.server_address[1]}/healthz",
+                method="GET",
+            )
+            with urlopen(health, timeout=5) as resp:
+                self.assertEqual(json.loads(resp.read().decode())["ok"], True)
+            ok = Request(
+                f"http://127.0.0.1:{proxy.server_address[1]}/composio",
+                data=json.dumps(ping).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-MCP-Proxy-Token": "proxy-secret",
+                    "Authorization": "Bearer client-token",
+                },
+                method="POST",
+            )
+            with urlopen(ok, timeout=5) as resp:
+                out = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(out["result"]["auth"], "Bearer client-token")
+            self.assertIsNone(out["result"]["proxy_token"])
         finally:
             proxy.shutdown()
             upstream.shutdown()

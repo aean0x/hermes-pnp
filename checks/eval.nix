@@ -122,6 +122,8 @@ in
     test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig ? StartLimitIntervalSec)}" = ""
     test "${toString (lib.elem "hermes-agent-setup.service" gbrainConfig.systemd.services.gbrain-mcp-http.after)}" = ""
     test "${toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_TRUST_FORWARDED_PROTO)}" = "1"
+    test "${modulesConfig.services.hermes-webui.extraEnvironment.HERMES_WEBUI_TRUSTED_PROXY_CIDRS}" = "127.0.0.1/32,::1/128"
+    test "${modulesConfig.systemd.services.hermes-webui.serviceConfig.UMask}" = "0077"
     test "${toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_EXTENSION_DIR)}" = "1"
     test "${toString (builtins.elem "model-router" modulesConfig.services.hermesPnP.plugins)}" = "1"
     test "${toString (builtins.elem "model-router" gbrainConfig.services.hermesPnP.plugins)}" = "1"
@@ -193,6 +195,9 @@ in
     test "${toString (lib.hasInfix "GBRAIN_TOKEN_FILE=/home/hermes/.gbrain/hermes-mcp.token" (lib.concatStringsSep " " containerGbrainConfig.services.hermes-agent.container.extraOptions))}" = "1"
     test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.after)}" = "1"
     test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.wants)}" = "1"
+    test "${containerMcpConfig.services.hermesPnP.mcpProxy.clientAuth}" = "token"
+    test "${toString (containerMcpConfig.services.hermes-agent.mcpServers.github.headers."X-MCP-Proxy-Token" == "\${MCP_PROXY_TOKEN}")}" = "1"
+    test "${toString (lib.any (p: toString p == "/run/mcp-proxy/client.env") containerMcpConfig.services.hermes-agent.environmentFiles)}" = "1"
     touch "$out"
   '';
 
@@ -219,6 +224,7 @@ in
     test "${toString (optionsEval.options.services.hermesPnP.webui ? container)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? container)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? gate)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser ? cdpAllowOrigins)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? noVNC)}" = ""
     test "${toString (optionsEval.options.services.hermesPnP.toolbox.enable.isDefined or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser.enable.default or true)}" = "1"
@@ -230,6 +236,7 @@ in
     test "${toString (optionsEval.options.services.hermesPnP ? mcpProxy)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.mcpProxy.enable.default}" = ""
     test "${toString (optionsEval.options.services.hermesPnP.mcpProxy ? backends)}" = "1"
+    test "${optionsEval.config.services.hermesPnP.mcpProxy.clientAuth}" = "none"
     test "${toString (optionsEval.options.services ? mcpProxy)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.packageFixes.silenceMarkers.default}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? hmc)}" = "1"
@@ -242,6 +249,8 @@ in
 
   examples = pkgs.runCommand "hermes-pnp-examples-eval" { } ''
     test "${toString mcpProxyConfig.services.hermesPnP.mcpProxy.enable}" = "1"
+    test "${mcpProxyConfig.services.hermesPnP.mcpProxy.clientAuth}" = "none"
+    test "${toString (mcpProxyConfig.services.hermes-agent.mcpServers.github.headers."X-MCP-Proxy-Token" or "")}" = ""
     test "${mcpProxyConfig.services.hermesPnP.mcpProxy.backends.github.auth.mode}" = "passthrough"
     test "${mcpProxyConfig.services.hermesPnP.mcpProxy.backends.docs.upstream}" = "https://example.invalid/mcp"
     test "${mcpProxyConfig.services.hermes-agent.mcpServers.github.url}" = "http://127.0.0.1:3140/github"

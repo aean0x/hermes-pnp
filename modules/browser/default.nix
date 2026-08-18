@@ -4,6 +4,7 @@
 # Agent attaches at 127.0.0.1:9222. Humans use the dashboard
 # (listenAddress, default 127.0.0.1) via Caddy.
 # Gate waits for /json/version before `agent-browser connect`.
+# Chromium --remote-allow-origins takes HTTP origins, not CIDR.
 {
   config,
   lib,
@@ -96,6 +97,22 @@ in
       description = "Loopback CDP port.";
     };
 
+    cdpAllowOrigins = mkOption {
+      type = types.nullOr (types.listOf types.str);
+      default = null;
+      description = ''
+        Chromium --remote-allow-origins. Each entry is an HTTP origin
+        (scheme://host[:port]), not a CIDR — Chromium has no LAN-range
+        form. null (default) is loopback CDP + dashboard, plus
+        gate.publicUrl and a non-loopback listenAddress when set.
+        Set [ "*" ] to allow any Origin (weaker).
+      '';
+      example = [
+        "http://127.0.0.1:9222"
+        "https://browser.example.com"
+      ];
+    };
+
     profileDir = mkOption {
       type = types.str;
       default = "${agent.stateDir}/browser-profile";
@@ -143,9 +160,9 @@ in
         type = types.str;
         default = "127.0.0.1";
         description = ''
-          Advertised dashboard bind. The binary itself listens on
-          loopback. Expose via Caddy (same auth as the WebUI), not a
-          LAN-open 4848.
+          Dashboard bind. Passed as --host when the binary supports it.
+          Default loopback; expose LAN through Caddy (same auth as the
+          WebUI). 0.0.0.0 is a raw LAN bind with no dashboard auth.
         '';
       };
       publicUrl = mkOption {

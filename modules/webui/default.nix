@@ -64,6 +64,8 @@ in
         {
           HERMES_WEBUI_TRUST_FORWARDED_PROTO = mkDefault "true";
           HERMES_WEBUI_SECURE = mkDefault "true";
+          # Caddy on this host. Override for a proxy whose peer is not loopback.
+          HERMES_WEBUI_TRUSTED_PROXY_CIDRS = mkDefault "127.0.0.1/32,::1/128";
         }
         // optionalAttrs (extensionDir != null) {
           HERMES_WEBUI_EXTENSION_DIR = toString extensionDir;

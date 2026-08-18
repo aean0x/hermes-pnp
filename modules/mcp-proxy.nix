@@ -2,6 +2,7 @@
 {
   config,
   lib,
+  options,
   pkgs,
   ...
 }:
@@ -9,11 +10,20 @@
 let
   cfg = config.services.hermesPnP.mcpProxy;
   inherit (lib)
+    mkDefault
     mkEnableOption
     mkIf
+    mkMerge
     mkOption
     types
     ;
+
+  pnpEnabled = options.services.hermesPnP ? enable && config.services.hermesPnP.enable;
+  agentEnabled = options.services ? hermes-agent && config.services.hermes-agent.enable;
+  tokenAuth = cfg.clientAuth == "token";
+  clientTokenFile = cfg.clientTokenFile;
+  clientEnvFile = "/run/mcp-proxy/client.env";
+  clientHeader = "X-MCP-Proxy-Token";
 
   credName =
     backend: header:
@@ -404,6 +414,13 @@ let
   proxyConfig = {
     listen = "${cfg.listenAddress}:${toString cfg.listenPort}";
     backends = backendJson;
+  }
+  // lib.optionalAttrs tokenAuth {
+    clientAuth = {
+      mode = "token";
+      header = clientHeader;
+      credential = "mcp-proxy-client";
+    };
   };
 
   configFile = pkgs.writeText "mcp-proxy.json" (builtins.toJSON proxyConfig);
@@ -437,6 +454,32 @@ in
       description = "Loopback port. Clients use http://<addr>:<port>/<backend>.";
     };
 
+    clientAuth = mkOption {
+      type = types.enum [
+        "none"
+        "token"
+      ];
+      default = "none";
+      description = ''
+        Incoming client check. none: any process that can reach the
+        listen address may call the proxy (à-la-carte default).
+        token: require X-MCP-Proxy-Token matching clientTokenFile.
+        Composer sets mkDefault "token" and wires that header onto
+        official mcpServers named like a backend. Set none to use the
+        proxy without a Hermes pairing.
+      '';
+    };
+
+    clientTokenFile = mkOption {
+      type = types.str;
+      default = "/var/lib/mcp-proxy/client.token";
+      description = ''
+        Host token file used when clientAuth is token. Created on first
+        start if missing. Point at a sops path to supply your own.
+        Not a Nix store path.
+      '';
+    };
+
     backends = mkOption {
       type = types.attrsOf backendType;
       default = { };
@@ -444,55 +487,91 @@ in
     };
   };
 
-  config = mkIf cfg.enable {
-    assertions = [
-      {
-        assertion = enabledBackends != { };
-        message = "services.hermesPnP.mcpProxy.enable is true but no backends are enabled";
-      }
-      {
-        assertion = lib.all (b: b.upstream != "") (lib.attrValues enabledBackends);
-        message = "every hermesPnP.mcpProxy backend needs an upstream URL";
-      }
-    ];
+  config = mkMerge [
+    (mkIf pnpEnabled {
+      services.hermesPnP.mcpProxy.clientAuth = mkDefault "token";
+    })
 
-    environment.systemPackages = [ mcpProxy ];
+    (mkIf cfg.enable {
+      assertions = [
+        {
+          assertion = enabledBackends != { };
+          message = "services.hermesPnP.mcpProxy.enable is true but no backends are enabled";
+        }
+        {
+          assertion = lib.all (b: b.upstream != "") (lib.attrValues enabledBackends);
+          message = "every hermesPnP.mcpProxy backend needs an upstream URL";
+        }
+      ];
 
-    systemd.services.hermes-agent = {
-      after = [ "mcp-proxy.service" ];
-      wants = [ "mcp-proxy.service" ];
-    };
-    systemd.services.hermes-webui = {
-      after = [ "mcp-proxy.service" ];
-      wants = [ "mcp-proxy.service" ];
-    };
+      environment.systemPackages = [ mcpProxy ];
 
-    systemd.services.mcp-proxy = {
-      description = "Declarative MCP reverse proxy (secrets + filters)";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig = {
-        Type = "simple";
-        ExecStart = "${mcpProxy}/bin/mcp-proxy --config ${configFile}";
-        Restart = "on-failure";
-        RestartSec = 3;
-        DynamicUser = true;
-        LoadCredential = loadCredentials;
-        ProtectSystem = "strict";
-        ProtectHome = true;
-        PrivateTmp = true;
-        NoNewPrivileges = true;
-        LockPersonality = true;
-        RestrictAddressFamilies = [
-          "AF_INET"
-          "AF_INET6"
-          "AF_UNIX"
-        ];
-        RestrictRealtime = true;
-        MemoryMax = "128M";
-        OOMScoreAdjust = 400;
+      systemd.services.hermes-agent = mkIf agentEnabled {
+        after = [ "mcp-proxy.service" ];
+        wants = [ "mcp-proxy.service" ];
       };
-    };
-  };
+      systemd.services.hermes-webui = {
+        after = [ "mcp-proxy.service" ];
+        wants = [ "mcp-proxy.service" ];
+      };
+
+      systemd.services.mcp-proxy = {
+        description = "Declarative MCP reverse proxy (secrets + filters)";
+        after = [ "network-online.target" ];
+        wants = [ "network-online.target" ];
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig = {
+          Type = "simple";
+          ExecStart = "${mcpProxy}/bin/mcp-proxy --config ${configFile}";
+          Restart = "on-failure";
+          RestartSec = 3;
+          DynamicUser = true;
+          LoadCredential = loadCredentials ++ lib.optional tokenAuth "mcp-proxy-client:${clientTokenFile}";
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          PrivateTmp = true;
+          NoNewPrivileges = true;
+          LockPersonality = true;
+          RestrictAddressFamilies = [
+            "AF_INET"
+            "AF_INET6"
+            "AF_UNIX"
+          ];
+          RestrictRealtime = true;
+          MemoryMax = "128M";
+          OOMScoreAdjust = 400;
+        };
+      };
+    })
+
+    (mkIf (cfg.enable && tokenAuth) {
+      systemd.tmpfiles.rules = [
+        "d /var/lib/mcp-proxy 0750 root root - -"
+        "d /run/mcp-proxy 0750 root root - -"
+      ];
+
+      system.activationScripts.mcp-proxy-client-token = lib.stringAfter [ "etc" ] ''
+        ${pkgs.coreutils}/bin/install -d -m 0750 /var/lib/mcp-proxy /run/mcp-proxy
+        if [ ! -s ${lib.escapeShellArg clientTokenFile} ]; then
+          umask 077
+          ${pkgs.openssl}/bin/openssl rand -hex 24 > ${lib.escapeShellArg clientTokenFile}
+        fi
+        ${pkgs.coreutils}/bin/chmod 0600 ${lib.escapeShellArg clientTokenFile}
+        umask 077
+        printf 'MCP_PROXY_TOKEN=%s\n' "$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg clientTokenFile})" \
+          > ${clientEnvFile}
+        ${pkgs.coreutils}/bin/chmod 0640 ${clientEnvFile}
+        ${lib.optionalString agentEnabled ''
+          ${pkgs.coreutils}/bin/chown root:${config.services.hermes-agent.group} ${clientEnvFile} || true
+        ''}
+      '';
+    })
+
+    (mkIf (cfg.enable && tokenAuth && agentEnabled) {
+      services.hermes-agent.environmentFiles = lib.mkAfter [ clientEnvFile ];
+      services.hermes-agent.mcpServers = lib.mapAttrs (_: _: {
+        headers.${clientHeader} = mkDefault "\${MCP_PROXY_TOKEN}";
+      }) enabledBackends;
+    })
+  ];
 }

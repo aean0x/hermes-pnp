@@ -61,7 +61,8 @@ path: plugins and `services.hermesPnP.mcpProxy` only.
 MCP backends live on `services.hermesPnP.mcpProxy.*`
 (`services.mcpProxy` is an alias). Point official
 `services.hermes-agent.mcpServers.<name>.url` at
-`http://127.0.0.1:3140/<backend>`.
+`http://127.0.0.1:3140/<backend>`. Composer defaults
+`clientAuth` to `token`; à-la-carte stays `none`.
 
 ## Three models
 

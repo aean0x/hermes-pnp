@@ -36,7 +36,11 @@ def main(argv: list[str] | None = None) -> int:
 
     from http_proxy import serve
 
-    httpd = serve(listen, backends, args.credentials_dir)
+    try:
+        httpd = serve(listen, backends, args.credentials_dir, cfg.get("clientAuth"))
+    except RuntimeError as exc:
+        logging.error("%s", exc)
+        return 2
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

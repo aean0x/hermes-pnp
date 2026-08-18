@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -26,6 +27,35 @@ HOP_BY_HOP = {
     "host",
     "content-length",
 }
+
+
+CLIENT_TOKEN_HEADER = "X-MCP-Proxy-Token"
+
+
+def load_client_token(spec: dict[str, Any] | None, credentials_dir: str | None) -> str | None:
+    """Load the incoming-client token. None means no client check."""
+    if not spec or spec.get("mode") in (None, "none"):
+        return None
+    if spec.get("mode") != "token":
+        raise RuntimeError(f"unknown clientAuth.mode {spec.get('mode')!r}")
+    if "value" in spec:
+        token = str(spec.get("value") or "").strip()
+        if not token:
+            raise RuntimeError("clientAuth.mode is token but value is empty")
+        return token
+    path = spec.get("file")
+    cred = spec.get("credential")
+    if cred:
+        if not credentials_dir:
+            raise RuntimeError(f"credential {cred} needs CREDENTIALS_DIRECTORY")
+        path = os.path.join(credentials_dir, cred)
+    if not path:
+        raise RuntimeError("clientAuth.mode is token but no credential, file, or value")
+    with open(path, encoding="utf-8") as handle:
+        token = handle.read().strip()
+    if not token:
+        raise RuntimeError(f"clientAuth token file {path} is empty")
+    return token
 
 
 def load_header_value(spec: dict[str, Any], credentials_dir: str | None) -> str:
@@ -183,8 +213,36 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def credentials_dir(self) -> str | None:
         return self.server.credentials_dir  # type: ignore[attr-defined]
 
+    @property
+    def client_token(self) -> str | None:
+        return self.server.client_token  # type: ignore[attr-defined]
+
+    @property
+    def client_header(self) -> str:
+        return self.server.client_header  # type: ignore[attr-defined]
+
     def log_message(self, fmt: str, *args: Any) -> None:
         log.info("%s - %s", self.address_string(), fmt % args)
+
+    def _client_header_value(self) -> str:
+        return (self.headers.get(self.client_header) or "").strip()
+
+    def _token_ok(self) -> bool:
+        expected = self.client_token
+        if expected is None:
+            return True
+        got = self._client_header_value()
+        if not got or len(got) != len(expected):
+            return False
+        return hmac.compare_digest(got, expected)
+
+    def _unauthorized(self) -> None:
+        body = b'{"error":"mcp-proxy: client token required"}\n'
+        self.send_response(401)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _not_found(self) -> None:
         body = b'{"error":"no mcp-proxy backend for this path"}\n'
@@ -218,6 +276,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         return self.rfile.read(length)
 
     def _proxy(self, body: bytes) -> None:
+        if not self._token_ok():
+            self._unauthorized()
+            return
         path = self.path.split("?", 1)[0]
         found = backend_for_path(path, self.backends)
         if found is None:
@@ -239,11 +300,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         parsed = urlparse(backend["upstream"])
         inject = resolve_headers(backend, self.credentials_dir)
+        skip_in = HOP_BY_HOP | {self.client_header.lower()} | {name.lower() for name in inject}
         fwd: list[tuple[str, str]] = []
         for key, value in self.headers.items():
-            if key.lower() in HOP_BY_HOP:
-                continue
-            if key.lower() in {name.lower() for name in inject}:
+            if key.lower() in skip_in:
                 continue
             fwd.append((key, value))
         for key, value in inject.items():
@@ -288,10 +348,23 @@ class ProxyHandler(BaseHTTPRequestHandler):
             conn.close()
 
 
-def serve(listen: str, backends: dict[str, Any], credentials_dir: str | None) -> ThreadingHTTPServer:
+def serve(
+    listen: str,
+    backends: dict[str, Any],
+    credentials_dir: str | None,
+    client_auth: dict[str, Any] | None = None,
+) -> ThreadingHTTPServer:
     host, _, port_s = listen.rpartition(":")
     server = ThreadingHTTPServer((host or "127.0.0.1", int(port_s)), ProxyHandler)
     server.backends = backends
     server.credentials_dir = credentials_dir
-    log.info("listen %s backends=%s", listen, ",".join(backends))
+    server.client_token = load_client_token(client_auth, credentials_dir)
+    header = (client_auth or {}).get("header") or CLIENT_TOKEN_HEADER
+    server.client_header = str(header)
+    log.info(
+        "listen %s backends=%s clientAuth=%s",
+        listen,
+        ",".join(backends),
+        "token" if server.client_token else "none",
+    )
     return server

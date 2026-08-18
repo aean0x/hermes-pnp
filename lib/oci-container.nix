@@ -32,6 +32,7 @@ let
   mkSlimEntrypoint = name:
     pkgs.writeShellScript "${name}-oci-entrypoint" ''
       set -euo pipefail
+      umask 0077
       export HOME="''${HOME:-/home/hermes}"
       export USER="''${USER:-hermes}"
       export LOGNAME="''${LOGNAME:-hermes}"

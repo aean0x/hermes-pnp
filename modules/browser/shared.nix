@@ -30,6 +30,53 @@ let
     then cfg.gate.publicUrl
     else "http://127.0.0.1:${toString gatePort}";
 
+  originFromUrl =
+    url:
+    let
+      m = builtins.match "([a-zA-Z][a-zA-Z0-9+.-]*://[^/?#]+).*" url;
+    in
+    if m == null then null else builtins.head m;
+
+  loopbackOrigins = [
+    "http://127.0.0.1:${toString cdpPort}"
+    "http://localhost:${toString cdpPort}"
+    "http://[::1]:${toString cdpPort}"
+  ]
+  ++ lib.optionals cfg.gate.enable [
+    "http://127.0.0.1:${toString gatePort}"
+    "http://localhost:${toString gatePort}"
+    "http://[::1]:${toString gatePort}"
+  ];
+
+  listenOrigin =
+    if
+      cfg.gate.enable
+      && listenAddr != "127.0.0.1"
+      && listenAddr != "localhost"
+      && listenAddr != "::1"
+      && listenAddr != "0.0.0.0"
+      && listenAddr != "::"
+    then
+      "http://${listenAddr}:${toString gatePort}"
+    else
+      null;
+
+  publicOrigin = if cfg.gate.publicUrl != null then originFromUrl cfg.gate.publicUrl else null;
+
+  computedOrigins = lib.unique (
+    loopbackOrigins
+    ++ lib.optional (listenOrigin != null) listenOrigin
+    ++ lib.optional (publicOrigin != null) publicOrigin
+  );
+
+  allowOrigins =
+    if cfg.cdpAllowOrigins == null || cfg.cdpAllowOrigins == [ ] then
+      computedOrigins
+    else
+      cfg.cdpAllowOrigins;
+
+  allowOriginsFlag = lib.concatStringsSep "," allowOrigins;
+
   chromiumAliases = pkgs.runCommand "chromium-alias" { } ''
     mkdir -p "$out/bin"
     ln -s ${browserBin} "$out/bin/chromium"
@@ -73,7 +120,9 @@ let
       mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" ${logDir}
 
       cdp="${cdpUrl}"
-      dash="http://127.0.0.1:${toString gatePort}"
+      dash="http://${
+        if listenAddr == "0.0.0.0" || listenAddr == "::" then "127.0.0.1" else listenAddr
+      }:${toString gatePort}"
 
       cleanup() {
         agent-browser dashboard stop >/dev/null 2>&1 || true
@@ -103,14 +152,22 @@ let
       echo "attaching to existing browser via CDP $cdp"
       agent-browser connect ${toString cdpPort}
 
-      echo "starting dashboard on $dash"
-      agent-browser dashboard start --port ${toString gatePort}
+      start_dash() {
+        if agent-browser dashboard start --help 2>&1 | grep -q -- '--host'; then
+          agent-browser dashboard start --port ${toString gatePort} --host '${listenAddr}'
+        else
+          agent-browser dashboard start --port ${toString gatePort}
+        fi
+      }
+
+      echo "starting dashboard on $dash (host ${listenAddr})"
+      start_dash
 
       while true; do
         if ! curl -sf --max-time 2 -o /dev/null "$dash/"; then
           echo "dashboard down; restarting"
           agent-browser dashboard stop >/dev/null 2>&1 || true
-          agent-browser dashboard start --port ${toString gatePort} || true
+          start_dash || true
         fi
         if ! agent-browser session info --json 2>/dev/null | grep -q '"connectionMethod":"cdp"'; then
           if curl -sf --max-time 1 "$cdp/json/version" >/dev/null; then
@@ -140,7 +197,7 @@ let
       --user-data-dir=${profileDir} \
       --remote-debugging-address=${cdpAddr} \
       --remote-debugging-port=${toString cdpPort} \
-      --remote-allow-origins=* \
+      --remote-allow-origins='${allowOriginsFlag}' \
       --no-first-run \
       --no-default-browser-check \
       --no-sandbox \

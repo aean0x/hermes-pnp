@@ -167,11 +167,13 @@ the official option PnP set via `mkDefault`.
   `gbrain serve`, `mcpServers.gbrain.url`, plugin env. Appends the two
   gbrain plugins if missing. No PGLite, sources, or memory registry.
 - `services.hermesPnP.gbrain.url` / `bind` / `port` / `tokenFile`.
-- `services.hermesPnP.mcpProxy` — enable, listen, backends.
-  `services.mcpProxy` is an alias.
+- `services.hermesPnP.mcpProxy` — enable, listen, backends,
+  `clientAuth` (`none` / `token`), `clientTokenFile`.
+  `services.mcpProxy` is an alias. Composer sets `clientAuth` to
+  `token` via `mkDefault`; à-la-carte stays `none`.
 - `services.hermesPnP.browser.enable` / `package` / `engine` / `cdpPort`
-  / `gate.*` — persistent CDP browser + dashboard. Seeds
-  `BROWSER_CDP_URL` and `settings.browser.{cdp_url,engine}`. Extra
+  / `cdpAllowOrigins` / `gate.*` — persistent CDP browser + dashboard.
+  Seeds `BROWSER_CDP_URL` and `settings.browser.{cdp_url,engine}`. Extra
   host mounts use official `container.extraVolumes`.
 - `services.hermesPnP.packageFixes.silenceMarkers` — default `true`.
   Autonomous silence match via PYTHONPATH.
@@ -289,6 +291,9 @@ docker.service`. `--network=host` so the jail reaches the same
 loopback services as native hermes. Host-native flags live in
 `lib/harden-host.nix`. Path remaps (`stateDir` → `/data`,
 `${stateDir}/home` → `/home/hermes`) live in `lib.remapStatePath`.
+Host `/home/hermes` (gbrain activation, only if that path is missing)
+is an alias of `${stateDir}/home`. Durability is `${stateDir}/home`
+on the host, not the alias.
 WebUI CA/gitconfig binds stay in `modules/webui/container.nix`.
 
 Jail image is ubuntu + `/nix/store:ro`. WebUI `extraVolumes` is
@@ -320,8 +325,13 @@ One browser, two control planes:
 - Agent: CDP `127.0.0.1:9222`
 - Human: dashboard on `listenAddress` (default `127.0.0.1`), via Caddy
 
-Do not bind `0.0.0.0:4848`. Do not open the firewall when loopback.
-Set `browser.gate.publicUrl` to the Caddy URL.
+`--remote-allow-origins` is HTTP origins (scheme+host+port), not CIDR.
+Default is loopback CDP + dashboard, plus `gate.publicUrl` / a
+non-loopback `listenAddress` when set. `[ "*" ]` is the wildcard.
+
+Do not bind `0.0.0.0:4848` unless you accept an unauthenticated
+screencast. Do not open the firewall when loopback. Set
+`browser.gate.publicUrl` to the Caddy URL.
 
 ```
 services.caddy.proxyServices."browser.${domain}" = 4848;
@@ -363,6 +373,13 @@ Operator scripts: `scripts/gbrain-setup.sh`,
 Point official `mcpServers` at `http://127.0.0.1:<port>/…`.
 `services.mcpProxy` is an alias.
 
+`clientAuth` is `none` on the library path so the proxy can run
+without Hermes. Composer sets `mkDefault "token"`: a host token file,
+`X-MCP-Proxy-Token: ${MCP_PROXY_TOKEN}` on mcpServers named like a
+backend, and `/run/mcp-proxy/client.env` on official
+`environmentFiles`. `/healthz` stays open. Set `clientAuth = "none"`
+to turn that off.
+
 Site-specific `tools.deny` / account filters stay in the consumer.
 When the proxy is on, hermes-agent and hermes-webui wait for it
 (including the WebUI jail).
@@ -370,7 +387,10 @@ When the proxy is on, hermes-agent and hermes-webui wait for it
 ## WebUI
 
 Official module plus pairing defaults above. No forked WebUI package.
-Host unit waits for `hermes-agent.service`.
+Host unit waits for `hermes-agent.service`. Pairing sets
+`HERMES_WEBUI_TRUST_FORWARDED_PROTO` / `SECURE` and
+`HERMES_WEBUI_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128` (Caddy on
+this host). Jail entrypoint `umask 0077`; host unit `UMask=0077`.
 
 ## Checks
 

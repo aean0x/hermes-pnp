@@ -15,6 +15,7 @@
       package = pkgs.brave;
       # engine = "brave"; # only if mainProgram is wrong
       cdpPort = 9222;
+      # cdpAllowOrigins = [ "*" ]; # Chromium origins, not CIDR
       gate = {
         enable = true;
         listenAddress = "127.0.0.1";
