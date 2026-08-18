@@ -1,5 +1,6 @@
 # Loopback GBrain HTTP MCP. Does not ship PGLite, sources, or a memory
-# registry. The CLI is a consumer bootstrap (`bun install -g`).
+# registry. Two steps: enable this hook and switch, then run
+# scripts/gbrain-setup.sh (bun install -g + mint token).
 # Enabling this also installs gbrain-retrieval-reflex + gbrain-memory-flush.
 #
 # Import: inputs.hermes-pnp.nixosModules.default

@@ -166,9 +166,11 @@ is in `plugins`, Nix writes `config.json` and `webui/config.js` from
 
 ## GBrain
 
-Off by default. When enabled, starts loopback `gbrain serve`, sets the
-MCP URL + plugin env, and installs the two gbrain plugins. The CLI is
-a consumer bootstrap (`bun install -g`).
+Off by default. Enable the hook, switch, then run
+`scripts/gbrain-setup.sh` (consumer `./deploy gbrain-setup`): bun CLI,
+mint token, import/embed. The hook starts loopback `gbrain serve`,
+sets the MCP URL + plugin env, installs the two gbrain plugins, and
+re-applies a literal Bearer after official config merge.
 
 See [`examples/gbrain.nix`](examples/gbrain.nix). Listing the plugins
 does not require this hook.

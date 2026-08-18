@@ -7,6 +7,13 @@
 # services.hermesPnP.gbrain; this script is the remaining one-shot /
 # Hermes-home state (bun CLI, PGLite init, bearer, import/embed).
 #
+# Two-step consumer path:
+#   1. services.hermesPnP.gbrain.enable = true  (switch — unit + MCP URL + plugins)
+#   2. this script (bun CLI, mint token, import/embed)
+# Official hermes-agent-setup drops headers on merge; composer activation
+# re-applies a literal Bearer. This script wires immediately so the first
+# start after mint does not 401.
+#
 # Catalogue (fresh machine after remote-switch):
 #   1. bun + gbrain CLI (bun global under hermes HOME)
 #   2. gbrain init --pglite (if no PGLite dir)
@@ -43,6 +50,13 @@ warn() { echo "[gbrain-setup] WARN: $*" >&2; }
 die() { echo "[gbrain-setup] FAIL: $*" >&2; exit 1; }
 
 [[ "$(id -u)" -eq 0 ]] || die "run as root (sudo)"
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WIRE_PY="${HERE}/gbrain-wire-config.py"
+
+if ! systemctl cat gbrain-mcp-http.service >/dev/null 2>&1; then
+  die "gbrain-mcp-http unit missing — set services.hermesPnP.gbrain.enable = true and switch first"
+fi
 
 as_hermes() {
   # shellcheck disable=SC2086
@@ -221,48 +235,14 @@ wire_hermes_mcp_config() {
     warn "refusing placeholder token in env — re-run mint"
     token=""
   fi
-  # Prefer toolbox python if system python3 missing
   local py=python3
   command -v python3 >/dev/null 2>&1 || py=/var/lib/hermes/toolbox/bin/python3
-  "${py}" - "${HERMES_CFG}" "${MCP_URL}" "${token}" <<'PY'
-import sys
-from pathlib import Path
-try:
-    import yaml
-except ImportError:
-    print("yaml missing — skip config wire")
-    sys.exit(0)
-path, url, token = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-data = yaml.safe_load(path.read_text()) or {}
-mcp = data.setdefault("mcp_servers", {})
-cur = mcp.get("gbrain") or {}
-desired = {
-    "url": url,
-    "connect_timeout": 120,
-    "timeout": 120,
-    "enabled": True,
-}
-# Literal Bearer only — Hermes does NOT expand ${GBRAIN_REMOTE_TOKEN} in yaml.
-if token and "${" not in token:
-    desired["headers"] = {"Authorization": f"Bearer {token}"}
-else:
-    headers = cur.get("headers") if isinstance(cur.get("headers"), dict) else {}
-    auth = (headers.get("Authorization") or headers.get("authorization") or "")
-    if auth.startswith("Bearer ") and "${" not in auth:
-        desired["headers"] = {"Authorization": auth}
-    else:
-        print("WARN: no usable literal Bearer — config will 401 until token is wired")
-# Drop stdio fields
-for k in ("command", "args", "env", "auth"):
-    pass  # not copied into desired
-if mcp.get("gbrain") != desired:
-    mcp["gbrain"] = desired
-    path.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False))
-    print("config.yaml gbrain MCP updated (HTTP + literal Bearer)")
-else:
-    print("config.yaml gbrain MCP already correct")
-PY
-  chown hermes:hermes "${HERMES_CFG}"
+  if [[ -f "${WIRE_PY}" ]]; then
+    "${py}" "${WIRE_PY}" "${HERMES_CFG}" "${MCP_URL}" "${token}" || warn "wire-config exited non-zero"
+  else
+    warn "gbrain-wire-config.py not next to this script — skip yaml patch (composer activation will apply)"
+  fi
+  [[ -f "${HERMES_CFG}" ]] && chown hermes:hermes "${HERMES_CFG}"
 }
 
 import_and_embed() {

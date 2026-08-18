@@ -60,7 +60,7 @@ checks/                   # eval + plugin/proxy tests
 examples/                 # consumer snippets (evalled by checks)
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
-scripts/                  # gbrain-setup / validate-gbrain (not Nix)
+scripts/                  # gbrain-setup / validate-gbrain / wire-config (not Nix)
 plugins/                  # first-party plugin trees
 skills/                   # first-party skill trees
 ```

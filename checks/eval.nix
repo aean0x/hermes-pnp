@@ -116,6 +116,8 @@ in
     test "${toString (modulesConfig.systemd.services ? gbrain-mcp-http)}" = ""
     test "${gbrainConfig.services.hermes-agent.mcpServers.gbrain.url}" = "http://127.0.0.1:3131/mcp"
     test "${toString (gbrainConfig.systemd.services ? gbrain-mcp-http)}" = "1"
+    test "${toString (lib.hasInfix "gbrain-wire-config.py" gbrainConfig.system.activationScripts.hermes-gbrain.text)}" = "1"
+    test "${toString (lib.elem "hermes-agent-setup" gbrainConfig.system.activationScripts.hermes-gbrain.deps)}" = "1"
     test "${gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig.User}" = "${gbrainConfig.services.hermes-agent.user}"
     test "${toString gbrainConfig.systemd.services.gbrain-mcp-http.unitConfig.StartLimitIntervalSec}" = "120"
     test "${toString gbrainConfig.systemd.services.gbrain-mcp-http.unitConfig.StartLimitBurst}" = "5"

@@ -1,14 +1,18 @@
 # GBrain (operator)
 
-Off by default. `services.hermesPnP.gbrain.enable = true` starts loopback
-`gbrain serve` (`gbrain-mcp-http`), sets `mcpServers.gbrain.url`, and
-installs `gbrain-retrieval-reflex` + `gbrain-memory-flush`.
+Off by default. Two steps:
 
-The CLI is a consumer bootstrap (`bun install -g`). Nix does not ship
-PGLite, sources, or a memory registry.
+1. `services.hermesPnP.gbrain.enable = true` then switch — starts
+   loopback `gbrain serve` (`gbrain-mcp-http`), sets
+   `mcpServers.gbrain.url`, installs `gbrain-retrieval-reflex` +
+   `gbrain-memory-flush`, and re-applies a literal Bearer on
+   `config.yaml` after official merge (Nix keys win; Hermes does not
+   expand `${GBRAIN_REMOTE_TOKEN}`).
+2. `scripts/gbrain-setup.sh` (root; consumer `./deploy gbrain-setup`) —
+   bun CLI, PGLite init, mint token, import/embed.
 
-**Setup:** `scripts/gbrain-setup.sh` (root on the device; consumer
-`./deploy gbrain-setup` copies it from this flake).  
+Nix does not ship PGLite, sources, or a memory registry.
+
 **Validate:** `scripts/validate-gbrain.sh`.  
 **Agent bootstrap prompt:** `scripts/gbrain-bootstrap-query.txt`.
 

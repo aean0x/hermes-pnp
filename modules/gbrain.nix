@@ -46,14 +46,23 @@ let
     cd "$HOME"
     exec gbrain serve --http --port ${toString cfg.port} --bind ${cfg.bind}
   '';
+
+  hermesHome = "${agent.stateDir}/.hermes";
+  wirePython = pkgs.python3.withPackages (ps: [ ps.pyyaml ]);
+  wireScript = pkgs.writeText "gbrain-wire-config.py" (
+    builtins.readFile ../scripts/gbrain-wire-config.py
+  );
+  tokenFile = if cfg.tokenFile != null then cfg.tokenFile else "";
 in
 {
   options.services.hermesPnP.gbrain = {
     enable = mkEnableOption ''
       GBrain HTTP MCP: start gbrain-mcp-http (loopback serve), mkDefault
-      mcpServers.gbrain.url, and export GBRAIN_MCP_URL / GBRAIN_TOKEN_FILE.
+      mcpServers.gbrain.url, export GBRAIN_MCP_URL / GBRAIN_TOKEN_FILE,
+      and re-apply a literal Bearer on config.yaml after official merge.
       Also installs the two gbrain plugins even if they are not listed.
       Off by default. Does not ship PGLite, sources, or a memory registry.
+      CLI install is a one-shot: scripts/gbrain-setup.sh.
     '';
 
     url = mkOption {
@@ -140,7 +149,9 @@ in
       wants = [ "gbrain-mcp-http.service" ];
     };
 
-    # Directories gbrain serve expects.
+    # Directories gbrain serve expects. Official hermes-agent-setup merges
+    # Nix mcpServers into config.yaml and Nix keys win (headers dropped),
+    # so re-apply a literal Bearer after that merge.
     system.activationScripts.hermes-gbrain = lib.stringAfter [ "hermes-agent-setup" ] ''
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.gbrain
@@ -149,6 +160,35 @@ in
         ln -sfn ${home} /home/hermes
       elif [ ! -L /home/hermes ] && [ ! -d /home/hermes ]; then
         ln -sfn ${home} /home/hermes
+      fi
+
+      token=""
+      for tp in \
+        ${lib.optionalString (tokenFile != "") tokenFile} \
+        ${home}/.gbrain/hermes-mcp.token \
+        /home/hermes/.gbrain/hermes-mcp.token
+      do
+        [ -n "$tp" ] || continue
+        if [ -s "$tp" ]; then
+          token=$(tr -d '\r\n' <"$tp")
+          [ -n "$token" ] && break
+        fi
+      done
+      if [ -z "$token" ]; then
+        for ep in ${hermesHome}/.env /home/hermes/.hermes/.env; do
+          [ -f "$ep" ] || continue
+          line=$(grep -E '^GBRAIN_REMOTE_TOKEN=' "$ep" | tail -n1 || true)
+          token=''${line#GBRAIN_REMOTE_TOKEN=}
+          token=''${token#\"}
+          token=''${token%\"}
+          token=''${token#\'}
+          token=''${token%\'}
+          [ -n "$token" ] && break
+        done
+      fi
+      ${wirePython}/bin/python3 ${wireScript} ${hermesHome}/config.yaml ${lib.escapeShellArg cfg.url} "$token" || true
+      if [ -f ${hermesHome}/config.yaml ]; then
+        chown ${agent.user}:${agent.group} ${hermesHome}/config.yaml 2>/dev/null || true
       fi
     '';
   };

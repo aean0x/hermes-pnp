@@ -110,7 +110,26 @@ else
   warn "resolve IPC socket missing (serve not up, old gbrain, or non-PGLite path)"
 fi
 
-echo "=== 4. MCP list (gbrain expected) ==="
+echo "=== 4. config.yaml HTTP + literal Bearer ==="
+CFG="${HERMES_HOME}/config.yaml"
+if [ -f "$CFG" ]; then
+  if grep -A12 -E '^[[:space:]]*gbrain:' "$CFG" | grep -qE 'Authorization:.*\$\{'; then
+    bad "config.yaml Authorization is a \${placeholder} (Hermes will 401)"
+  elif grep -A12 -E '^[[:space:]]*gbrain:' "$CFG" | grep -qE 'Authorization:[[:space:]]*Bearer[[:space:]]+'; then
+    ok "config.yaml has literal Bearer (value not printed)"
+  else
+    warn "config.yaml gbrain has no Authorization — run gbrain-setup"
+  fi
+  if grep -A12 -E '^[[:space:]]*gbrain:' "$CFG" | grep -qE 'url:[[:space:]]*http://127.0.0.1:3131/mcp'; then
+    ok "config.yaml gbrain url is loopback HTTP"
+  else
+    warn "config.yaml gbrain url is not http://127.0.0.1:3131/mcp"
+  fi
+else
+  warn "no $CFG yet"
+fi
+
+echo "=== 5. MCP list (gbrain expected) ==="
 if command -v hermes >/dev/null 2>&1 || [ -x /run/current-system/sw/bin/hermes ]; then
   HERMES_BIN=$(command -v hermes 2>/dev/null || echo /run/current-system/sw/bin/hermes)
   if sudo -u hermes "$HERMES_BIN" mcp list 2>/dev/null | tee /tmp/hermes-mcp-list.txt | grep -qi gbrain; then
