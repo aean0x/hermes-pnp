@@ -74,6 +74,7 @@
 
       overlays.default = final: _prev: {
         mcp-proxy = final.callPackage ./services/mcp-proxy/nix/package.nix { };
+        agent-browser = final.callPackage ./services/browser/nix/package.nix { };
       };
 
       packages = forAllSystems (
@@ -83,6 +84,7 @@
         in
         rec {
           mcp-proxy = pkgs.callPackage ./services/mcp-proxy/nix/package.nix { };
+          agent-browser = pkgs.callPackage ./services/browser/nix/package.nix { };
           default = mcp-proxy;
         }
       );
