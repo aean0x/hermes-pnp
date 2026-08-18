@@ -22,11 +22,14 @@ let
     path = webui.hermesHome;
   };
 
-  # NixOS /etc/ssl/certs is a symlink farm into /etc/static. Binding
-  # only /etc/ssl leaves ca-certificates.crt dangling in Ubuntu.
-  nixosCaBinds = [
-    "/etc/ssl:/etc/ssl:ro"
-    "/etc/static:/etc/static:ro"
+  # NixOS /etc/ssl is a symlink farm into /etc/static, and /etc/static
+  # is itself a symlink. Docker bind-mounts that symlink as an empty
+  # directory, so overlaying host /etc/ssl dangles. Pin nss-cacert onto
+  # Ubuntu's well-known paths instead (store path, already in /nix/store).
+  caBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+  caBinds = [
+    "${caBundle}:/etc/ssl/certs/ca-certificates.crt:ro"
+    "${caBundle}:/etc/ssl/cert.pem:ro"
   ];
   gitconfigBind = "/etc/gitconfig:/etc/gitconfig:ro";
 
@@ -52,6 +55,11 @@ let
       HERMES_WEBUI_PORT = toString webui.port;
       HERMES_WEBUI_STATE_DIR = webui.stateDir;
       HOME = oci.containerHome;
+      SSL_CERT_FILE = caBundle;
+      NIX_SSL_CERT_FILE = caBundle;
+      CURL_CA_BUNDLE = caBundle;
+      REQUESTS_CA_BUNDLE = caBundle;
+      GIT_SSL_CAINFO = caBundle;
     }
     // optionalAttrs (webui.hermesHome != null) {
       HERMES_HOME = remappedHome;
@@ -79,7 +87,7 @@ let
       (oci.stateDirBind agent.stateDir)
       (oci.homeBind agent.stateDir)
       "${webui.stateDir}:${webui.stateDir}"
-    ] ++ nixosCaBinds ++ [ gitconfigBind ];
+    ] ++ caBinds ++ [ gitconfigBind ];
     inherit extraEnv;
     envFiles = webui.environmentFiles;
     command = [ "${webui.package}/bin/hermes-webui" ];

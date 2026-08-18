@@ -300,9 +300,11 @@ Jail image is ubuntu + `/nix/store:ro`. WebUI `extraVolumes` is
 independent of the agent list.
 
 WebUI mounts: `/nix/store:ro`, agent stateDir → `/data`, agent home →
-`/home/hermes`, webui stateDir same-path, `/etc/ssl:ro`,
-`/etc/static:ro`, `/etc/gitconfig:ro`. Not `/etc/nixos`, not
-docker.sock.
+`/home/hermes`, webui stateDir same-path, nss-cacert onto Ubuntu
+`/etc/ssl/certs/ca-certificates.crt` + `/etc/ssl/cert.pem`,
+`/etc/gitconfig:ro`. Not host `/etc/ssl` or `/etc/static` (Docker
+bind-mounts the NixOS `/etc/static` symlink as an empty dir). Not
+`/etc/nixos`, not docker.sock.
 
 Browser mounts: workspace, profile, cookies, logs, gate. Not hermes
 home, not `.hermes`, not `/etc`. `--no-sandbox`: the container is the
