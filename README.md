@@ -123,9 +123,29 @@ PnP does **not** default `extraDependencyGroups` to `["mcp"]`. Native
 - `packages.<system>.mcp-proxy` / `agent-browser` and `overlays.default`
 - `lib.mkDockerEnv` / `lib.forPkgs` — OCI + env helpers
 - `plugins.<name>` — raw plugin source paths
-- `templates.default` — `nix flake init -t github:aean0x/hermes-pnp`
 
 Double-import of the official modules is fine: they merge.
+
+## Examples
+
+Copy a module from [`examples/`](examples/). They are snippets for a
+consumer flake, not a host. `nix flake check` evaluates each file.
+
+| File | Role |
+| --- | --- |
+| [`examples/composer.nix`](examples/composer.nix) | Native drop-in (pairing, models, plugins, WebUI, toolbox, browser) |
+| [`examples/container.nix`](examples/container.nix) | Agent + WebUI + browser in the Ubuntu OCI jail |
+| [`examples/library-plugins.nix`](examples/library-plugins.nix) | Composer off; first-party plugins only |
+| [`examples/mcp-proxy.nix`](examples/mcp-proxy.nix) | Loopback MCP proxy + `mcpServers` |
+| [`examples/gbrain.nix`](examples/gbrain.nix) | Loopback `gbrain serve` |
+| [`examples/browser.nix`](examples/browser.nix) | CDP engine + dashboard `publicUrl` |
+| [`examples/toolbox.nix`](examples/toolbox.nix) | Extra CLI on the shared PATH |
+| [`examples/skills.nix`](examples/skills.nix) | Consumer `extraSkills` |
+| [`examples/hmc.nix`](examples/hmc.nix) | Pin hermes-context-manager |
+
+The drop-in block above is `examples/composer.nix`. Combine files
+(container + gbrain, composer + mcp-proxy) when you want more than one
+product.
 
 ## Plugins
 
@@ -173,10 +193,8 @@ Off by default. When enabled, starts loopback `gbrain serve`
 two gbrain plugins even if they are not in `plugins`. The CLI is still
 a consumer bootstrap (`bun install -g`). No PGLite / registry from Nix.
 
-```nix
-services.hermesPnP.gbrain.enable = true;
-# url / bind / port / tokenFile have conventional defaults
-```
+See [`examples/gbrain.nix`](examples/gbrain.nix). `url` / `bind` /
+`port` / `tokenFile` have conventional defaults.
 
 Listing the GBrain plugins does not require this hook.
 
@@ -214,21 +232,8 @@ GBrain tokens stay on `gbrain.tokenFile`, not this file. Site identity
 
 Composer does not auto-enable it.
 
-```nix
-services.hermesPnP.mcpProxy = {
-  enable = true;
-  backends.example = {
-    upstream = "https://example.example/mcp";
-    secrets.Authorization = {
-      file = config.sops.secrets.example_api_key.path;
-      prefix = "Bearer ";
-    };
-  };
-};
-
-# Point the MCP client at the proxy:
-#   url = "http://127.0.0.1:3140/example";
-```
+See [`examples/mcp-proxy.nix`](examples/mcp-proxy.nix). Point official
+`mcpServers.<name>.url` at `http://127.0.0.1:3140/<backend>`.
 
 ### Auth
 

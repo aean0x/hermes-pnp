@@ -66,31 +66,29 @@ let
 
   modulesConfig = eval [ ../examples/composer.nix ];
 
-  dropInConfig = eval [ ../examples/library-path.nix ];
+  dropInConfig = eval [ ../examples/library-plugins.nix ];
 
-  gbrainConfig = eval [
-    {
-      services.hermes-agent.enable = true;
-      services.hermesPnP.enable = true;
-      services.hermesPnP.gbrain.enable = true;
-    }
-  ];
+  gbrainConfig = eval [ ../examples/gbrain.nix ];
 
-  containerConfig = eval [
-    {
-      services.hermes-agent.enable = true;
-      services.hermesPnP.enable = true;
-      services.hermesPnP.container.enable = true;
-    }
-  ];
+  containerConfig = eval [ ../examples/container.nix ];
 
   containerGbrainConfig = eval [
-    {
-      services.hermes-agent.enable = true;
-      services.hermesPnP.enable = true;
-      services.hermesPnP.container.enable = true;
-      services.hermesPnP.gbrain.enable = true;
-    }
+    ../examples/container.nix
+    ../examples/gbrain.nix
+  ];
+
+  mcpProxyConfig = eval [ ../examples/mcp-proxy.nix ];
+
+  browserConfig = eval [ ../examples/browser.nix ];
+
+  toolboxConfig = eval [ ../examples/toolbox.nix ];
+
+  skillsConfig = eval [ ../examples/skills.nix ];
+
+  # hmc.enable fetches GitHub; keep the pin options, skip the fetch.
+  hmcConfig = eval [
+    ../examples/hmc.nix
+    { services.hermesPnP.hmc.enable = lib.mkForce false; }
   ];
 
   optionsEval = evalSystem [ ];
@@ -215,6 +213,21 @@ in
     test "${toString (optionsEval.options.services.hermesPnP ? container)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.container.enable.default}" = ""
     test "${optionsEval.config.services.hermesPnP.container.image}" = "ubuntu:24.04"
+    touch "$out"
+  '';
+
+  examples = pkgs.runCommand "hermes-pnp-examples-eval" { } ''
+    test "${toString mcpProxyConfig.services.hermesPnP.mcpProxy.enable}" = "1"
+    test "${mcpProxyConfig.services.hermesPnP.mcpProxy.backends.github.auth.mode}" = "passthrough"
+    test "${mcpProxyConfig.services.hermesPnP.mcpProxy.backends.docs.upstream}" = "https://example.invalid/mcp"
+    test "${mcpProxyConfig.services.hermes-agent.mcpServers.github.url}" = "http://127.0.0.1:3140/github"
+    test "${toString (mcpProxyConfig.systemd.services ? mcp-proxy)}" = "1"
+    test "${browserConfig.services.hermesPnP.browser.gate.publicUrl}" = "https://browser.example.com/"
+    test "${toString (browserConfig.services.hermesPnP.browser.package == pkgs.brave)}" = "1"
+    test "${toString (builtins.elem pkgs.sops toolboxConfig.services.hermesPnP.toolbox.extraPackages)}" = "1"
+    test "${toString (skillsConfig.services.hermesPnP.skills.extraSkills ? site-runbook)}" = "1"
+    test "${toString (hmcConfig.services.hermesPnP.hmc.compressPercent == 0.30)}" = "1"
+    test "${toString hmcConfig.services.hermesPnP.hmc.enable}" = ""
     touch "$out"
   '';
 }

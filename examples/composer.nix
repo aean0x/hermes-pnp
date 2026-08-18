@@ -1,5 +1,35 @@
-# Composer path: one enable turns on pairing opinions.
+# Native composer. One enable pairs agent + WebUI + toolbox + browser
+# and seeds models / default plugins. Site identity stays in the consumer.
+#
+# Import: inputs.hermes-pnp.nixosModules.default
 {
   services.hermes-agent.enable = true;
-  services.hermesPnP.enable = true;
+
+  services.hermesPnP = {
+    enable = true;
+    # environmentFiles = [ config.sops.templates.hermesEnv.path ];
+
+    models.low = {
+      provider = "deepseek";
+      model = "deepseek-v4-flash";
+    };
+    models.medium = {
+      provider = "deepseek";
+      model = "deepseek-v4-pro";
+    };
+    models.high = {
+      provider = "xai-oauth";
+      model = "grok-4.6";
+    };
+
+    plugins = [
+      "model-router"
+      "tool-call-coherency"
+      "secret-handoff"
+    ];
+
+    # webui.enable = true;
+    # toolbox.enable = true;
+    # browser.enable = true;
+  };
 }

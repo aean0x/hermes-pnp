@@ -100,8 +100,7 @@ hermes-pnp/
     mcp-proxy/                   # default.nix + src/tests/examples
     agent-browser.nix
   checks/                        # eval + plugin/proxy tests
-  examples/                      # composer.nix, library-path.nix (evalled by checks)
-  templates/default/             # nix flake init -t …
+  examples/                      # consumer snippets; evalled by checks
   plugins/                       # first-party plugin source + catalog.nix
   skills/                        # first-party skill source + catalog.nix
   scripts/                       # operator one-shots (not Nix)
@@ -323,8 +322,8 @@ their hand-rolled WebUI pairing, plugin symlink scripts, and bundled
 share env once they opt into the composer.
 
 rk3588-nixos-nas is a *consumer*, not this repo. Host cutover is a
-follow-up PR there. This repo ships the composer and a documented
-example.
+follow-up PR there. This repo ships the composer and `examples/`
+(native, jail, library plugins, and each configurable sub-product).
 
 ## Plugins
 
@@ -652,5 +651,5 @@ Shipped as `refactor: library-flake layout (modules/, lib/, pkgs/, examples/)`.
 - `packages.default` is unset. mcp-proxy source lives under
   `pkgs/mcp-proxy/`. Cookie import lives next to the browser module.
   There is no `services/` tree.
-- `examples/` is evalled by `checks`. `templates.default` is the
-  consumer starter.
+- `examples/` is evalled by `checks`. No `templates.default` — this
+  flake is imported by a host, not inited as one.

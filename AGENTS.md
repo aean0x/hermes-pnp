@@ -61,7 +61,7 @@ modules/browser/          # CDP browser + dashboard + cookie import
 pkgs/mcp-proxy/           # proxy package + src/tests/examples
 pkgs/agent-browser.nix    # pinned musl-static release
 checks/                   # eval + plugin/proxy tests (CI)
-examples/                 # composer + library-path (evalled by checks)
+examples/                 # consumer snippets (evalled by checks); not a host template
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
 scripts/                  # gbrain-setup / validate-gbrain (operator; not Nix)

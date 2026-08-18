@@ -81,11 +81,6 @@
         }
       );
 
-      templates.default = {
-        path = ./templates/default;
-        description = "NixOS host using hermes-pnp composer";
-      };
-
       formatter = forAllSystems (system: (pkgsFor system).nixfmt-rfc-style);
 
       devShells = forAllSystems (
