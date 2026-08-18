@@ -1,18 +1,23 @@
-# Persistent CDP browser + optional phone noVNC.
+# Persistent CDP browser + agent-browser dashboard gate.
 #
 # Two modes:
 # - host-native (default unless hermesPnP.container.enable): systemd
-#   units as the hermes user, hardened.
+#   units as the hermes user, hardened. Brave is independently
+#   supervised so a gate crash does not kill the warm profile.
 # - container: one Ubuntu OCI container (same docker create --network=host
 #   + /nix/store pattern as official hermes-agent.container). Mounts
-#   workspace + profile + cookies + logs. Not hermes home, not .hermes,
-#   not /etc. Xvfb/x11vnc/noVNC live in the same container so they share
-#   the X socket.
+#   workspace + profile + cookies + logs + gate state. Not hermes home,
+#   not .hermes, not /etc. Xvfb + engine + gate share the container.
 #
 # Takeover: same local browser, two control planes.
-#   Agent  = CDP 127.0.0.1:9222
-#   Human  = noVNC on listenAddress (default 127.0.0.1) via Caddy
-# VNC password stays as a second factor. Do not bind 0.0.0.0.
+#   Agent  = CDP 127.0.0.1:9222  (browser_* tools, unchanged)
+#   Human  = agent-browser dashboard on listenAddress (default 127.0.0.1)
+#            via Caddy. CDP screencast + input injection. No VNC, no
+#            password, no framebuffer.
+#
+# agent-browser connect ATTACHES to the existing engine. It will launch
+# its own Chrome if CDP is down — the gate refuses to connect until
+# /json/version answers.
 {
   config,
   lib,
@@ -38,26 +43,26 @@ let
   logDir = cfg.logDir;
   workspaceDir = cfg.workspaceDir;
   cdpPort = cfg.cdpPort;
-  vncPort = cfg.noVNC.vncPort;
-  novncPort = cfg.noVNC.port;
-  listenAddr = cfg.noVNC.listenAddress;
+  gatePort = cfg.gate.port;
+  listenAddr = cfg.gate.listenAddress;
   displayNum = "99";
   display = ":${displayNum}";
   cdpAddr = "127.0.0.1";
 
   home = "${agent.stateDir}/home";
   hermesEnv = "${agent.stateDir}/.hermes/.env";
+  gateHome = "${agent.stateDir}/browser-gate";
 
-  vncPassFile = "${agent.stateDir}/browser-vnc.pass";
-  vncEnvFile = "/run/hermes-browser-vnc.env";
   cdpEnvFile = "/run/hermes-browser.env";
 
   browserBin = "${cfg.package}/bin/${cfg.engine}";
 
-  novncUrl =
-    if cfg.noVNC.publicUrl != null
-    then cfg.noVNC.publicUrl
-    else "http://127.0.0.1:${toString novncPort}/vnc.html";
+  agentBrowser = pkgs.callPackage ./package.nix { };
+
+  gateUrl =
+    if cfg.gate.publicUrl != null
+    then cfg.gate.publicUrl
+    else "http://127.0.0.1:${toString gatePort}";
 
   chromiumAliases = pkgs.runCommand "chromium-alias" { } ''
     mkdir -p "$out/bin"
@@ -77,6 +82,80 @@ let
     text = ''
       set -euo pipefail
       exec python3 ${importCookiesPy} --cdp "http://${cdpAddr}:${toString cdpPort}" "$@"
+    '';
+  };
+
+  # Foreground supervisor around a daemonizing dashboard.
+  # dashboard start returns immediately; we health-check and stay
+  # in the foreground so systemd can restart us. Never `connect`
+  # unless CDP is up — connect would otherwise spawn a second browser.
+  hermesBrowserGate = pkgs.writeShellApplication {
+    name = "hermes-browser-gate";
+    runtimeInputs = [
+      agentBrowser
+      pkgs.curl
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    text = ''
+      set -euo pipefail
+
+      export AGENT_BROWSER_NAMESPACE=hermes
+      export AGENT_BROWSER_IDLE_TIMEOUT_MS=0
+      export HOME=${gateHome}
+      export XDG_CONFIG_HOME=${gateHome}/.config
+      export XDG_CACHE_HOME=${gateHome}/.cache
+      export XDG_STATE_HOME=${gateHome}/.local/state
+      mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" ${logDir}
+
+      cdp="http://${cdpAddr}:${toString cdpPort}"
+      dash="http://127.0.0.1:${toString gatePort}"
+
+      cleanup() {
+        agent-browser dashboard stop >/dev/null 2>&1 || true
+        exit 0
+      }
+      trap cleanup TERM INT
+
+      echo "waiting for CDP $cdp"
+      up=0
+      for _ in $(seq 1 90); do
+        if curl -sf --max-time 1 "$cdp/json/version" >/dev/null; then
+          up=1
+          break
+        fi
+        sleep 1
+      done
+      if [[ "$up" != "1" ]]; then
+        echo "cdp never came up; refusing to connect (would spawn a second browser)" >&2
+        exit 1
+      fi
+
+      # Stale-daemon quirk: "already running" while the port is dead.
+      if ! curl -sf --max-time 1 -o /dev/null "$dash/"; then
+        agent-browser dashboard stop >/dev/null 2>&1 || true
+      fi
+
+      echo "attaching to existing browser via CDP $cdp"
+      agent-browser connect ${toString cdpPort}
+
+      echo "starting dashboard on $dash"
+      agent-browser dashboard start --port ${toString gatePort}
+
+      while true; do
+        if ! curl -sf --max-time 2 -o /dev/null "$dash/"; then
+          echo "dashboard down; restarting"
+          agent-browser dashboard stop >/dev/null 2>&1 || true
+          agent-browser dashboard start --port ${toString gatePort} || true
+        fi
+        if ! agent-browser session info --json 2>/dev/null | grep -q '"connectionMethod":"cdp"'; then
+          if curl -sf --max-time 1 "$cdp/json/version" >/dev/null; then
+            echo "session dropped; reconnecting"
+            agent-browser connect ${toString cdpPort} || true
+          fi
+        fi
+        sleep 5
+      done
     '';
   };
 
@@ -101,11 +180,10 @@ let
     runtimeInputs = [
       pkgs.xvfb
       pkgs.xorg.xdpyinfo
-      pkgs.x11vnc
-      pkgs.novnc
-      pkgs.python3Packages.websockify
       pkgs.coreutils
+      pkgs.curl
       cfg.package
+      hermesBrowserGate
     ];
     text = ''
       set -euo pipefail
@@ -114,7 +192,7 @@ let
       export HOME=/tmp/browser-home
       export XDG_CONFIG_HOME=/tmp/browser-home/.config
       export XDG_CACHE_HOME=/tmp/browser-home/.cache
-      mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" /tmp/.X11-unix ${profileDir} ${cookiesDir} ${logDir}
+      mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" /tmp/.X11-unix ${profileDir} ${cookiesDir} ${logDir} ${gateHome}
       touch "$XAUTHORITY"
       chmod 600 "$XAUTHORITY"
 
@@ -125,31 +203,11 @@ let
         sleep 0.1
       done
 
-      if [[ "''${VNC_ENABLE:-}" == "1" ]]; then
-        webroot=""
-        for d in \
-          ${pkgs.novnc}/share/novnc \
-          ${pkgs.novnc}/share/webapps/novnc \
-          ${pkgs.novnc}/share/novnc/www
-        do
-          if [[ -d "$d" ]]; then webroot="$d"; break; fi
-        done
-        if [[ -z "$webroot" ]]; then
-          echo "novnc web root not found under ${pkgs.novnc}" >&2
-          exit 1
-        fi
-        x11vnc \
-          -display ${display} \
-          -rfbport ${toString vncPort} \
-          -localhost \
-          -rfbauth ${profileDir}/.vncpass \
-          -shared -forever -noxdamage -wait 10 -defer 10 \
-          -o ${logDir}/x11vnc.log &
-        websockify \
-          --web "$webroot" \
-          ${listenAddr}:${toString novncPort} \
-          127.0.0.1:${toString vncPort} &
-      fi
+      ${
+        if cfg.gate.enable then ''
+          hermes-browser-gate &
+        '' else ""
+      }
 
       # --no-sandbox: container is the jail (no chrome-sandbox SUID).
       exec ${browserBin} \
@@ -177,16 +235,14 @@ let
     "${profileDir}:${profileDir}"
     "${cookiesDir}:${cookiesDir}"
     "${logDir}:${logDir}"
-    "${vncPassFile}:${vncPassFile}:ro"
+    "${gateHome}:${gateHome}"
   ] ++ bctr.extraVolumes;
-
-  extraEnv = lib.optionalAttrs cfg.noVNC.enable { VNC_ENABLE = "1"; };
 
   identity = {
     image = bctr.image;
     inherit volumes;
     extraOptions = bctr.extraOptions;
-    inherit extraEnv;
+    extraEnv = { };
     package = "${supervisor}";
     inherit entrypoint;
   };
@@ -196,7 +252,8 @@ let
     containerName = "hermes-browser";
     image = bctr.image;
     user = agent.user;
-    inherit volumes extraEnv entrypoint identity;
+    inherit volumes entrypoint identity;
+    extraEnv = { };
     extraOptions = bctr.extraOptions;
     envFiles = [ ];
     command = [ "${supervisor}/bin/hermes-browser-supervisor" ];
@@ -223,10 +280,9 @@ in
         cfg.package
         chromiumAliases
         pkgs.xvfb
-        pkgs.x11vnc
-        pkgs.novnc
-        pkgs.python3Packages.websockify
+        agentBrowser
         hermesBrowserImportCookies
+        hermesBrowserGate
         (pkgs.writeShellScriptBin "hermes-browser-status" ''
           set -euo pipefail
           echo "engine:   ${cfg.engine}"
@@ -235,40 +291,35 @@ in
           echo "workspace:${workspaceDir}"
           echo "cookies:  ${cookiesDir}  (drop Netscape/JSON; import with hermes-browser-import-cookies)"
           echo "cdp:      http://${cdpAddr}:${toString cdpPort}"
-          echo "novnc:    ${novncUrl}"
+          echo "gate:     ${gateUrl}"
           if ${pkgs.curl}/bin/curl -fsS --max-time 2 "http://${cdpAddr}:${toString cdpPort}/json/version"; then
             echo
             echo "cdp:      up"
           else
             echo "cdp:      down"
           fi
-          if ${pkgs.curl}/bin/curl -fsS --max-time 2 -o /dev/null "http://127.0.0.1:${toString novncPort}/vnc.html"; then
-            echo "novnc:    up"
+          if ${pkgs.curl}/bin/curl -fsS --max-time 2 -o /dev/null "http://127.0.0.1:${toString gatePort}/"; then
+            echo "gate:     up"
           else
-            echo "novnc:    down"
+            echo "gate:     down"
           fi
-          if [[ -f ${vncEnvFile} ]]; then
-            echo "--- relay env (password redacted) ---"
-            ${pkgs.gnused}/bin/sed -E 's/(PASSWORD|VNC_PASSWORD)=.*/\1=***/' ${vncEnvFile}
-          fi
-          ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service hermes-browser-vnc.service hermes-browser-novnc.service || true
+          ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service hermes-browser-gate.service || true
         '')
       ];
 
-      # Loopback is the default. Only punch the firewall if someone
-      # explicitly binds off-loopback (not recommended).
+      # Dashboard binds loopback. Only punch the firewall if someone
+      # explicitly binds off-loopback (not recommended; Caddy instead).
       networking.firewall.allowedTCPPorts =
-        optionals (cfg.noVNC.enable && listenAddr != "127.0.0.1" && listenAddr != "localhost") [ novncPort ];
+        optionals (cfg.gate.enable && listenAddr != "127.0.0.1" && listenAddr != "localhost") [ gatePort ];
 
       systemd.tmpfiles.rules = [
         "d ${profileDir} 0750 ${agent.user} ${agent.group} - -"
         "d ${cookiesDir} 0750 ${agent.user} ${agent.group} - -"
         "d ${logDir} 0750 ${agent.user} ${agent.group} - -"
         "d ${workspaceDir} 0755 ${agent.user} ${agent.group} - -"
+        "d ${gateHome} 0750 ${agent.user} ${agent.group} - -"
         "d ${home} 0755 ${agent.user} ${agent.group} - -"
         "f ${cdpEnvFile} 0640 ${agent.user} ${agent.group} - "
-        "f ${vncEnvFile} 0640 ${agent.user} ${agent.group} - "
-        "f ${vncPassFile} 0600 ${agent.user} ${agent.group} - "
       ];
 
       services.hermes-agent = {
@@ -277,87 +328,70 @@ in
           BU_CDP_URL = "http://${cdpAddr}:${toString cdpPort}";
           HERMES_BROWSER_CDP_URL = "http://${cdpAddr}:${toString cdpPort}";
           HERMES_BROWSER_PROFILE = profileDir;
-          HERMES_BROWSER_NOVNC_PORT = toString novncPort;
+          HERMES_BROWSER_GATE_URL = gateUrl;
+          HERMES_BROWSER_GATE_PORT = toString gatePort;
           HERMES_BROWSER_ENGINE = cfg.engine;
         };
-        environmentFiles = [ cdpEnvFile ];
         settings.browser = {
           cdp_url = "http://${cdpAddr}:${toString cdpPort}";
-          allow_private_urls = true;
         };
       };
 
       systemd.services.hermes-browser-env = {
-        description = "Write Hermes browser CDP/noVNC env";
+        description = "Seed Hermes browser CDP + gate env";
         wantedBy = [ "multi-user.target" ];
-        before = [ "hermes-agent.service" ];
-        after = [ "network-online.target" ];
-        wants = [ "network-online.target" ];
+        before = [ "hermes-browser.service" ];
+
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
+          User = "root";
         };
+
         script = ''
           set -euo pipefail
           umask 027
-
-          if [[ ! -s ${vncPassFile} ]]; then
-            pw="$(${pkgs.openssl}/bin/openssl rand -base64 18 | ${pkgs.coreutils}/bin/tr -dc 'A-Za-z0-9' | ${pkgs.coreutils}/bin/head -c 12)"
-            echo -n "$pw" > ${vncPassFile}
-            chown ${agent.user}:${agent.group} ${vncPassFile}
-            chmod 0600 ${vncPassFile}
-          fi
-          pw="$(${pkgs.coreutils}/bin/cat ${vncPassFile})"
-          ${pkgs.x11vnc}/bin/x11vnc -storepasswd "$pw" ${profileDir}/.vncpass
-          chown ${agent.user}:${agent.group} ${profileDir}/.vncpass
-          chmod 0600 ${profileDir}/.vncpass
-
           cat > ${cdpEnvFile} <<EOF
-          # Auto-generated by services/browser/nix/module.nix — do not edit
           BROWSER_CDP_URL=http://${cdpAddr}:${toString cdpPort}
           BU_CDP_URL=http://${cdpAddr}:${toString cdpPort}
           HERMES_BROWSER_CDP_URL=http://${cdpAddr}:${toString cdpPort}
           HERMES_BROWSER_PROFILE=${profileDir}
-          HERMES_BROWSER_NOVNC_URL=${novncUrl}
-          HERMES_BROWSER_NOVNC_PORT=${toString novncPort}
+          HERMES_BROWSER_GATE_URL=${gateUrl}
+          HERMES_BROWSER_GATE_PORT=${toString gatePort}
           HERMES_BROWSER_ENGINE=${cfg.engine}
           EOF
           chown ${agent.user}:${agent.group} ${cdpEnvFile}
-          chmod 0640 ${cdpEnvFile}
 
-          cat > ${vncEnvFile} <<EOF
-          # Auto-generated — agent may relay to user on captcha handoff
-          HERMES_BROWSER_NOVNC_URL=${novncUrl}
-          HERMES_BROWSER_NOVNC_PASSWORD=$pw
-          HERMES_BROWSER_VNC_PASSWORD=$pw
+          if [[ -f ${hermesEnv} ]]; then
+            ${pkgs.gnused}/bin/sed -i \
+              -e '/^BROWSER_CDP_URL=/d' \
+              -e '/^BU_CDP_URL=/d' \
+              -e '/^HERMES_BROWSER_CDP_URL=/d' \
+              -e '/^HERMES_BROWSER_PROFILE=/d' \
+              -e '/^HERMES_BROWSER_GATE_URL=/d' \
+              -e '/^HERMES_BROWSER_GATE_PORT=/d' \
+              -e '/^HERMES_BROWSER_ENGINE=/d' \
+              -e '/^HERMES_BROWSER_NOVNC_URL=/d' \
+              -e '/^HERMES_BROWSER_NOVNC_PORT=/d' \
+              -e '/^HERMES_BROWSER_NOVNC_PASSWORD=/d' \
+              -e '/^HERMES_BROWSER_VNC_PASSWORD=/d' \
+              ${hermesEnv}
+            cat >> ${hermesEnv} <<EOF
+          BROWSER_CDP_URL=http://${cdpAddr}:${toString cdpPort}
+          BU_CDP_URL=http://${cdpAddr}:${toString cdpPort}
+          HERMES_BROWSER_CDP_URL=http://${cdpAddr}:${toString cdpPort}
+          HERMES_BROWSER_PROFILE=${profileDir}
+          HERMES_BROWSER_GATE_URL=${gateUrl}
+          HERMES_BROWSER_GATE_PORT=${toString gatePort}
+          HERMES_BROWSER_ENGINE=${cfg.engine}
           EOF
-          chown ${agent.user}:${agent.group} ${vncEnvFile}
-          chmod 0640 ${vncEnvFile}
-
-          if [[ -f "${hermesEnv}" ]]; then
-            for key in BROWSER_CDP_URL BU_CDP_URL HERMES_BROWSER_CDP_URL HERMES_BROWSER_PROFILE HERMES_BROWSER_NOVNC_URL HERMES_BROWSER_NOVNC_PORT HERMES_BROWSER_ENGINE; do
-              val="$(${pkgs.gnugrep}/bin/grep -E "^''${key}=" ${cdpEnvFile} | ${pkgs.coreutils}/bin/head -1 || true)"
-              if [[ -n "$val" ]]; then
-                ${pkgs.gnused}/bin/sed -i "/^''${key}=/d" "${hermesEnv}" 2>/dev/null || true
-                echo "$val" >> "${hermesEnv}"
-              fi
-            done
-            chown ${agent.user}:${agent.group} "${hermesEnv}"
-            chmod 0640 "${hermesEnv}"
+            chown ${agent.user}:${agent.group} ${hermesEnv}
           fi
         '';
       };
-
-      systemd.services.hermes-agent = {
-        after = [
-          "hermes-browser-env.service"
-          "hermes-browser.service"
-        ];
-        wants = [ "hermes-browser-env.service" ];
-      };
     })
 
-    # Host-native units (Xvfb/browser/vnc/novnc as separate systemd services).
+    # Host-native: Brave independently supervised; gate is a CDP client.
     (mkIf (pnp.enable && cfg.enable && !bctr.enable) {
       systemd.services.hermes-browser = {
         description = "Hermes persistent browser on Xvfb (CDP loopback)";
@@ -382,6 +416,9 @@ in
           TimeoutStartSec = 90;
           StandardOutput = "append:${logDir}/browser.stdout";
           StandardError = "append:${logDir}/browser.stderr";
+          # Xvfb + engine share this unit, so PrivateTmp is safe now
+          # that x11vnc no longer needs the host /tmp/.X11-unix.
+          PrivateTmp = true;
         } // hardenHost;
 
         environment = {
@@ -421,87 +458,31 @@ in
         '';
       };
 
-      systemd.services.hermes-browser-vnc = mkIf cfg.noVNC.enable {
-        description = "Hermes browser x11vnc (password-gated, loopback)";
+      systemd.services.hermes-browser-gate = mkIf cfg.gate.enable {
+        description = "Hermes browser gate (agent-browser dashboard, loopback)";
         wantedBy = [ "multi-user.target" ];
         after = [
           "hermes-browser.service"
           "hermes-browser-env.service"
         ];
-        requires = [ "hermes-browser.service" ];
+        wants = [ "hermes-browser.service" ];
 
         serviceConfig = {
           Type = "simple";
           User = agent.user;
           Group = agent.group;
-          Restart = "on-failure";
+          Restart = "always";
           RestartSec = 3;
-          StandardOutput = "append:${logDir}/x11vnc.stdout";
-          StandardError = "append:${logDir}/x11vnc.stderr";
+          TimeoutStartSec = 120;
+          StandardOutput = "append:${logDir}/gate.stdout";
+          StandardError = "append:${logDir}/gate.stderr";
+          PrivateTmp = true;
+          ExecStart = "${hermesBrowserGate}/bin/hermes-browser-gate";
         } // hardenHost;
-
-        environment.DISPLAY = display;
-
-        script = ''
-          set -euo pipefail
-          for i in $(seq 1 30); do
-            if [[ -e /tmp/.X11-unix/X${displayNum} ]]; then break; fi
-            sleep 0.5
-          done
-          exec ${pkgs.x11vnc}/bin/x11vnc \
-            -display ${display} \
-            -rfbport ${toString vncPort} \
-            -localhost \
-            -rfbauth ${profileDir}/.vncpass \
-            -shared \
-            -forever \
-            -noxdamage \
-            -wait 10 \
-            -defer 10 \
-            -o ${logDir}/x11vnc.log
-        '';
-      };
-
-      systemd.services.hermes-browser-novnc = mkIf cfg.noVNC.enable {
-        description = "Hermes browser noVNC (loopback; proxy via Caddy)";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "hermes-browser-vnc.service" ];
-        requires = [ "hermes-browser-vnc.service" ];
-
-        serviceConfig = {
-          Type = "simple";
-          User = agent.user;
-          Group = agent.group;
-          Restart = "on-failure";
-          RestartSec = 3;
-          StandardOutput = "append:${logDir}/novnc.stdout";
-          StandardError = "append:${logDir}/novnc.stderr";
-        } // hardenHost;
-
-        script = ''
-          set -euo pipefail
-          webroot=""
-          for d in \
-            ${pkgs.novnc}/share/novnc \
-            ${pkgs.novnc}/share/webapps/novnc \
-            ${pkgs.novnc}/share/novnc/www
-          do
-            if [[ -d "$d" ]]; then webroot="$d"; break; fi
-          done
-          if [[ -z "$webroot" ]]; then
-            echo "novnc web root not found under ${pkgs.novnc}" >&2
-            ls -la ${pkgs.novnc}/share || true
-            exit 1
-          fi
-          exec ${pkgs.python3Packages.websockify}/bin/websockify \
-            --web "$webroot" \
-            ${listenAddr}:${toString novncPort} \
-            127.0.0.1:${toString vncPort}
-        '';
       };
     })
 
-    # OCI mode: one container, one unit. vnc/novnc are inside.
+    # OCI mode: one container, one unit. Gate runs inside next to Brave.
     (mkIf (pnp.enable && cfg.enable && bctr.enable) {
       virtualisation.docker.enable = mkIf (bctr.backend == "docker") (mkDefault true);
 
@@ -510,27 +491,29 @@ in
         wantedBy = [ "multi-user.target" ];
         after = [
           "network-online.target"
-          "docker.service"
           "hermes-browser-env.service"
+          "docker.service"
         ];
         wants = [
           "network-online.target"
           "hermes-browser-env.service"
         ];
-        requires = [ "docker.service" ];
-        preStart = unit.preStart;
-        script = unit.script;
-        preStop = unit.preStop;
+        path = [
+          pkgs.docker
+          pkgs.coreutils
+        ];
+        environment.PATH = lib.mkForce null;
+
         serviceConfig = {
           Type = "simple";
           Restart = "on-failure";
           RestartSec = 5;
-          MemoryMax = "1G";
-          OOMScoreAdjust = 500;
           TimeoutStartSec = 180;
           TimeoutStopSec = 30;
+          ExecStartPre = unit.preStart;
+          ExecStart = unit.start;
+          ExecStop = unit.stop;
         };
-        path = [ pkgs.docker pkgs.coreutils ];
       };
     })
   ];
