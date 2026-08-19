@@ -198,7 +198,7 @@ in
 
     maxTabs = mkOption {
       type = types.nullOr types.ints.positive;
-      default = 2;
+      default = 5;
       description = ''
         Cap live page targets. Adds --renderer-process-limit and a
         CDP prune loop in the container supervisor. Null disables.
