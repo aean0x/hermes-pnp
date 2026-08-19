@@ -224,6 +224,7 @@ in
     test "${toString (containerConfig.systemd.services ? hermes-browser-novnc)}" = ""
     test "${toString (containerConfig.systemd.services ? hermes-browser-env)}" = ""
     test "${toString (containerConfig.systemd.services ? hermes-browser-gate)}" = ""
+    test "${toString (lib.hasInfix "session info --json" (builtins.readFile ../modules/browser/shared.nix))}" = ""
     test "${containerConfig.services.hermesPnP.browser.gate.listenAddress}" = "127.0.0.1"
     test "${toString containerConfig.services.hermesPnP.browser.gate.port}" = "4848"
     test "${toString (builtins.elem 6080 containerConfig.networking.firewall.allowedTCPPorts)}" = ""

@@ -130,6 +130,15 @@ let
       }
       trap cleanup TERM INT
 
+      # gateHome is bind-mounted. A leftover default.version (0.27.0)
+      # plus the full /nix/store bind lets connect exec an old daemon.
+      rm -f "$HOME/.agent-browser/"*.pid \
+            "$HOME/.agent-browser/"*.sock \
+            "$HOME/.agent-browser/"*.stream \
+            "$HOME/.agent-browser/"*.version
+      rm -rf "$HOME/.agent-browser/namespaces"
+      agent-browser dashboard stop >/dev/null 2>&1 || true
+
       echo "waiting for CDP $cdp"
       up=0
       for _ in $(seq 1 90); do
@@ -142,11 +151,6 @@ let
       if [[ "$up" != "1" ]]; then
         echo "cdp never came up; refusing to connect (would spawn a second browser)" >&2
         exit 1
-      fi
-
-      # Stop a stale dashboard that still reports running.
-      if ! curl -sf --max-time 1 -o /dev/null "$dash/"; then
-        agent-browser dashboard stop >/dev/null 2>&1 || true
       fi
 
       echo "attaching to existing browser via CDP $cdp"
@@ -163,18 +167,18 @@ let
       echo "starting dashboard on $dash (host ${listenAddr})"
       start_dash
 
+      # Watchdog is dashboard HTTP. Do not probe CLI session JSON.
       while true; do
-        if ! curl -sf --max-time 2 -o /dev/null "$dash/"; then
-          echo "dashboard down; restarting"
-          agent-browser dashboard stop >/dev/null 2>&1 || true
-          start_dash || true
+        if curl -sf --max-time 2 -o /dev/null "$dash/"; then
+          sleep 5
+          continue
         fi
-        if ! agent-browser session info --json 2>/dev/null | grep -q '"connectionMethod":"cdp"'; then
-          if curl -sf --max-time 1 "$cdp/json/version" >/dev/null; then
-            echo "session dropped; reconnecting"
-            agent-browser connect ${toString cdpPort} || true
-          fi
+        echo "dashboard down; restarting"
+        agent-browser dashboard stop >/dev/null 2>&1 || true
+        if curl -sf --max-time 1 "$cdp/json/version" >/dev/null; then
+          agent-browser connect ${toString cdpPort} || true
         fi
+        start_dash || true
         sleep 5
       done
     '';

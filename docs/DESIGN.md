@@ -310,7 +310,11 @@ independent of the agent list.
 `hermesPnP.browser.maxTabs` (default 2) adds
 `--renderer-process-limit` and a CDP prune loop. The container
 supervisor drops Chromium session-restore files on each engine
-start.
+start. Gate watchdog is dashboard HTTP + CDP, not
+`session info --json` (0.34 has no `connectionMethod`; grepping it
+reconnects every 5s). Leftover `.agent-browser` sockets/version
+under gateHome are wiped on start so an old store path cannot
+keep a 0.27 daemon alive.
 
 `hermesPnP.admin.enable` (off by default) is a host unix socket
 at `/run/hermes-admin/admin.sock` (0660, group hermes). The
