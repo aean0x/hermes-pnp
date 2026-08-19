@@ -253,7 +253,13 @@ in
           else
             echo "gate:     down"
           fi
-          ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service hermes-browser-gate.service || true
+          ${
+            if bctr.enable then ''
+              ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service || true
+            '' else ''
+              ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service hermes-browser-gate.service || true
+            ''
+          }
         '')
       ];
 
