@@ -162,7 +162,6 @@ in
         RestrictAddressFamilies = [ "AF_UNIX" ];
         RestrictSUIDSGID = true;
         LockPersonality = true;
-        MemoryDenyWriteExecute = true;
       };
     };
 
