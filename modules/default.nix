@@ -14,6 +14,7 @@
     ./hmc.nix
     ./webui
     ./browser
+    ./admin.nix
     ./mcp-proxy.nix
   ];
 }

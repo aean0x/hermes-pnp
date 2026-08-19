@@ -195,11 +195,27 @@ in
       ];
       description = "Extra chromium flags appended to the browser ExecStart.";
     };
+
+    maxTabs = mkOption {
+      type = types.nullOr types.ints.positive;
+      default = 2;
+      description = ''
+        Cap live page targets. Adds --renderer-process-limit and a
+        CDP prune loop in the container supervisor. Null disables.
+        Agent browsers do not need a human tab pile.
+      '';
+    };
   };
 
   config = mkMerge [
     (mkIf pnp.enable {
       services.hermesPnP.browser.container = oci.followComposerContainer pnp;
+    })
+
+    (mkIf (pnp.enable && cfg.enable && cfg.maxTabs != null) {
+      services.hermesPnP.browser.extraArgs = [
+        "--renderer-process-limit=${toString cfg.maxTabs}"
+      ];
     })
 
     (mkIf (pnp.enable && cfg.enable) {

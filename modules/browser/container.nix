@@ -27,7 +27,27 @@ let
     launchXvfb
     waitForDisplay
     chromiumExec
+    cdpPort
     ;
+
+  pruneTabs = pkgs.writeScript "hermes-browser-prune-tabs" ''
+    #!${pkgs.python3}/bin/python3
+    import json, sys, urllib.request
+    port, cap = sys.argv[1], int(sys.argv[2])
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=2) as r:
+            targets = json.load(r)
+    except Exception:
+        raise SystemExit(0)
+    pages = [t for t in targets if t.get("type") == "page" and t.get("id")]
+    for t in pages[:-cap]:
+        try:
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/json/close/{t['id']}", timeout=2
+            ).read()
+        except Exception:
+            pass
+  '';
 
   supervisor = pkgs.writeShellApplication {
     name = "hermes-browser-supervisor";
@@ -56,10 +76,23 @@ let
         '' else ""
       }
 
-      # --no-sandbox: the container is the jail.
+      ${
+        if cfg.maxTabs != null then ''
+          while true; do
+            ${pruneTabs} ${toString cdpPort} ${toString cfg.maxTabs} || true
+            sleep 20
+          done &
+        '' else ""
+      }
+
       # Restart the engine in-process. Xvfb and the gate stay up.
       while true; do
         echo "$(date -Iseconds) start" >> ${logDir}/supervisor.log
+        rm -f ${profileDir}/Default/"Current Session" \
+              ${profileDir}/Default/"Last Session" \
+              ${profileDir}/Default/"Current Tabs" \
+              ${profileDir}/Default/"Last Tabs"
+        rm -rf ${profileDir}/Default/Sessions
         ${chromiumExec} \
           >> ${logDir}/browser.stdout \
           2>> ${logDir}/browser.stderr \
