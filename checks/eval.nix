@@ -79,6 +79,10 @@ let
       services.hermesPnP.browser.container.shmSize = "256m";
     }
   ];
+  adminConfig = eval [
+    ../examples/container.nix
+    { services.hermesPnP.admin.enable = true; }
+  ];
 
   containerGbrainConfig = eval [
     ../examples/container.nix
@@ -195,6 +199,14 @@ in
     test "${toString (lib.hasInfix "--memory=2g" containerResourcesConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--cpus=2" containerResourcesConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--init" containerResourcesConfig.systemd.services.hermes-browser.preStart)}" = "1"
+    test "${toString (lib.elem "--renderer-process-limit=2" containerConfig.services.hermesPnP.browser.extraArgs)}" = "1"
+    test "${toString (containerConfig.systemd.sockets ? hermes-admin)}" = ""
+    test "${toString (lib.hasInfix "/run/hermes-admin" containerConfig.systemd.services.hermes-webui.preStart)}" = ""
+    test "${toString (adminConfig.systemd.sockets ? hermes-admin)}" = "1"
+    test "${toString (adminConfig.systemd.services ? "hermes-admin@")}" = "1"
+    test "${toString (lib.hasInfix "/run/hermes-admin:/run/hermes-admin" adminConfig.systemd.services.hermes-webui.preStart)}" = "1"
+    test "${toString (lib.elem "/run/hermes-admin:/run/hermes-admin" adminConfig.services.hermes-agent.container.extraVolumes)}" = "1"
+    test "${toString (lib.hasInfix "/run/docker.sock" adminConfig.systemd.services.hermes-webui.preStart)}" = ""
     test "${toString (lib.hasInfix "--read-only" containerConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--cap-drop=ALL" containerConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--user" containerConfig.systemd.services.hermes-webui.preStart)}" = "1"
@@ -272,6 +284,9 @@ in
     test "${toString optionsEval.options.services.hermesPnP.hmc.enable.default}" = ""
     test "${toString (optionsEval.options.services.hermesPnP ? container)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.container.enable.default}" = ""
+    test "${toString (optionsEval.options.services.hermesPnP ? admin)}" = "1"
+    test "${toString optionsEval.options.services.hermesPnP.admin.enable.default}" = ""
+    test "${toString (optionsEval.options.services.hermesPnP.browser ? maxTabs)}" = "1"
     test "${optionsEval.config.services.hermesPnP.container.image}" = "ubuntu:24.04"
     touch "$out"
   '';

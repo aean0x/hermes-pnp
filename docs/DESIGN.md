@@ -307,6 +307,20 @@ WebUI CA/gitconfig binds stay in `modules/webui/container.nix`.
 Jail image is ubuntu + `/nix/store:ro`. WebUI `extraVolumes` is
 independent of the agent list.
 
+`hermesPnP.browser.maxTabs` (default 2) adds
+`--renderer-process-limit` and a CDP prune loop. The container
+supervisor drops Chromium session-restore files on each engine
+start.
+
+`hermesPnP.admin.enable` (off by default) is a host unix socket
+at `/run/hermes-admin/admin.sock` (0660, group hermes). The
+allowlist is `status` / `restart` / `reset-failed` of
+`hermes-agent`, `hermes-webui`, `hermes-browser`. Restart also
+runs `reset-failed` and has a 15s cooldown. Jails bind that
+directory only — never `/run`, never the docker socket. CLI:
+`hermes-admin`. Sudo inside the jail cannot work
+(`no-new-privileges`).
+
 WebUI mounts: `/nix/store:ro`, agent stateDir → `/data`, agent home →
 `/home/hermes`, webui stateDir same-path, nss-cacert onto Ubuntu
 `/etc/ssl/certs/ca-certificates.crt` + `/etc/ssl/cert.pem`,

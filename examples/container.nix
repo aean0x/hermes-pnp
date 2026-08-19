@@ -27,4 +27,7 @@
   # services.hermesPnP.webui.container.cpus = 2;
   # services.hermesPnP.browser.container.memory = "1g";
   # services.hermesPnP.browser.container.shmSize = "256m";
+
+  # services.hermesPnP.admin.enable = true;
+  # services.hermesPnP.browser.maxTabs = 2;
 }
