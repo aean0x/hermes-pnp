@@ -135,6 +135,11 @@ in
         /nix/store:ro). Defaults on when hermesPnP.container.enable is set.
       '',
       extraOptionsDescription ? "Extra docker create args. Privilege-regain locks are always injected.",
+      memory ? null,
+      memorySwap ? null,
+      cpus ? null,
+      oomScoreAdj ? null,
+      shmSize ? null,
     }:
     {
       enable = mkOption {
@@ -164,6 +169,36 @@ in
         type = types.listOf types.str;
         default = extraOptions;
         description = extraOptionsDescription;
+      };
+      memory = mkOption {
+        type = types.nullOr types.str;
+        default = memory;
+        example = "2g";
+        description = "Docker --memory. Null = no cap. Prefer this over extraOptions.";
+      };
+      memorySwap = mkOption {
+        type = types.nullOr types.str;
+        default = memorySwap;
+        example = "2g";
+        description = "Docker --memory-swap. Null = omit (docker default). Set equal to memory to disable swap.";
+      };
+      cpus = mkOption {
+        type = types.nullOr types.number;
+        default = cpus;
+        example = 2;
+        description = "Docker --cpus. Null = no quota.";
+      };
+      oomScoreAdj = mkOption {
+        type = types.nullOr (types.ints.between (-1000) 1000);
+        default = oomScoreAdj;
+        example = 500;
+        description = "Docker --oom-score-adj. Positive = die first.";
+      };
+      shmSize = mkOption {
+        type = types.nullOr types.str;
+        default = shmSize;
+        example = "256m";
+        description = "Docker --shm-size. Chromium jails usually need this.";
       };
     };
 
@@ -195,8 +230,15 @@ in
       containerBinPkg = if cfg.backend == "docker" then pkgs.docker else pkgs.podman;
       needsDocker = cfg.backend == "docker";
       identityFile = "${identityDir}/${name}";
+      resourceFlags =
+        (lib.optional (cfg.memory != null) "--memory=${cfg.memory}")
+        ++ (lib.optional (cfg.memorySwap != null) "--memory-swap=${cfg.memorySwap}")
+        ++ (lib.optional (cfg.cpus != null) "--cpus=${toString cfg.cpus}")
+        ++ (lib.optional (cfg.oomScoreAdj != null) "--oom-score-adj=${toString cfg.oomScoreAdj}")
+        ++ (lib.optional (cfg.shmSize != null) "--shm-size=${cfg.shmSize}");
+      effectiveExtraOptions = cfg.extraOptions ++ resourceFlags;
       fullIdentity = {
-        inherit (cfg) image extraVolumes extraOptions;
+        inherit (cfg) image extraVolumes extraOptions memory memorySwap cpus oomScoreAdj shmSize;
         inherit extraEnv entrypoint envFiles command forcedCreateArgs;
         volumes = allVolumes;
       } // identity;
@@ -206,7 +248,7 @@ in
         image = cfg.image;
         inherit user extraEnv envFiles entrypoint command identityFile;
         volumes = allVolumes;
-        extraOptions = cfg.extraOptions;
+        extraOptions = effectiveExtraOptions;
         identity = fullIdentity;
       };
     in

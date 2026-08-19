@@ -177,15 +177,13 @@ in
     };
 
     container = oci.mkOciServiceOptions {
-      extraOptions = [
-        "--shm-size=2g"
-        "--init"
-      ];
-      extraOptionsDescription = "Extra docker create args. Privilege-regain locks are always injected.";
+      shmSize = "2g";
+      extraOptionsDescription = "Extra docker create args. Privilege-regain locks and --init are always injected.";
       description = ''
         Run Xvfb + browser + gate in one OCI jail (workspace, profile,
         cookies, logs, gate). Defaults on when hermesPnP.container.enable
-        is set.
+        is set. Override memory / cpus / shmSize here — do not mkForce
+        extraOptions just to set RAM.
       '';
     };
 
