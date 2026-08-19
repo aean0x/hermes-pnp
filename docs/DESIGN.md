@@ -386,9 +386,12 @@ the jail). Native gateway PATH is official `extraPackages`. Jail PATH
 is extraOptions `--env`.
 
 Default set includes git, curl, jq, ripgrep, file, unzip, python3
-(with requests/pyyaml/toml), gh, age. Browser PATH aliases live in the
+(with requests/pyyaml/toml/pip), gh, age. Browser PATH aliases live in the
 browser module. `docker`, `sops`, `nmap`, and language toolchains are
-consumer `extraPackages`.
+consumer `extraPackages`. WebUI jail gets the same `HERMES_PYTHON` as
+the agent jail (`/data/toolbox/bin/python3`). ubuntu:24.04 has no
+distro python and the jail is read-only (no apt); `pip install` goes
+to `~/.local` (`PIP_USER`).
 
 ## GBrain
 

@@ -59,6 +59,11 @@ let
   containerProcessEnv = {
     PATH = containerPath;
     HERMES_PYTHON = "${containerToolboxDir}/python3";
+    # Nix python is EXTERNALLY-MANAGED (immutable prefix). User installs
+    # go to ~/.local. PIP_USER is ignored inside a venv.
+    PIP_USER = "1";
+    PIP_BREAK_SYSTEM_PACKAGES = "1";
+    PYTHONUSERBASE = "${containerHome}/.local";
   };
 
   # Keep both python and python3 names explicit.
@@ -167,9 +172,12 @@ in
         requests
         pyyaml
         toml
+        pip
+        setuptools
+        wheel
       ];
-      defaultText = literalExpression "ps: with ps; [ requests pyyaml toml ]";
-      description = "Python packages baked into the toolbox python3/python.";
+      defaultText = literalExpression "ps: with ps; [ requests pyyaml toml pip setuptools wheel ]";
+      description = "Python packages baked into the toolbox python3/python. pip is for --user installs (jail prefix is immutable).";
     };
 
     # Resolved paths for other modules.
