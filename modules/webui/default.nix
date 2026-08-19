@@ -73,16 +73,11 @@ in
         }
         // optionalAttrs pnp.toolbox.enable {
           PATH = if wctr.enable then pnp.toolbox.containerPath else pnp.toolbox.hostPath;
-          # Same interpreter the agent jail gets. ubuntu:24.04 has no
-          # distro python; the WebUI jail is read-only so apt cannot add one.
+          # Writable ~/.venv (activation). ubuntu:24.04 has no distro
+          # python; the jail is read-only so apt cannot add one.
           HERMES_PYTHON =
-            if wctr.enable then "${pnp.toolbox.containerToolboxDir}/python3"
-            else "${pnp.toolbox.toolboxDir}/python3";
-          PIP_USER = "1";
-          PIP_BREAK_SYSTEM_PACKAGES = "1";
-          PYTHONUSERBASE =
-            if wctr.enable then "${oci.containerHome}/.local"
-            else "${agent.stateDir}/home/.local";
+            if wctr.enable then "${oci.containerHome}/.venv/bin/python3"
+            else "${agent.stateDir}/home/.venv/bin/python3";
         };
     };
   };
