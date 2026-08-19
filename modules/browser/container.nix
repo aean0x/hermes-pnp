@@ -86,6 +86,8 @@ let
       }
 
       # Restart the engine in-process. Xvfb and the gate stay up.
+      # Drop root-owned leftovers in logDir so >> as hermes cannot fail.
+      rm -f ${logDir}/browser.stdout ${logDir}/browser.stderr
       while true; do
         echo "$(date -Iseconds) start" >> ${logDir}/supervisor.log
         rm -f ${profileDir}/Default/"Current Session" \
