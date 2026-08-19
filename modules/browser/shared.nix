@@ -156,7 +156,9 @@ let
       fi
 
       echo "attaching to existing browser via CDP $cdp"
-      agent-browser connect ${toString cdpPort}
+      # Port-only connect uses localhost, which is ::1 in the jail.
+      # Brave binds 127.0.0.1 only, so that misses CDP and the daemon dies.
+      agent-browser connect ${cdpUrl}
 
       start_dash() {
         if agent-browser dashboard start --help 2>&1 | grep -q -- '--host'; then
@@ -169,16 +171,25 @@ let
       echo "starting dashboard on $dash (host ${listenAddr})"
       start_dash
 
-      # Watchdog is dashboard HTTP. Do not probe CLI session JSON.
+      # Dashboard HTTP stays up after the session daemon dies (engine
+      # restart / CDP drop). Require the default.pid too.
+      pidfile="$HOME/.agent-browser/namespaces/$AGENT_BROWSER_NAMESPACE/run/default.pid"
+      session_ok() {
+        curl -sf --max-time 2 -o /dev/null "$dash/" || return 1
+        curl -sf --max-time 1 "$cdp/json/version" >/dev/null || return 1
+        [[ -f "$pidfile" ]] || return 1
+        kill -0 "$(cat "$pidfile")" 2>/dev/null
+      }
+
       while true; do
-        if curl -sf --max-time 2 -o /dev/null "$dash/"; then
+        if session_ok; then
           sleep 5
           continue
         fi
-        echo "dashboard down; restarting"
+        echo "session/dashboard down; reconnecting"
         agent-browser dashboard stop >/dev/null 2>&1 || true
         if curl -sf --max-time 1 "$cdp/json/version" >/dev/null; then
-          agent-browser connect ${toString cdpPort} || true
+          agent-browser connect ${cdpUrl} || true
         fi
         start_dash || true
         sleep 5

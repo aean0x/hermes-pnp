@@ -310,9 +310,12 @@ independent of the agent list.
 `hermesPnP.browser.maxTabs` (default 2) adds
 `--renderer-process-limit` and a CDP prune loop. The container
 supervisor drops Chromium session-restore files on each engine
-start. Gate watchdog is dashboard HTTP + CDP, not
-`session info --json` (0.34 has no `connectionMethod`; grepping it
-reconnects every 5s). Leftover `.agent-browser` sockets/version
+start. Gate watchdog is dashboard HTTP + CDP + the session
+`default.pid`. Dashboard HTTP stays up after the daemon dies.
+`connect` uses `http://127.0.0.1:9222`, not a bare port —
+jail `localhost` is `::1` first and Brave binds IPv4 only.
+Do not grep `session info --json` (0.34 has no `connectionMethod`;
+that reconnects every 5s). Leftover `.agent-browser` sockets/version
 under gateHome are wiped on start so an old store path cannot
 keep a 0.27 daemon alive. The gate always `callPackage`s
 `pkgs/agent-browser.nix` (0.34 musl). Do not use
