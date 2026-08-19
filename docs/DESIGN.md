@@ -278,8 +278,11 @@ default extras. Native `full` already has what most users need.
 `hermesPnP.container.enable` turns on official
 `services.hermes-agent.container` (Ubuntu, docker). Off by default.
 
-Extra host mounts are official `container.extraVolumes`. RAM caps stay
-official `extraOptions`.
+Extra host mounts are official `container.extraVolumes`. Official
+agent RAM caps stay `extraOptions`. Composer WebUI/browser jails
+use first-class `*.container.memory` / `cpus` / `shmSize` /
+`oomScoreAdj` / `memorySwap`. `extraOptions` is the escape hatch.
+Do not `mkForce` extraOptions just to set RAM.
 
 Official `services.hermes-webui` has no `container.*`. The composer
 adds `hermesPnP.webui.container` and `hermesPnP.browser.container`.

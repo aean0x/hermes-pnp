@@ -70,6 +70,15 @@ let
   gbrainConfig = eval [ ../examples/gbrain.nix ];
 
   containerConfig = eval [ ../examples/container.nix ];
+  containerResourcesConfig = eval [
+    ../examples/container.nix
+    {
+      services.hermesPnP.webui.container.memory = "2g";
+      services.hermesPnP.webui.container.cpus = 2;
+      services.hermesPnP.browser.container.memory = "1g";
+      services.hermesPnP.browser.container.shmSize = "256m";
+    }
+  ];
 
   containerGbrainConfig = eval [
     ../examples/container.nix
@@ -180,6 +189,12 @@ in
     test "${toString (lib.hasInfix "--init" containerConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--init" containerConfig.systemd.services.hermes-browser.preStart)}" = "1"
     test "${toString (lib.hasInfix "hermes-browser-supervisor" containerConfig.systemd.services.hermes-browser.preStart)}" = "1"
+    test "${toString (lib.hasInfix "--shm-size=2g" containerConfig.systemd.services.hermes-browser.preStart)}" = "1"
+    test "${toString (lib.hasInfix "--memory=1g" containerResourcesConfig.systemd.services.hermes-browser.preStart)}" = "1"
+    test "${toString (lib.hasInfix "--shm-size=256m" containerResourcesConfig.systemd.services.hermes-browser.preStart)}" = "1"
+    test "${toString (lib.hasInfix "--memory=2g" containerResourcesConfig.systemd.services.hermes-webui.preStart)}" = "1"
+    test "${toString (lib.hasInfix "--cpus=2" containerResourcesConfig.systemd.services.hermes-webui.preStart)}" = "1"
+    test "${toString (lib.hasInfix "--init" containerResourcesConfig.systemd.services.hermes-browser.preStart)}" = "1"
     test "${toString (lib.hasInfix "--read-only" containerConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--cap-drop=ALL" containerConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--user" containerConfig.systemd.services.hermes-webui.preStart)}" = "1"
@@ -235,6 +250,8 @@ in
     test "${toString (optionsEval.options.services.hermesPnP.webui.enable.isDefined or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.webui ? container)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? container)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.webui.container ? memory)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser.container ? shmSize)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? gate)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? cdpAllowOrigins)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? noVNC)}" = ""
