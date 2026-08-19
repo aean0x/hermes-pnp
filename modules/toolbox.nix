@@ -42,13 +42,18 @@ let
     "/bin"
   ];
 
+  hostVenv = "${home}/.venv";
+  containerVenv = "${containerHome}/.venv";
+
   containerPath = concatStringsSep ":" ([
+    "${containerVenv}/bin"
     "${containerHome}/.npm-global/bin"
     "${containerHome}/.bun/bin"
     containerToolboxDir
   ] ++ sysPathTail);
 
   hostPath = concatStringsSep ":" ([
+    "${hostVenv}/bin"
     toolboxDir
     "${home}/.bun/bin"
     "${home}/.npm-global/bin"
@@ -58,12 +63,7 @@ let
 
   containerProcessEnv = {
     PATH = containerPath;
-    HERMES_PYTHON = "${containerToolboxDir}/python3";
-    # Nix python is EXTERNALLY-MANAGED (immutable prefix). User installs
-    # go to ~/.local. PIP_USER is ignored inside a venv.
-    PIP_USER = "1";
-    PIP_BREAK_SYSTEM_PACKAGES = "1";
-    PYTHONUSERBASE = "${containerHome}/.local";
+    HERMES_PYTHON = "${containerVenv}/bin/python3";
   };
 
   # Keep both python and python3 names explicit.
@@ -177,7 +177,7 @@ in
         wheel
       ];
       defaultText = literalExpression "ps: with ps; [ requests pyyaml toml pip setuptools wheel ]";
-      description = "Python packages baked into the toolbox python3/python. pip is for --user installs (jail prefix is immutable).";
+      description = "Python packages baked into the toolbox python3/python. pip seeds the writable ~/.venv (jail prefix is immutable).";
     };
 
     # Resolved paths for other modules.
@@ -228,6 +228,18 @@ in
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.npm-global
       install -d -m 0755 -o ${agent.user} -g ${agent.group} ${home}/.local/bin
+
+      # Writable venv for pip. Toolbox python prefix is immutable and
+      # has ENABLE_USER_SITE=False, so PIP_USER cannot work.
+      venv=${hostVenv}
+      py=${pythonEnv}/bin/python3
+      current=$(${pkgs.coreutils}/bin/readlink -f "$venv/bin/python3" 2>/dev/null || true)
+      wanted=$(${pkgs.coreutils}/bin/readlink -f "$py")
+      if [ "$current" != "$wanted" ]; then
+        rm -rf "$venv"
+        "$py" -m venv "$venv"
+        chown -R ${agent.user}:${agent.group} "$venv"
+      fi
 
       install -m 0644 -o ${agent.user} -g ${agent.group} ${containerProfile} ${home}/.profile
       install -m 0644 -o ${agent.user} -g ${agent.group} ${containerBashrc} ${home}/.bashrc

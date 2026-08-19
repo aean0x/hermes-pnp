@@ -352,7 +352,7 @@ When official `container.enable` is on, **stable** jail paths go on
 
 - `HERMES_BROWSER_PROFILE=/data/browser-profile`
 - `GBRAIN_TOKEN_FILE=/home/hermes/.gbrain/hermes-mcp.token`
-- toolbox `PATH` / `HERMES_PYTHON` under `/data/toolbox/bin`
+- toolbox `PATH` / `HERMES_PYTHON` (`~/.venv` then `/data/toolbox/bin`)
 
 Activation drops a host `HERMES_BROWSER_PROFILE` from `.env` in jail
 mode so the remapped `--env` wins. CDP / gate URLs stay on
@@ -388,10 +388,10 @@ is extraOptions `--env`.
 Default set includes git, curl, jq, ripgrep, file, unzip, python3
 (with requests/pyyaml/toml/pip), gh, age. Browser PATH aliases live in the
 browser module. `docker`, `sops`, `nmap`, and language toolchains are
-consumer `extraPackages`. WebUI jail gets the same `HERMES_PYTHON` as
-the agent jail (`/data/toolbox/bin/python3`). ubuntu:24.04 has no
-distro python and the jail is read-only (no apt); `pip install` goes
-to `~/.local` (`PIP_USER`).
+consumer `extraPackages`. Activation seeds a writable `~/.venv` from
+that interpreter (`HERMES_PYTHON`); the Nix prefix is immutable and
+has user-site disabled. ubuntu:24.04 has no distro python and the
+jail is read-only (no apt).
 
 ## GBrain
 
