@@ -72,6 +72,7 @@ Empty volunteer on topic-only turns is expected; query covers that. Named-entity
 - Maintaining a workspace alias JSON / pointer-index
 - Answering from MEMORY alone when a pointer or durable entity is the subject
 - Expecting volunteer to replace topical search (use both)
+- Writing live incident state into env/ops pages (`ops/browser-backends`, `ops/hermes-sandbox`, project DESIGN.md). Incident notes stay in chat or a page *solely* for troubleshooting. SoT: `ops/durable-notes`.
 
 ## Tools (typical MCP names)
 
