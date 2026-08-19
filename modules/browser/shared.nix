@@ -193,7 +193,7 @@ let
   '';
 
   chromiumExec = ''
-    exec ${browserBin} \
+    ${browserBin} \
       --user-data-dir=${profileDir} \
       --remote-debugging-address=${cdpAddr} \
       --remote-debugging-port=${toString cdpPort} \

@@ -191,7 +191,10 @@ in
 
     extraArgs = mkOption {
       type = types.listOf types.str;
-      default = [ ];
+      default = [
+        "--hide-crash-restore-bubble"
+        "--disable-session-crashed-bubble"
+      ];
       description = "Extra chromium flags appended to the browser ExecStart.";
     };
   };

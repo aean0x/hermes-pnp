@@ -21,7 +21,10 @@ let
   identityDir = "/var/lib/hermes-oci";
 
   # After extraOptions so the consumer list cannot drop these.
+  # --init (tini) reaps zombies. WebUI PID 1 is a Python server; without
+  # it, dead git/browser-tool children stay as Z until the jail restarts.
   forcedCreateArgs = [
+    "--init"
     "--security-opt=no-new-privileges"
     "--cap-drop=ALL"
     "--read-only"

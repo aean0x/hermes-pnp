@@ -286,8 +286,11 @@ adds `hermesPnP.webui.container` and `hermesPnP.browser.container`.
 Both default on when `hermesPnP.container.enable` is set.
 
 `lib/oci-container.nix` (`mkOciJail`): `--user` host hermes uid,
-`--cap-drop=ALL`, `--read-only`, nosuid tmpfs `/tmp`+`/run`,
-`--security-opt=no-new-privileges` after `extraOptions`. Identity is
+`--init` (tini), `--cap-drop=ALL`, `--read-only`, nosuid tmpfs
+`/tmp`+`/run`, `--security-opt=no-new-privileges` after
+`extraOptions`. Consumers cannot drop `--init`. Browser jail
+supervises the engine (restart loop + `logDir/supervisor.log`); a
+tab OOM must not exit the container. Identity is
 `/var/lib/hermes-oci/<name>` (root 0700). Docker backend `requires
 docker.service`. `--network=host` so the jail reaches the same
 loopback services as native hermes. Host-native flags live in

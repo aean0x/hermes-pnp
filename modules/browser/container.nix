@@ -57,7 +57,17 @@ let
       }
 
       # --no-sandbox: the container is the jail.
-      ${chromiumExec}
+      # Do not let a tab OOM (1g cgroup) exit PID 1. Xvfb + gate stay;
+      # Brave is restarted into the same profile. Host logs were going
+      # to docker json-file only — keep a copy under logDir.
+      while true; do
+        echo "$(date -Iseconds) start" >> ${logDir}/supervisor.log
+        ${chromiumExec} \
+          >> ${logDir}/browser.stdout \
+          2>> ${logDir}/browser.stderr \
+          || echo "$(date -Iseconds) exit $?" >> ${logDir}/supervisor.log
+        sleep 2
+      done
     '';
   };
 
