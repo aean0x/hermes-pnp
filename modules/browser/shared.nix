@@ -23,7 +23,9 @@ let
 
   browserBin = "${cfg.package}/bin/${cfg.engine}";
 
-  agentBrowser = pkgs.agent-browser or (pkgs.callPackage ../../pkgs/agent-browser.nix { });
+  # Always the in-tree pin. nixpkgs agent-browser is 0.27.0; `or` would
+  # pick it and keep the old daemon (keyboard stream broken until 0.33.2).
+  agentBrowser = pkgs.callPackage ../../pkgs/agent-browser.nix { };
 
   gateUrl =
     if cfg.gate.publicUrl != null
