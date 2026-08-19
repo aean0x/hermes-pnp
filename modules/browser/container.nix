@@ -93,9 +93,10 @@ let
               ${profileDir}/Default/"Current Tabs" \
               ${profileDir}/Default/"Last Tabs"
         rm -rf ${profileDir}/Default/Sessions
-        ${chromiumExec} \
-          >> ${logDir}/browser.stdout \
-          2>> ${logDir}/browser.stderr \
+        # chromiumExec is a multi-line command; wrap so the log redirects bind.
+        {
+          ${chromiumExec}
+        } >>${logDir}/browser.stdout 2>>${logDir}/browser.stderr \
           || echo "$(date -Iseconds) exit $?" >> ${logDir}/supervisor.log
         sleep 2
       done
