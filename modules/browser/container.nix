@@ -94,14 +94,10 @@ let
 
       # Restart the engine in-process. Xvfb and the gate stay up.
       # Drop root-owned leftovers in logDir so >> as hermes cannot fail.
+      # Keep Chromium session-restore; extraArgs hide the crash bubble.
       rm -f ${logDir}/browser.stdout ${logDir}/browser.stderr
       while true; do
         echo "$(date -Iseconds) start" >> ${logDir}/supervisor.log
-        rm -f ${profileDir}/Default/"Current Session" \
-              ${profileDir}/Default/"Last Session" \
-              ${profileDir}/Default/"Current Tabs" \
-              ${profileDir}/Default/"Last Tabs"
-        rm -rf ${profileDir}/Default/Sessions
         # chromiumExec is a multi-line command; wrap so the log redirects bind.
         {
           ${chromiumExec}
