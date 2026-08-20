@@ -19,6 +19,17 @@ rec {
       ]) attrs
     );
 
+  # Official container.network landed on a PR; older pins have no option.
+  # Default "host" keeps today's loopback pairing. When the option exists,
+  # WebUI/browser jails follow the agent so the stack can leave host net
+  # together (remap 127.0.0.1 URLs before you do).
+  agentContainerNetwork =
+    options: config:
+    if options.services.hermes-agent.container ? network then
+      config.services.hermes-agent.container.network
+    else
+      "host";
+
   # Null stays null. Home prefix is checked before stateDir so
   # ${stateDir}/home/.gbrain/... becomes /home/hermes/.gbrain/..., not
   # /data/home/.... Trailing-slash guards reject ${stateDir}/homework.

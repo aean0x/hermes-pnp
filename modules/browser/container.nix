@@ -2,6 +2,7 @@
 {
   config,
   lib,
+  options,
   pkgs,
   ...
 }:
@@ -71,18 +72,24 @@ let
       ${waitForDisplay}
 
       ${
-        if cfg.gate.enable then ''
-          hermes-browser-gate &
-        '' else ""
+        if cfg.gate.enable then
+          ''
+            hermes-browser-gate &
+          ''
+        else
+          ""
       }
 
       ${
-        if cfg.maxTabs != null then ''
-          while true; do
-            ${pruneTabs} ${toString cdpPort} ${toString cfg.maxTabs} || true
-            sleep 20
-          done &
-        '' else ""
+        if cfg.maxTabs != null then
+          ''
+            while true; do
+              ${pruneTabs} ${toString cdpPort} ${toString cfg.maxTabs} || true
+              sleep 20
+            done &
+          ''
+        else
+          ""
       }
 
       # Restart the engine in-process. Xvfb and the gate stay up.
@@ -110,6 +117,8 @@ let
     description = "Hermes persistent browser (OCI, official-container-shaped)";
     user = agent.user;
     cfg = bctr;
+    network = oci.agentContainerNetwork options config;
+    publish = bctr.publish;
     volumes = [
       oci.nixStoreBind
       "${workspaceDir}:${workspaceDir}"

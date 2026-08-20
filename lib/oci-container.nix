@@ -1,8 +1,11 @@
-# WebUI / browser OCI jail: docker create --network=host, /nix/store:ro,
-# identity hash, start -a. Runs as the host hermes uid with --cap-drop=ALL,
-# --read-only, no-new-privileges. Identity is /var/lib/hermes-oci/<name>
-# (root 0700). Host-network so the jail reaches the same loopback services
-# as native hermes. Service binds stay at the call site.
+# WebUI / browser OCI jail: docker create, /nix/store:ro, identity hash,
+# start -a. Runs as the host hermes uid with --cap-drop=ALL, --read-only,
+# no-new-privileges. Identity is /var/lib/hermes-oci/<name> (root 0700).
+# Network follows official services.hermes-agent.container.network when
+# that option exists (else "host") so the stack can leave host net
+# together. Loopback pairing (CDP, WebUI, GBrain, mcp-proxy) still
+# uses 127.0.0.1 until those URLs are remapped. Service binds stay at
+# the call site.
 { pkgs, lib }:
 
 let
@@ -32,7 +35,8 @@ let
     "--tmpfs=/run:nosuid,nodev,mode=0755"
   ];
 
-  mkSlimEntrypoint = name:
+  mkSlimEntrypoint =
+    name:
     pkgs.writeShellScript "${name}-oci-entrypoint" ''
       set -euo pipefail
       umask 0077
@@ -46,27 +50,36 @@ let
     '';
 
   # Returns { preStart, script, preStop, identityHash }.
-  mkUnitScripts = {
-    backend,
-    containerName,
-    image,
-    user,
-    volumes,
-    extraOptions ? [ ],
-    extraEnv ? { },
-    envFiles ? [ ],
-    entrypoint,
-    command,
-    identity,
-    identityFile,
-  }:
+  mkUnitScripts =
+    {
+      backend,
+      containerName,
+      image,
+      user,
+      volumes,
+      extraOptions ? [ ],
+      extraEnv ? { },
+      envFiles ? [ ],
+      entrypoint,
+      command,
+      identity,
+      identityFile,
+      network ? "host",
+      publish ? [ ],
+    }:
     let
       containerBin =
-        if backend == "docker"
-        then "${pkgs.docker}/bin/docker"
-        else "${pkgs.podman}/bin/podman";
+        if backend == "docker" then "${pkgs.docker}/bin/docker" else "${pkgs.podman}/bin/podman";
 
       identityHash = builtins.hashString "sha256" (builtins.toJSON identity);
+
+      networkIsNamed =
+        !(lib.elem network [
+          "host"
+          "bridge"
+          "none"
+        ]);
+      networkIsHost = network == "host";
 
       volumeArgs = concatMapStringsSep " " (v: "--volume ${escapeShellArg v}") volumes;
       envArgs = concatStringsSep " " (mapAttrsToList (n: v: "--env ${n}=${escapeShellArg v}") extraEnv);
@@ -74,6 +87,8 @@ let
       extraArgs = concatMapStringsSep " " escapeShellArg extraOptions;
       forcedArgs = concatMapStringsSep " " escapeShellArg forcedCreateArgs;
       cmdArgs = concatMapStringsSep " " escapeShellArg command;
+      publishArgs =
+        if networkIsHost then "" else concatMapStringsSep " " (p: "--publish ${escapeShellArg p}") publish;
     in
     {
       inherit identityHash identityFile containerBin;
@@ -95,10 +110,17 @@ let
         if [ "$NEED_CREATE" = "true" ]; then
           HERMES_UID=$(${pkgs.coreutils}/bin/id -u ${user})
           HERMES_GID=$(${pkgs.coreutils}/bin/id -g ${user})
+          ${lib.optionalString networkIsNamed ''
+            if ! ${containerBin} network inspect ${escapeShellArg network} >/dev/null 2>&1; then
+              echo "Creating network ${network}..."
+              ${containerBin} network create ${escapeShellArg network}
+            fi
+          ''}
           echo "Creating ${containerName} (uid=$HERMES_UID gid=$HERMES_GID)..."
           ${containerBin} create \
             --name ${containerName} \
-            --network=host \
+            --network ${escapeShellArg network} \
+            ${publishArgs} \
             --user "$HERMES_UID:$HERMES_GID" \
             --entrypoint ${entrypoint} \
             ${volumeArgs} \
@@ -122,7 +144,7 @@ let
       '';
     };
 in
-{
+rec {
   inherit identityDir;
 
   nixStoreBind = "/nix/store:/nix/store:ro";
@@ -131,8 +153,9 @@ in
     {
       extraOptions ? [ ],
       description ? ''
-        Run inside an OCI container (docker create --network=host,
-        /nix/store:ro). Defaults on when hermesPnP.container.enable is set.
+        Run inside an OCI container (docker create, /nix/store:ro).
+        Network follows official services.hermes-agent.container.
+        Defaults on when the official agent container is on.
       '',
       extraOptionsDescription ? "Extra docker create args. Privilege-regain locks are always injected.",
       memory ? null,
@@ -170,6 +193,16 @@ in
         default = extraOptions;
         description = extraOptionsDescription;
       };
+      publish = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = ''
+          --publish entries (ip:hostPort:containerPort). Ignored when
+          the jail network is "host". For leaving host net with the
+          official container.network PR.
+        '';
+        example = [ "127.0.0.1:8787:8787" ];
+      };
       memory = mkOption {
         type = types.nullOr types.str;
         default = memory;
@@ -202,34 +235,43 @@ in
       };
     };
 
-  followComposerContainer = pnp: {
-    enable = mkDefault pnp.container.enable;
-    backend = mkDefault pnp.container.backend;
-    image = mkDefault pnp.container.image;
+  # Follow the official agent container, not hermesPnP.container.
+  # hermesPnP.container.enable only mkDefaults the official option.
+  followAgentContainer = agent: {
+    enable = mkDefault agent.container.enable;
+    backend = mkDefault agent.container.backend;
+    image = mkDefault agent.container.image;
   };
+
+  # Back-compat name. New callers should pass the official agent.
+  followComposerContainer = followAgentContainer;
 
   # Callers supply volumes / extraEnv / command / identity extras.
   # Returns { dockerEnable, unit, preStart, script, preStop, volumes, identityFile }.
-  mkOciJail = {
-    name,
-    description,
-    user,
-    cfg,
-    volumes,
-    extraEnv ? { },
-    envFiles ? [ ],
-    command,
-    identity ? { },
-    after ? [ ],
-    wants ? [ ],
-    wantedBy ? [ "multi-user.target" ],
-  }:
+  mkOciJail =
+    {
+      name,
+      description,
+      user,
+      cfg,
+      volumes,
+      extraEnv ? { },
+      envFiles ? [ ],
+      command,
+      identity ? { },
+      after ? [ ],
+      wants ? [ ],
+      wantedBy ? [ "multi-user.target" ],
+      network ? "host",
+      publish ? [ ],
+    }:
     let
       entrypoint = mkSlimEntrypoint name;
       allVolumes = volumes ++ cfg.extraVolumes;
       containerBinPkg = if cfg.backend == "docker" then pkgs.docker else pkgs.podman;
       needsDocker = cfg.backend == "docker";
       identityFile = "${identityDir}/${name}";
+      jailPublish = if publish != [ ] then publish else (cfg.publish or [ ]);
       resourceFlags =
         (lib.optional (cfg.memory != null) "--memory=${cfg.memory}")
         ++ (lib.optional (cfg.memorySwap != null) "--memory-swap=${cfg.memorySwap}")
@@ -238,29 +280,63 @@ in
         ++ (lib.optional (cfg.shmSize != null) "--shm-size=${cfg.shmSize}");
       effectiveExtraOptions = cfg.extraOptions ++ resourceFlags;
       fullIdentity = {
-        inherit (cfg) image extraVolumes extraOptions memory memorySwap cpus oomScoreAdj shmSize;
-        inherit extraEnv entrypoint envFiles command forcedCreateArgs;
+        inherit (cfg)
+          image
+          extraVolumes
+          extraOptions
+          memory
+          memorySwap
+          cpus
+          oomScoreAdj
+          shmSize
+          ;
+        inherit
+          extraEnv
+          entrypoint
+          envFiles
+          command
+          forcedCreateArgs
+          network
+          ;
+        publish = jailPublish;
         volumes = allVolumes;
-      } // identity;
+      }
+      // identity;
       scripts = mkUnitScripts {
         backend = cfg.backend;
         containerName = name;
         image = cfg.image;
-        inherit user extraEnv envFiles entrypoint command identityFile;
+        inherit
+          user
+          extraEnv
+          envFiles
+          entrypoint
+          command
+          identityFile
+          network
+          ;
         volumes = allVolumes;
         extraOptions = effectiveExtraOptions;
         identity = fullIdentity;
+        publish = jailPublish;
       };
     in
     {
       dockerEnable = needsDocker;
       volumes = allVolumes;
-      inherit (scripts) preStart script preStop identityFile;
+      inherit (scripts)
+        preStart
+        script
+        preStop
+        identityFile
+        ;
       unit = {
         inherit description wantedBy;
         after = [
           "network-online.target"
-        ] ++ optional needsDocker "docker.service" ++ after;
+        ]
+        ++ optional needsDocker "docker.service"
+        ++ after;
         wants = [ "network-online.target" ] ++ wants;
         requires = optionals needsDocker [ "docker.service" ];
         inherit (scripts) preStart script preStop;

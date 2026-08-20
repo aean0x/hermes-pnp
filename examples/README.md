@@ -17,7 +17,7 @@ packages).
 | [browser.nix](browser.nix) | CDP engine + dashboard `publicUrl` (Caddy in the consumer) |
 | [toolbox.nix](toolbox.nix) | Extra CLI on the shared PATH |
 | [skills.nix](skills.nix) | Consumer skill trees beside the catalog |
-| [hmc.nix](hmc.nix) | Pin hermes-context-manager as an extra plugin |
+| [hmc.nix](hmc.nix) | Pin hermes-context-manager as extraPluginDirs |
 
 Combine them: `container.nix` + `gbrain.nix` is a jailed gateway with
 GBrain. `composer.nix` + `mcp-proxy.nix` is the usual pairing plus

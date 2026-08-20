@@ -181,8 +181,9 @@ in
       extraOptionsDescription = "Extra docker create args. Privilege-regain locks and --init are always injected.";
       description = ''
         Run Xvfb + browser + gate in one OCI jail (workspace, profile,
-        cookies, logs, gate). Defaults on when hermesPnP.container.enable
-        is set. Override memory / cpus / shmSize here — do not mkForce
+        cookies, logs, gate). Defaults on when the official agent
+        container is on. Network follows official container.network.
+        Override memory / cpus / shmSize here — do not mkForce
         extraOptions just to set RAM.
       '';
     };
@@ -209,7 +210,7 @@ in
 
   config = mkMerge [
     (mkIf pnp.enable {
-      services.hermesPnP.browser.container = oci.followComposerContainer pnp;
+      services.hermesPnP.browser.container = oci.followAgentContainer agent;
     })
 
     (mkIf (pnp.enable && cfg.enable && cfg.maxTabs != null) {
@@ -254,18 +255,22 @@ in
             echo "gate:     down"
           fi
           ${
-            if bctr.enable then ''
-              ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service || true
-            '' else ''
-              ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service hermes-browser-gate.service || true
-            ''
+            if bctr.enable then
+              ''
+                ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service || true
+              ''
+            else
+              ''
+                ${pkgs.systemd}/bin/systemctl is-active hermes-browser.service hermes-browser-gate.service || true
+              ''
           }
         '')
       ];
 
       # Loopback dashboard. Open the firewall only for a non-loopback bind.
-      networking.firewall.allowedTCPPorts =
-        optionals (cfg.gate.enable && listenAddr != "127.0.0.1" && listenAddr != "localhost") [ gatePort ];
+      networking.firewall.allowedTCPPorts = optionals (
+        cfg.gate.enable && listenAddr != "127.0.0.1" && listenAddr != "localhost"
+      ) [ gatePort ];
 
       systemd.tmpfiles.rules = [
         "d ${profileDir} 0750 ${agent.user} ${agent.group} - -"

@@ -1,4 +1,4 @@
-# Optional hermes-context-manager. Pins upstream as extraPlugins and
+# Optional hermes-context-manager. Pins upstream as extraPluginDirs and
 # creates $stateDir/.hermes/hmc_state. Native compact stays the LLM
 # summarizer; HMC does cheap per-tool work only.
 #

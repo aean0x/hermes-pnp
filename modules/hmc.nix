@@ -21,7 +21,12 @@ let
   src = cfg.src;
 
   hmcSrc = pkgs.fetchFromGitHub {
-    inherit (src) owner repo rev hash;
+    inherit (src)
+      owner
+      repo
+      rev
+      hash
+      ;
   };
 
   percent = toString cfg.compressPercent;
@@ -94,7 +99,7 @@ in
 {
   options.services.hermesPnP.hmc = {
     enable = mkEnableOption ''
-      Pin hermes-context-manager as extraPlugins.hermes-context-manager
+      Pin hermes-context-manager as extraPluginDirs.hermes-context-manager
       and create $stateDir/.hermes/hmc_state. Native compact stays on;
       HMC does cheap per-tool work only.
     '';
@@ -129,14 +134,17 @@ in
   };
 
   config = mkIf cfg.enable {
-    services.hermesPnP.extraPlugins.hermes-context-manager = hmcPluginSrc;
+    services.hermesPnP.extraPluginDirs.hermes-context-manager = hmcPluginSrc;
 
-    system.activationScripts.hermes-hmc-state = lib.stringAfter [
-      "users"
-      "groups"
-      "hermes-agent-setup"
-    ] ''
-      install -d -m 2770 -o ${agent.user} -g ${agent.group} ${agent.stateDir}/.hermes/hmc_state
-    '';
+    system.activationScripts.hermes-hmc-state =
+      lib.stringAfter
+        [
+          "users"
+          "groups"
+          "hermes-agent-setup"
+        ]
+        ''
+          install -d -m 2770 -o ${agent.user} -g ${agent.group} ${agent.stateDir}/.hermes/hmc_state
+        '';
   };
 }

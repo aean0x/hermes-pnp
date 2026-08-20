@@ -2,12 +2,19 @@
 {
   config,
   lib,
+  options,
   pkgs,
   ...
 }:
 
 let
-  inherit (lib) mkDefault mkForce mkIf optional optionalAttrs;
+  inherit (lib)
+    mkDefault
+    mkForce
+    mkIf
+    optional
+    optionalAttrs
+    ;
 
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;
@@ -49,57 +56,64 @@ let
     else
       null;
 
-  extraEnv =
-    {
-      HERMES_WEBUI_HOST = webui.host;
-      HERMES_WEBUI_PORT = toString webui.port;
-      HERMES_WEBUI_STATE_DIR = webui.stateDir;
-      HOME = oci.containerHome;
-      SSL_CERT_FILE = caBundle;
-      NIX_SSL_CERT_FILE = caBundle;
-      CURL_CA_BUNDLE = caBundle;
-      REQUESTS_CA_BUNDLE = caBundle;
-      GIT_SSL_CAINFO = caBundle;
-    }
-    // optionalAttrs (webui.hermesHome != null) {
-      HERMES_HOME = remappedHome;
-    }
-    // optionalAttrs (inferredAgentDir != null) {
-      HERMES_WEBUI_AGENT_DIR = inferredAgentDir;
-    }
-    // optionalAttrs (inferredPython != null) {
-      HERMES_WEBUI_PYTHON = inferredPython;
-    }
-    // webui.extraEnvironment
-    // optionalAttrs (webui.agent.package != null) {
-      PATH = "${webui.agent.package}/bin:${
-        webui.extraEnvironment.PATH or "${oci.containerData}/toolbox/bin:/usr/bin:/bin"
-      }";
-    };
+  extraEnv = {
+    HERMES_WEBUI_HOST = webui.host;
+    HERMES_WEBUI_PORT = toString webui.port;
+    HERMES_WEBUI_STATE_DIR = webui.stateDir;
+    HOME = oci.containerHome;
+    SSL_CERT_FILE = caBundle;
+    NIX_SSL_CERT_FILE = caBundle;
+    CURL_CA_BUNDLE = caBundle;
+    REQUESTS_CA_BUNDLE = caBundle;
+    GIT_SSL_CAINFO = caBundle;
+  }
+  // optionalAttrs (webui.hermesHome != null) {
+    HERMES_HOME = remappedHome;
+  }
+  // optionalAttrs (inferredAgentDir != null) {
+    HERMES_WEBUI_AGENT_DIR = inferredAgentDir;
+  }
+  // optionalAttrs (inferredPython != null) {
+    HERMES_WEBUI_PYTHON = inferredPython;
+  }
+  // webui.extraEnvironment
+  // optionalAttrs (webui.agent.package != null) {
+    PATH = "${webui.agent.package}/bin:${
+      webui.extraEnvironment.PATH or "${oci.containerData}/toolbox/bin:/usr/bin:/bin"
+    }";
+  };
 
   jail = oci.mkOciJail {
     name = "hermes-webui";
     description = "Hermes Web UI (OCI, official-container-shaped)";
     user = webui.user;
     cfg = wctr;
+    network = oci.agentContainerNetwork options config;
+    publish = wctr.publish;
     volumes = [
       oci.nixStoreBind
       (oci.stateDirBind agent.stateDir)
       (oci.homeBind agent.stateDir)
       "${webui.stateDir}:${webui.stateDir}"
-    ] ++ caBinds ++ [ gitconfigBind ];
+    ]
+    ++ caBinds
+    ++ [ gitconfigBind ];
     inherit extraEnv;
     envFiles = webui.environmentFiles;
     command = [ "${webui.package}/bin/hermes-webui" ];
     identity = {
       package = "${webui.package}";
     };
-    after = [ "hermes-agent.service" ]
-      ++ optional pnp.gbrain.enable "gbrain-mcp-http.service"
-      ++ optional pnp.mcpProxy.enable "mcp-proxy.service";
-    wants = [ "hermes-agent.service" ]
-      ++ optional pnp.gbrain.enable "gbrain-mcp-http.service"
-      ++ optional pnp.mcpProxy.enable "mcp-proxy.service";
+    after = [
+      "hermes-agent.service"
+    ]
+    ++ optional pnp.gbrain.enable "gbrain-mcp-http.service"
+    ++ optional pnp.mcpProxy.enable "mcp-proxy.service";
+    wants = [
+      "hermes-agent.service"
+    ]
+    ++ optional pnp.gbrain.enable "gbrain-mcp-http.service"
+    ++ optional pnp.mcpProxy.enable "mcp-proxy.service";
   };
 in
 {

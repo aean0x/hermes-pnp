@@ -1,9 +1,10 @@
 # Seed services.hermes-agent.settings from hermesPnP.models.
 # settings is deepConfigType: do not wrap leaves in mkDefault.
 # Last writer wins; assign consumer settings after the PnP import.
-{ config
-, lib
-, ...
+{
+  config,
+  lib,
+  ...
 }:
 
 let
@@ -31,10 +32,10 @@ let
   };
 
   mkNamedModel =
-    { provider
-    , model
-    , description
-    ,
+    {
+      provider,
+      model,
+      description,
     }:
     mkOption {
       type = types.submodule { options = mkModelFields { inherit provider model; }; };
@@ -79,19 +80,24 @@ in
     low = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-flash";
-      description = "Cheap helper. Seeds mechanical auxiliary slots + unpinned cron.";
+      description = "Cheap helper. OOBE seed for mechanical auxiliary slots + unpinned cron.";
     };
 
     medium = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-pro";
-      description = "Workhorse. Seeds delegation + reasoning auxiliary slots (background_review, curator, kanban_decomposer).";
+      description = "Workhorse. OOBE seed for delegation + reasoning auxiliary slots (background_review, curator, kanban_decomposer).";
     };
 
     high = mkNamedModel {
       provider = "xai-oauth";
       model = "grok-4.6";
-      description = "Session identity + voice. Seeds model.default, fallback, rest.";
+      description = ''
+        Session identity + voice. OOBE seed for settings.model.default
+        and fallback. Override here — not settings.model.default —
+        unless you assign settings after the PnP import (deepConfigType
+        last writer wins; mkDefault on a leaf is stored as a literal).
+      '';
     };
   };
 
@@ -114,8 +120,7 @@ in
         model_provider = models.low.provider;
       };
       auxiliary =
-        genAttrs auxiliaryLowSlots (_: lowSlot)
-        // genAttrs auxiliaryMediumSlots (_: mediumSlot);
+        genAttrs auxiliaryLowSlots (_: lowSlot) // genAttrs auxiliaryMediumSlots (_: mediumSlot);
     };
   };
 }

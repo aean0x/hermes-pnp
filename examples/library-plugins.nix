@@ -14,7 +14,7 @@
       "tool-call-coherency"
       "secret-handoff"
     ];
-    extraPlugins = {
+    extraPluginDirs = {
       # my-plugin = ./plugins/my-plugin;
     };
   };

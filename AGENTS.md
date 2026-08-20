@@ -33,7 +33,13 @@ consumer.
   `extraDependencyGroups` into the package wrap. Do not default extras.
 - Materialize first-party plugins to `$stateDir/plugins/<name>` and
   symlink `$stateDir/.hermes/plugins/<name>` → `../../plugins/<name>`.
-  Do not install them via official `extraPlugins`.
+  Do not install them via official `extraPlugins`. Consumer trees
+  go on `extraPluginDirs`. Union official extraPlugins names into
+  `settings.plugins.enabled`.
+- Fold official `extraPackages` into the toolbox buildEnv. Do not put
+  the env back on `extraPackages`.
+- WebUI/browser jails follow official `container.enable` / network,
+  not `hermesPnP.container.enable`.
 - Gate the silence-marker wrap on
   `services.hermesPnP.packageFixes.silenceMarkers`.
 - Extra host mounts go on official `container.extraVolumes`.
