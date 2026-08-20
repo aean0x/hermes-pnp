@@ -28,6 +28,7 @@ let
     launchXvfb
     waitForDisplay
     chromiumExec
+    fontconfigFile
     cdpPort
     ;
 
@@ -64,6 +65,7 @@ let
       export HOME=/tmp/browser-home
       export XDG_CONFIG_HOME=/tmp/browser-home/.config
       export XDG_CACHE_HOME=/tmp/browser-home/.cache
+      export FONTCONFIG_FILE=${fontconfigFile}
       mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" /tmp/.X11-unix ${profileDir} ${cookiesDir} ${logDir} ${gateHome}
       touch "$XAUTHORITY"
       chmod 600 "$XAUTHORITY"
@@ -123,9 +125,13 @@ let
       "${logDir}:${logDir}"
       "${gateHome}:${gateHome}"
     ];
+    extraEnv = {
+      FONTCONFIG_FILE = fontconfigFile;
+    };
     command = [ "${supervisor}/bin/hermes-browser-supervisor" ];
     identity = {
       package = "${supervisor}";
+      inherit fontconfigFile;
     };
   };
 in
