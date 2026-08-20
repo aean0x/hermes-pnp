@@ -79,6 +79,16 @@ let
 
   allowOriginsFlag = lib.concatStringsSep "," allowOrigins;
 
+  # Ubuntu OCI image ships no fonts. Empty fontconfig then Skia FATALS
+  # FontConfigInterface (clicks / text layout). Pin a store fonts.conf.
+  fontconfigFile = pkgs.makeFontsConf {
+    fontDirectories = [
+      "${pkgs.dejavu_fonts}/share/fonts"
+      "${pkgs.liberation_ttf}/share/fonts"
+      "${pkgs.noto-fonts-color-emoji}/share/fonts"
+    ];
+  };
+
   chromiumAliases = pkgs.runCommand "chromium-alias" { } ''
     mkdir -p "$out/bin"
     ln -s ${browserBin} "$out/bin/chromium"
@@ -223,6 +233,7 @@ let
   '';
 
   chromiumExec = ''
+    export FONTCONFIG_FILE=${fontconfigFile}
     ${browserBin} \
       --user-data-dir=${profileDir} \
       --remote-debugging-address=${cdpAddr} \
@@ -237,8 +248,7 @@ let
       --password-store=basic \
       --window-size=1400,900 \
       --disable-features=TranslateUI \
-      ${lib.concatStringsSep " " cfg.extraArgs} \
-      about:blank
+      ${lib.concatStringsSep " " cfg.extraArgs}
   '';
 in
 {
@@ -265,5 +275,6 @@ in
     launchXvfb
     waitForDisplay
     chromiumExec
+    fontconfigFile
     ;
 }

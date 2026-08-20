@@ -318,6 +318,13 @@ WebUI CA/gitconfig binds stay in `modules/webui/container.nix`.
 Jail image is ubuntu + `/nix/store:ro`. WebUI `extraVolumes` is
 independent of the agent list.
 
+The Ubuntu OCI image has no fonts. The supervisor exports
+`FONTCONFIG_FILE` from `pkgs.makeFontsConf` (DejaVu, Liberation,
+Noto emoji). Without it, Skia FATALS
+`SkFontMgr_FontConfigInterface` on text layout (clicks). Do not
+pass a command-line URL (`about:blank`); that ties process
+lifetime to that tab.
+
 `hermesPnP.browser.maxTabs` (default 5) adds
 `--renderer-process-limit` and a CDP prune loop. Gate watchdog is
 CDP + session `default.pid` + `dashboard.pid`. Do not curl dashboard

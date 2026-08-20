@@ -62,6 +62,7 @@ in
         XDG_CONFIG_HOME = "${home}/.config";
         XDG_CACHE_HOME = "${home}/.cache";
         DISPLAY = display;
+        FONTCONFIG_FILE = shared.fontconfigFile;
       };
 
       script = ''
