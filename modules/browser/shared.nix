@@ -118,7 +118,6 @@ let
       agentBrowser
       pkgs.curl
       pkgs.coreutils
-      pkgs.gnugrep
     ];
     text = ''
       set -euo pipefail
@@ -171,11 +170,7 @@ let
       agent-browser connect ${cdpUrl}
 
       start_dash() {
-        if agent-browser dashboard start --help 2>&1 | grep -q -- '--host'; then
-          agent-browser dashboard start --port ${toString gatePort} --host '${listenAddr}'
-        else
-          agent-browser dashboard start --port ${toString gatePort}
-        fi
+        agent-browser dashboard start --port ${toString gatePort} --host '${listenAddr}'
       }
 
       # Dashboard GET / blocks while /api/exec is in flight. Treating

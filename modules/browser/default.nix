@@ -177,7 +177,6 @@ in
     };
 
     container = oci.mkOciServiceOptions {
-      shmSize = "2g";
       extraOptionsDescription = "Extra docker create args. Privilege-regain locks and --init are always injected.";
       description = ''
         Run Xvfb + browser + gate in one OCI jail (workspace, profile,
@@ -191,7 +190,6 @@ in
     extraArgs = mkOption {
       type = types.listOf types.str;
       default = [
-        "--hide-crash-restore-bubble"
         "--disable-session-crashed-bubble"
       ];
       description = "Extra chromium flags appended to the browser ExecStart.";
@@ -201,9 +199,8 @@ in
       type = types.nullOr types.ints.positive;
       default = 5;
       description = ''
-        Cap live page targets. Adds --renderer-process-limit and a
-        CDP prune loop in the container supervisor. Null disables.
-        Agent browsers do not need a human tab pile.
+        Cap live page targets via --renderer-process-limit. Null
+        disables. Agent browsers do not need a human tab pile.
       '';
     };
   };
