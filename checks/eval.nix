@@ -282,6 +282,9 @@ in
     test "${toString (lib.hasInfix "connect \${cdpUrl}" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
     test "${toString (lib.hasInfix "connect \${toString cdpPort}" (builtins.readFile ../modules/browser/shared.nix))}" = ""
     test "${toString (lib.hasInfix "default.pid" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
+    test "${toString (lib.hasInfix "dashboard.pid" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
+    test "${toString (lib.hasInfix ''"$dash/"'' (builtins.readFile ../modules/browser/shared.nix))}" = ""
+    test "${toString (lib.hasInfix "Current Session" (builtins.readFile ../modules/browser/container.nix))}" = ""
     test "${toString (lib.hasInfix "pkgs.agent-browser or" (builtins.readFile ../modules/browser/shared.nix))}" = ""
     test "${
       toString (

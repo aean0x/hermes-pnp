@@ -318,13 +318,14 @@ WebUI CA/gitconfig binds stay in `modules/webui/container.nix`.
 Jail image is ubuntu + `/nix/store:ro`. WebUI `extraVolumes` is
 independent of the agent list.
 
-`hermesPnP.browser.maxTabs` (default 2) adds
-`--renderer-process-limit` and a CDP prune loop. The container
-supervisor drops Chromium session-restore files on each engine
-start. Gate watchdog is dashboard HTTP + CDP + the session
-`default.pid`. Dashboard HTTP stays up after the daemon dies.
-`connect` uses `http://127.0.0.1:9222`, not a bare port —
-jail `localhost` is `::1` first and Brave binds IPv4 only.
+`hermesPnP.browser.maxTabs` (default 5) adds
+`--renderer-process-limit` and a CDP prune loop. Gate watchdog is
+CDP + session `default.pid` + `dashboard.pid`. Do not curl dashboard
+HTTP (GET `/` blocks during `/api/exec` and looks like a drop).
+Do not `dashboard stop` / `connect` while those pids are alive —
+a second connect steals Chrome from the supervisor. `connect`
+uses `http://127.0.0.1:9222`, not a bare port — jail `localhost`
+is `::1` first and Brave binds IPv4 only.
 Do not grep `session info --json` (0.34 has no `connectionMethod`;
 that reconnects every 5s). Leftover `.agent-browser` sockets/version
 under gateHome are wiped on start so an old store path cannot

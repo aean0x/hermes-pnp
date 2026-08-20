@@ -168,30 +168,43 @@ let
         fi
       }
 
+      # Dashboard GET / blocks while /api/exec is in flight. Treating
+      # that as "down" stops the dashboard (502) and a second connect
+      # steals Chrome from the supervisor (exit 0, tabs wiped).
+      run="$HOME/.agent-browser/namespaces/$AGENT_BROWSER_NAMESPACE/run"
+      pidfile="$run/default.pid"
+      dashpid="$run/dashboard.pid"
+      pid_alive() {
+        local f="$1"
+        [[ -f "$f" ]] || return 1
+        kill -0 "$(cat "$f")" 2>/dev/null
+      }
+      cdp_ok() { curl -sf --max-time 1 "$cdp/json/version" >/dev/null; }
+
       echo "starting dashboard on $dash (host ${listenAddr})"
       start_dash
-
-      # Dashboard HTTP stays up after the session daemon dies (engine
-      # restart / CDP drop). Require the default.pid too.
-      pidfile="$HOME/.agent-browser/namespaces/$AGENT_BROWSER_NAMESPACE/run/default.pid"
-      session_ok() {
-        curl -sf --max-time 2 -o /dev/null "$dash/" || return 1
-        curl -sf --max-time 1 "$cdp/json/version" >/dev/null || return 1
-        [[ -f "$pidfile" ]] || return 1
-        kill -0 "$(cat "$pidfile")" 2>/dev/null
-      }
+      for _ in $(seq 1 25); do
+        pid_alive "$dashpid" && break
+        sleep 0.2
+      done
 
       while true; do
-        if session_ok; then
+        if cdp_ok && pid_alive "$pidfile" && pid_alive "$dashpid"; then
           sleep 5
           continue
         fi
         echo "session/dashboard down; reconnecting"
-        agent-browser dashboard stop >/dev/null 2>&1 || true
-        if curl -sf --max-time 1 "$cdp/json/version" >/dev/null; then
+        if ! cdp_ok; then
+          echo "CDP down; waiting for engine supervisor"
+          sleep 5
+          continue
+        fi
+        if ! pid_alive "$pidfile"; then
           agent-browser connect ${cdpUrl} || true
         fi
-        start_dash || true
+        if ! pid_alive "$dashpid"; then
+          start_dash || true
+        fi
         sleep 5
       done
     '';
