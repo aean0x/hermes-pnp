@@ -9,7 +9,12 @@
 }:
 
 let
-  inherit (lib) mkDefault mkIf mkOption types;
+  inherit (lib)
+    mkDefault
+    mkIf
+    mkOption
+    types
+    ;
 
   pnp = config.services.hermesPnP;
   cfg = pnp.git.credentialHelper;
@@ -54,7 +59,7 @@ in
       };
     })
 
-    (mkIf (cfg.enable && pnp.container.enable) {
+    (mkIf (cfg.enable && config.services.hermes-agent.container.enable) {
       services.hermes-agent.container.extraVolumes = [
         "/etc/gitconfig:/etc/gitconfig:ro"
       ];

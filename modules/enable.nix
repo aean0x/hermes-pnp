@@ -24,7 +24,7 @@ in
         inherits that list). Prefer a sops.templates path. Key list:
         docs/hermes.env.example.
       '';
-      example = lib.literalExpression ''[ config.sops.templates.hermesEnv.path ]'';
+      example = lib.literalExpression "[ config.sops.templates.hermesEnv.path ]";
     };
 
     container = {
@@ -32,10 +32,12 @@ in
         type = types.bool;
         default = false;
         description = ''
-          Turn on official services.hermes-agent.container (Ubuntu image,
-          host network). Toolbox /data remaps assume this when the
-          composer is on. Extra volumes and RAM flags stay official
-          container.extraVolumes / extraOptions.
+          Convenience alias: mkDefault official
+          services.hermes-agent.container.enable (and backend/image).
+          WebUI/browser jails follow the official agent container, not
+          this knob. Extra volumes and RAM flags stay official
+          container.extraVolumes / extraOptions. Network follows
+          official container.network when that option exists (else host).
         '';
       };
 

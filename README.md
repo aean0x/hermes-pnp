@@ -34,8 +34,8 @@ sandboxing, and the add-ons that should have been one enable.
       "git-hook"
     ];
 
-    # toolbox.extraPackages = [ pkgs.sops ];
-    # extraPlugins.my-plugin = ./plugins/my-plugin;
+    # services.hermes-agent.extraPackages = [ pkgs.sops ]; # folded into the toolbox
+    # extraPluginDirs.my-plugin = ./plugins/my-plugin;
     # skills.extraSkills.ops = ./skills/ops;
 
     # browser.gate.publicUrl = "https://browser.example.com/"; # Caddy in the consumer
@@ -72,11 +72,12 @@ Composer turns on the official gateway and pairs everything else to
 it: same user, same `HERMES_HOME`, same secrets file. A `buildEnv`
 toolbox lands at `$stateDir/toolbox/bin` (`/data/toolbox/bin` in the
 jail) — python3 plus a curated everyday CLI (git, rg, jq, bun, node,
-ffmpeg, gh, age, …). Native PATH is official `extraPackages`; the
-jail gets PATH via `--env`. `container.enable` is the recommended
-host: Ubuntu 24.04, host net, `/nix/store:ro`, no view of
-`/etc/nixos`. Extra binds stay on official `container.extraVolumes`.
-RAM caps stay in the consumer.
+ffmpeg, gh, age, …). Official `extraPackages` fold into that env
+(native profile + jail bind). Jail PATH is `--env`. `container.enable`
+is the recommended host: Ubuntu 24.04, `/nix/store:ro`, no view of
+`/etc/nixos`. Network follows official `container.network` when that
+option exists (else host). Extra binds stay on official
+`container.extraVolumes`. RAM caps stay in the consumer.
 
 ## Hermes WebUI
 
@@ -142,8 +143,8 @@ tool traces.
 
 Materialize to `$stateDir/plugins/<name>`, discovered via
 `$stateDir/.hermes/plugins/<name>`. First-party plugins are not
-installed through official `extraPlugins`. `extraPlugins` is
-`attrsOf path` for your own trees.
+installed through official `extraPlugins`. `extraPluginDirs` is
+`attrsOf path` for your own trees (`extraPlugins` is a renamed alias).
 
 **model-router** — per-turn low / medium / high. Classifies the user
 turn, switches the live model, climbs on tool errors. Pins:

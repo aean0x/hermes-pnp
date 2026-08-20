@@ -113,7 +113,7 @@ the official option PnP set via `mkDefault`.
 2. **Plugin dest.** Materialize to `$stateDir/plugins/<name>` and link
    `$stateDir/.hermes/plugins/<name>` → `../../plugins/<name>`. Official
    `extraPlugins` (`listOf package`) stays available for consumer
-   packages.
+   packages. PnP trees use `extraPluginDirs`.
 3. **WebUI bind.** `127.0.0.1:8787`, `hermesHome = ${stateDir}/.hermes`,
    same user as the agent. Opening the firewall or binding `0.0.0.0` is
    a consumer override of `services.hermes-webui.*`.
@@ -151,17 +151,22 @@ the official option PnP set via `mkDefault`.
 - `services.hermesPnP.models.{low,medium,high}` — `{ provider, model }`.
 - `services.hermesPnP.plugins` — `listOf str`. Composer on defaults
   via `mkDefault` to model-router, tool-call-coherency, secret-handoff.
-- `services.hermesPnP.extraPlugins` — `attrsOf path` beside the catalog.
+- `services.hermesPnP.extraPluginDirs` — `attrsOf path` beside the catalog
+  (`extraPlugins` is a renamed alias). Distinct from official
+  `services.hermes-agent.extraPlugins`.
 - `services.hermesPnP.webui.enable` — default `true` when composer is on.
 - `services.hermesPnP.toolbox.enable` — default `true` when composer is
   on. buildEnv at `/var/lib/hermes/toolbox/bin` (`/data/toolbox/bin`
-  in the jail).
-- `services.hermesPnP.toolbox.extraPackages` — append-only.
+  in the jail). Official `extraPackages` fold into this env.
+- `services.hermesPnP.toolbox.extraPackages` — append-only alias;
+  prefer official `services.hermes-agent.extraPackages`.
 - `services.hermesPnP.toolbox.hostPath` / `containerPath` /
   `toolboxDir` / `containerToolboxDir`.
-- `services.hermesPnP.container.enable` — default `false`. Sets official
-  `services.hermes-agent.container.enable` + `backend` / `image`
-  (`ubuntu:24.04`, docker). RAM caps and extra volumes stay official.
+- `services.hermesPnP.container.enable` — default `false`. Convenience
+  alias that mkDefaults official `container.enable` + `backend` /
+  `image`. WebUI/browser jails follow official `container.enable`,
+  not this knob. Network follows official `container.network` when
+  present (else host). RAM caps and extra volumes stay official.
 - `services.hermesPnP.hmc.enable` — default `false`.
 - `services.hermesPnP.gbrain.enable` — default `false`. Loopback
   `gbrain serve`, `mcpServers.gbrain.url`, plugin env, literal Bearer
@@ -191,9 +196,10 @@ the official option PnP set via `mkDefault`.
 - `services.hermes-webui.host = "127.0.0.1"`
 - `services.hermes-webui.port = 8787`
 - `services.hermes-webui.environmentFiles` = agent environmentFiles
+- `services.hermes-agent.addToSystemPackages = true`
 
 When `services.hermesPnP.enable = false`, PnP is inert except
-explicit `plugins` / `extraPlugins`, `mcpProxy.enable`, and opt-in
+explicit `plugins` / `extraPluginDirs`, `mcpProxy.enable`, and opt-in
 `gbrain` / `hmc`.
 
 ## Three models
@@ -250,12 +256,14 @@ First-party: `model-router`, `tool-call-coherency`,
 `git-hook` (ff-only pull on first read of a clean worktree; end of
 turn commits this turn's porcelain delta and pushes).
 
-- Empty `plugins` and no `extraPlugins` → no plugin files.
+- Empty `plugins` and no `extraPluginDirs` → no plugin files.
 - Materialize to `$stateDir/plugins/<name>`.
 - Discover via relative symlink under `$stateDir/.hermes/plugins/`.
 - Dest stays under official `stateDir` (native `ReadWritePaths`).
 
 Do not install first-party plugins via official `extraPlugins`.
+`settings.plugins.enabled` is the union of PnP names and official
+`extraPlugins` (`getName` and `nix-managed-<name>`), not a replace.
 
 ## Package / share env
 
@@ -286,7 +294,8 @@ Do not `mkForce` extraOptions just to set RAM.
 
 Official `services.hermes-webui` has no `container.*`. The composer
 adds `hermesPnP.webui.container` and `hermesPnP.browser.container`.
-Both default on when `hermesPnP.container.enable` is set.
+Both default on when official `services.hermes-agent.container.enable`
+is set (`hermesPnP.container.enable` only mkDefaults that option).
 
 `lib/oci-container.nix` (`mkOciJail`): `--user` host hermes uid,
 `--init` (tini), `--cap-drop=ALL`, `--read-only`, nosuid tmpfs
@@ -295,8 +304,10 @@ Both default on when `hermesPnP.container.enable` is set.
 supervises the engine (restart loop + `logDir/supervisor.log`); a
 tab OOM must not exit the container. Identity is
 `/var/lib/hermes-oci/<name>` (root 0700). Docker backend `requires
-docker.service`. `--network=host` so the jail reaches the same
-loopback services as native hermes. Host-native flags live in
+docker.service`. Network follows official `container.network` when
+that option exists (else host) so the stack can leave host net
+together. Loopback pairing (CDP, WebUI, GBrain, mcp-proxy) still
+uses `127.0.0.1` until those URLs are remapped. Host-native flags live in
 `lib/harden-host.nix`. Path remaps (`stateDir` → `/data`,
 `${stateDir}/home` → `/home/hermes`) live in `lib.remapStatePath`.
 Host `/home/hermes` (gbrain activation, only if that path is missing)
@@ -359,8 +370,9 @@ When official `container.enable` is on, **stable** jail paths go on
 
 Activation drops a host `HERMES_BROWSER_PROFILE` from `.env` in jail
 mode so the remapped `--env` wins. CDP / gate URLs stay on
-`environment{}` (`127.0.0.1`). Native toolbox lands on official
-`extraPackages`.
+`environment{}` (`127.0.0.1`). Native toolbox lands on the hermes
+user profile and the gateway unit path; official `extraPackages`
+fold into the same env.
 
 One browser, two control planes:
 
@@ -385,8 +397,10 @@ Default flake checks do not build a container image.
 ## Toolbox
 
 `buildEnv` at `/var/lib/hermes/toolbox/bin` (`/data/toolbox/bin` in
-the jail). Native gateway PATH is official `extraPackages`. Jail PATH
-is extraOptions `--env`.
+the jail). Official `extraPackages` fold into that env. Native PATH
+is the hermes user profile + systemd unit path (the env is **not**
+put back on `extraPackages` — that would cycle). Jail PATH is
+extraOptions `--env`.
 
 Default set includes git, curl, jq, ripgrep, file, unzip, python3
 (with requests/pyyaml/toml/pip), gh, age. Browser PATH aliases live in the

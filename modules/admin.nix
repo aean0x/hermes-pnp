@@ -128,7 +128,7 @@ in
 
     environment.systemPackages = [ client ];
 
-    services.hermesPnP.toolbox.extraPackages = [ client ];
+    services.hermes-agent.extraPackages = [ client ];
 
     systemd.tmpfiles.rules = [
       "d ${socketDir} 0750 root ${agent.group} -"

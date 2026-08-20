@@ -1,4 +1,4 @@
-# Install catalog + extraPlugins to $stateDir/plugins/<name>
+# Install catalog + extraPluginDirs to $stateDir/plugins/<name>
 # and symlink $stateDir/.hermes/plugins/<name> → ../../plugins/<name>.
 {
   config,
@@ -17,24 +17,28 @@ let
     ;
 
   pnp = config.services.hermesPnP;
-  extra = pnp.extraPlugins;
+  agent = config.services.hermes-agent;
+  extra = pnp.extraPluginDirs;
   catalog = import ../plugins/catalog.nix;
   install = pnp.pluginInstall;
 
-  gbrainOn =
-    (options.services.hermesPnP ? gbrain) && pnp.gbrain.enable;
+  gbrainOn = (options.services.hermesPnP ? gbrain) && pnp.gbrain.enable;
 
   gbrainPlugins = [
     "gbrain-retrieval-reflex"
     "gbrain-memory-flush"
   ];
 
-  # Do not write gbrain names back onto `plugins` — that clobbers the
-  # composer mkDefault.
+  officialExtraPluginNames = map lib.getName (agent.extraPlugins or [ ]);
+
+  # Materialize only PnP trees. Official extraPlugins already land as
+  # nix-managed-* under $HERMES_HOME/plugins.
+  pnpNames = lib.unique (pnp.plugins ++ lib.optionals gbrainOn gbrainPlugins ++ lib.attrNames extra);
+
+  # plugins.enabled is an opt-in allow-list. Union PnP names with
+  # official extraPlugins (path key + getName) so we do not hide them.
   enabledNames = lib.unique (
-    pnp.plugins
-    ++ lib.optionals gbrainOn gbrainPlugins
-    ++ lib.attrNames extra
+    pnpNames ++ officialExtraPluginNames ++ map (n: "nix-managed-${n}") officialExtraPluginNames
   );
 
   unknown =
@@ -101,9 +105,9 @@ let
         chmod -R u+w "$out"
         printf '%s\n' ${lib.escapeShellArg (builtins.toJSON modelRouterConfig)} \
           > "$out/config.json"
-        printf '%s\n' ${lib.escapeShellArg (
-          "window.__MODEL_ROUTER_CONFIG = " + builtins.toJSON modelRouterWebui + ";"
-        )} > "$out/webui/config.js"
+        printf '%s\n' ${
+          lib.escapeShellArg ("window.__MODEL_ROUTER_CONFIG = " + builtins.toJSON modelRouterWebui + ";")
+        } > "$out/webui/config.js"
       '';
 
   resolvedSources =
@@ -114,12 +118,16 @@ let
 
   hermesHomePlugins = "${install.stateDir}/.hermes/plugins";
   materializeRoot = "${install.stateDir}/plugins";
-  enabledPluginsJson = builtins.toJSON enabledNames;
+  enabledPluginsJson = builtins.toJSON pnpNames;
 in
 {
   imports = [
     ./enable.nix
     ./models.nix
+    (lib.mkRenamedOptionModule
+      [ "services" "hermesPnP" "extraPlugins" ]
+      [ "services" "hermesPnP" "extraPluginDirs" ]
+    )
   ];
 
   options.services.hermesPnP = {
@@ -140,10 +148,13 @@ in
       ];
     };
 
-    extraPlugins = mkOption {
+    extraPluginDirs = mkOption {
       type = types.attrsOf types.path;
       default = { };
-      description = "Name → source tree beside the catalog.";
+      description = ''
+        Name → source tree beside the catalog. Distinct from official
+        services.hermes-agent.extraPlugins (listOf package).
+      '';
       example = lib.literalExpression ''
         {
           # my-plugin = ./plugins/my-plugin;
@@ -186,9 +197,9 @@ in
         }
       ];
 
-      services.hermesPnP.pluginInstall.webuiExtensionDir = lib.mkIf
-        (lib.elem "model-router" enabledNames && resolvedSources ? model-router)
-        "${resolvedSources.model-router}/webui";
+      services.hermesPnP.pluginInstall.webuiExtensionDir = lib.mkIf (
+        lib.elem "model-router" enabledNames && resolvedSources ? model-router
+      ) "${resolvedSources.model-router}/webui";
 
       services.hermes-agent.settings.plugins.enabled = enabledNames;
 
@@ -233,7 +244,7 @@ in
               --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
               ${resolvedSources.${name}}/ "$dest/${name}/"
             ln -sfn "../../plugins/${name}" "$linkroot/${name}"
-          '') enabledNames}
+          '') pnpNames}
 
           echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' > "$dest/.enabled"
         '';

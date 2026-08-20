@@ -7,7 +7,10 @@
   deepseek-v4-pro; high = xai-oauth / grok-4.6.
 - No fourth model. No `T1`/`T2`/`T3` in Nix options, README,
   plugin.yaml, WebUI labels, or slash commands.
-- `plugins` is `listOf str`; `extraPlugins` is `attrsOf path`.
+- `plugins` is `listOf str`; `extraPluginDirs` is `attrsOf path`
+  (`extraPlugins` is a renamed alias). Official
+  `services.hermes-agent.extraPlugins` (`listOf package`) stays
+  distinct and is unioned into `settings.plugins.enabled`.
 - Composer on: default plugins are model-router, tool-call-coherency,
   secret-handoff (`mkDefault`). Composer off: `plugins` default is `[]`.
 - `gbrain.enable` appends the two gbrain plugins if missing, without
@@ -17,7 +20,15 @@
   `fallback_model` from high, `delegation` from medium, `cron` +
   listed auxiliary slots from low or medium (`reasoning_effort = "none"`).
   Do not seed vision / tts / moa / goal_judge.
-- Users override seeds with official `services.hermes-agent.settings.*`.
+- Users override seeds with `hermesPnP.models.*`, or official
+  `services.hermes-agent.settings.*` assigned **after** the PnP import
+  (`deepConfigType` last writer wins). Do not assign
+  `settings.plugins.enabled` yourself — add names via `plugins`,
+  `extraPluginDirs`, or official `extraPlugins`.
+- Official `extraPackages` fold into the toolbox buildEnv. Do not put
+  the toolbox env back on `extraPackages`.
+- WebUI/browser jails follow official `container.enable` (and
+  `container.network` when that option exists).
 - model-router keys are `low` / `medium` / `high`. Commands `/low`
   `/medium` `/high` `/auto`. Classifier replies with exactly one of
   those three words. Escalation 4 on low, 3 on medium, cap high.

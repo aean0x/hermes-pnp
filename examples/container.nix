@@ -11,6 +11,11 @@
     # container.image = "ubuntu:24.04";
   };
 
+  # Official pairing: host CLI shares ~/.hermes with the jail.
+  # services.hermes-agent.container.hostUsers = [ "alice" ];
+  # Official extraPackages fold into the toolbox (native + jail).
+  # services.hermes-agent.extraPackages = [ pkgs.sops ];
+
   # Official option — do not wrap. Extra binds for the gateway jail.
   services.hermes-agent.container.extraVolumes = [
     # "/home/alice/src:/data/src"

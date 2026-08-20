@@ -1,36 +1,38 @@
 # Eval-only composer checks. Dummy packages; do not realize official builds.
-{ self
-, nixpkgs
-, system
-, pkgs
-,
+{
+  self,
+  nixpkgs,
+  system,
+  pkgs,
 }:
 
 let
   inherit (nixpkgs) lib;
 
-  dummyAgent = pkgs.runCommand "dummy-hermes-agent"
-    {
-      passthru.hermesVenv = pkgs.runCommand "dummy-hermes-venv" { } ''
-        mkdir -p "$out/bin"
-        touch "$out/bin/python3"
-        chmod +x "$out/bin/python3"
+  dummyAgent =
+    pkgs.runCommand "dummy-hermes-agent"
+      {
+        passthru.hermesVenv = pkgs.runCommand "dummy-hermes-venv" { } ''
+          mkdir -p "$out/bin"
+          touch "$out/bin/python3"
+          chmod +x "$out/bin/python3"
+        '';
+      }
+      ''
+        mkdir -p "$out/bin" \
+          "$out/share/hermes-agent/plugins" \
+          "$out/share/hermes-agent/skills" \
+          "$out/share/hermes-agent/optional-skills" \
+          "$out/share/hermes-agent/locales" \
+          "$out/share/hermes-agent/optional-mcps" \
+          "$out/share/hermes-agent/web_dist" \
+          "$out/ui-tui"
+        cat > "$out/bin/hermes" <<'EOF'
+        #!/bin/sh
+        exit 0
+        EOF
+        chmod +x "$out/bin/hermes"
       '';
-    } ''
-    mkdir -p "$out/bin" \
-      "$out/share/hermes-agent/plugins" \
-      "$out/share/hermes-agent/skills" \
-      "$out/share/hermes-agent/optional-skills" \
-      "$out/share/hermes-agent/locales" \
-      "$out/share/hermes-agent/optional-mcps" \
-      "$out/share/hermes-agent/web_dist" \
-      "$out/ui-tui"
-    cat > "$out/bin/hermes" <<'EOF'
-    #!/bin/sh
-    exit 0
-    EOF
-    chmod +x "$out/bin/hermes"
-  '';
 
   dummyWebui = pkgs.runCommand "dummy-hermes-webui" { } ''
     mkdir -p "$out/bin"
@@ -100,6 +102,21 @@ let
 
   toolboxConfig = eval [ ../examples/toolbox.nix ];
 
+  foldedPackagesConfig = eval [
+    ../examples/composer.nix
+    { services.hermes-agent.extraPackages = [ pkgs.sops ]; }
+  ];
+
+  officialContainerOnly = eval [
+    ../examples/composer.nix
+    { services.hermes-agent.container.enable = true; }
+  ];
+
+  extraPluginUnion = eval [
+    ../examples/library-plugins.nix
+    { services.hermes-agent.extraPlugins = [ pkgs.hello ]; }
+  ];
+
   skillsConfig = eval [ ../examples/skills.nix ];
 
   # Skip the GitHub fetch; keep the pin options.
@@ -124,7 +141,11 @@ in
     test "${modulesConfig.services.hermes-webui.user}" = "${modulesConfig.services.hermes-agent.user}"
     test "${modulesConfig.services.hermes-webui.group}" = "${modulesConfig.services.hermes-agent.group}"
     test "${modulesConfig.services.hermes-webui.hermesHome}" = "${modulesConfig.services.hermes-agent.stateDir}/.hermes"
-    test "${toString (modulesConfig.services.hermes-webui.agent.package == modulesConfig.services.hermes-agent.package)}" = "1"
+    test "${
+      toString (
+        modulesConfig.services.hermes-webui.agent.package == modulesConfig.services.hermes-agent.package
+      )
+    }" = "1"
     test "${toString (modulesConfig.services.hermes-agent.extraDependencyGroups == [ ])}" = "1"
     test "${toString (modulesConfig.systemd.services ? gbrain-mcp-http)}" = ""
     test "${gbrainConfig.services.hermes-agent.mcpServers.gbrain.url}" = "http://127.0.0.1:3131/mcp"
@@ -134,12 +155,18 @@ in
     test "${gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig.User}" = "${gbrainConfig.services.hermes-agent.user}"
     test "${toString gbrainConfig.systemd.services.gbrain-mcp-http.unitConfig.StartLimitIntervalSec}" = "120"
     test "${toString gbrainConfig.systemd.services.gbrain-mcp-http.unitConfig.StartLimitBurst}" = "5"
-    test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig ? StartLimitIntervalSec)}" = ""
+    test "${
+      toString (gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig ? StartLimitIntervalSec)
+    }" = ""
     test "${toString (lib.elem "hermes-agent-setup.service" gbrainConfig.systemd.services.gbrain-mcp-http.after)}" = ""
-    test "${toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_TRUST_FORWARDED_PROTO)}" = "1"
+    test "${
+      toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_TRUST_FORWARDED_PROTO)
+    }" = "1"
     test "${modulesConfig.services.hermes-webui.extraEnvironment.HERMES_WEBUI_TRUSTED_PROXY_CIDRS}" = "127.0.0.1/32,::1/128"
     test "${modulesConfig.systemd.services.hermes-webui.serviceConfig.UMask}" = "0077"
-    test "${toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_EXTENSION_DIR)}" = "1"
+    test "${
+      toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_EXTENSION_DIR)
+    }" = "1"
     test "${toString (builtins.elem "model-router" modulesConfig.services.hermesPnP.plugins)}" = "1"
     test "${toString (builtins.elem "model-router" gbrainConfig.services.hermesPnP.plugins)}" = "1"
     test "${toString (builtins.elem "gbrain-retrieval-reflex" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
@@ -162,20 +189,42 @@ in
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_URL}" = "http://127.0.0.1:4848"
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_PORT}" = "4848"
     test "${modulesConfig.services.hermes-agent.environment.AGENT_BROWSER_ENGINE}" = "${modulesConfig.services.hermesPnP.browser.engine}"
-    test "${toString (modulesConfig.services.hermes-agent.extraPackages != [ ])}" = "1"
+    test "${toString (modulesConfig.services.hermes-agent.extraPackages == [ ])}" = "1"
+    test "${
+      toString (
+        lib.any (p: lib.hasPrefix "hermes-toolbox" (p.name or "")) modulesConfig.users.users.hermes.packages
+      )
+    }" = "1"
+    test "${toString modulesConfig.services.hermes-agent.addToSystemPackages}" = "1"
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_PROFILE}" = "${modulesConfig.services.hermes-agent.stateDir}/browser-profile"
     test "${gbrainConfig.services.hermes-agent.environment.GBRAIN_TOKEN_FILE}" = "${gbrainConfig.services.hermes-agent.stateDir}/home/.gbrain/hermes-mcp.token"
     test "${toString (builtins.elem 6080 modulesConfig.networking.firewall.allowedTCPPorts)}" = ""
     test "${toString (builtins.elem 4848 modulesConfig.networking.firewall.allowedTCPPorts)}" = ""
     test "${toString (modulesConfig.services.hermesPnP.toolbox.hostPath != "")}" = "1"
-    test "${toString (builtins.match ".*toolbox/bin.*" modulesConfig.services.hermesPnP.toolbox.hostPath != null)}" = "1"
+    test "${
+      toString (
+        builtins.match ".*toolbox/bin.*" modulesConfig.services.hermesPnP.toolbox.hostPath != null
+      )
+    }" = "1"
     test "${toString modulesConfig.services.hermes-agent.container.enable}" = ""
     test "${lib.concatStringsSep "," modulesConfig.services.hermes-agent.settings.skills.external_dirs}" = "/var/lib/hermes/skills"
     test "${toString modulesConfig.programs.git.enable}" = "1"
-    test "${toString (lib.any (x: lib.hasInfix "git-credential-github-env" (x.credential.helper or "")) modulesConfig.programs.git.config)}" = "1"
+    test "${
+      toString (
+        lib.any (
+          x: lib.hasInfix "git-credential-github-env" (x.credential.helper or "")
+        ) modulesConfig.programs.git.config
+      )
+    }" = "1"
     test "${toString (lib.any (x: x ? user) modulesConfig.programs.git.config)}" = ""
     test "${toString containerConfig.services.hermes-agent.container.enable}" = "1"
-    test "${toString (lib.any (v: lib.hasInfix "/etc/gitconfig" v) containerConfig.services.hermes-agent.container.extraVolumes)}" = "1"
+    test "${
+      toString (
+        lib.any (
+          v: lib.hasInfix "/etc/gitconfig" v
+        ) containerConfig.services.hermes-agent.container.extraVolumes
+      )
+    }" = "1"
     test "${lib.concatStringsSep "," containerConfig.services.hermes-agent.settings.skills.external_dirs}" = "/data/skills"
     test "${containerConfig.services.hermes-agent.container.image}" = "ubuntu:24.04"
     test "${toString containerConfig.services.hermesPnP.webui.container.enable}" = "1"
@@ -204,7 +253,7 @@ in
     test "${toString (lib.hasInfix "--memory=2g" containerResourcesConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--cpus=2" containerResourcesConfig.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (lib.hasInfix "--init" containerResourcesConfig.systemd.services.hermes-browser.preStart)}" = "1"
-    test "${toString (lib.elem "--renderer-process-limit=2" containerConfig.services.hermesPnP.browser.extraArgs)}" = "1"
+    test "${toString (lib.elem "--renderer-process-limit=5" containerConfig.services.hermesPnP.browser.extraArgs)}" = "1"
     test "${toString (containerConfig.systemd.sockets ? hermes-admin)}" = ""
     test "${toString (lib.hasInfix "/run/hermes-admin" containerConfig.systemd.services.hermes-webui.preStart)}" = ""
     test "${toString (adminConfig.systemd.sockets ? hermes-admin)}" = "1"
@@ -234,25 +283,57 @@ in
     test "${toString (lib.hasInfix "connect \${toString cdpPort}" (builtins.readFile ../modules/browser/shared.nix))}" = ""
     test "${toString (lib.hasInfix "default.pid" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
     test "${toString (lib.hasInfix "pkgs.agent-browser or" (builtins.readFile ../modules/browser/shared.nix))}" = ""
-    test "${toString (lib.hasInfix "agent-browser-0.34" (lib.concatMapStringsSep " " toString modulesConfig.environment.systemPackages))}" = "1"
-    test "${toString (lib.hasInfix "agent-browser-0.27" (lib.concatMapStringsSep " " toString modulesConfig.environment.systemPackages))}" = ""
-    test "${toString (lib.hasInfix "agent-browser-0.34" (lib.concatMapStringsSep " " toString containerConfig.environment.systemPackages))}" = "1"
+    test "${
+      toString (
+        lib.hasInfix "agent-browser-0.34" (
+          lib.concatMapStringsSep " " toString modulesConfig.environment.systemPackages
+        )
+      )
+    }" = "1"
+    test "${
+      toString (
+        lib.hasInfix "agent-browser-0.27" (
+          lib.concatMapStringsSep " " toString modulesConfig.environment.systemPackages
+        )
+      )
+    }" = ""
+    test "${
+      toString (
+        lib.hasInfix "agent-browser-0.34" (
+          lib.concatMapStringsSep " " toString containerConfig.environment.systemPackages
+        )
+      )
+    }" = "1"
     test "${containerConfig.services.hermesPnP.browser.gate.listenAddress}" = "127.0.0.1"
     test "${toString containerConfig.services.hermesPnP.browser.gate.port}" = "4848"
     test "${toString (builtins.elem 6080 containerConfig.networking.firewall.allowedTCPPorts)}" = ""
     test "${toString (builtins.elem 4848 containerConfig.networking.firewall.allowedTCPPorts)}" = ""
     test "${containerConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_URL}" = "http://127.0.0.1:4848"
-    test "${toString (containerGbrainConfig.services.hermes-agent.environment ? GBRAIN_TOKEN_FILE)}" = ""
+    test "${
+      toString (containerGbrainConfig.services.hermes-agent.environment ? GBRAIN_TOKEN_FILE)
+    }" = ""
     test "${toString (lib.hasInfix "GBRAIN_TOKEN_FILE=/home/hermes/.gbrain/hermes-mcp.token" (lib.concatStringsSep " " containerGbrainConfig.services.hermes-agent.container.extraOptions))}" = "1"
     test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.after)}" = "1"
     test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.wants)}" = "1"
     test "${containerMcpConfig.services.hermesPnP.mcpProxy.clientAuth}" = "token"
-    test "${toString (containerMcpConfig.services.hermes-agent.mcpServers.github.headers."X-MCP-Proxy-Token" == "\${MCP_PROXY_TOKEN}")}" = "1"
-    test "${toString (lib.any (p: toString p == "/run/mcp-proxy/client.env") containerMcpConfig.services.hermes-agent.environmentFiles)}" = "1"
+    test "${
+      toString (
+        containerMcpConfig.services.hermes-agent.mcpServers.github.headers."X-MCP-Proxy-Token"
+        == "\${MCP_PROXY_TOKEN}"
+      )
+    }" = "1"
+    test "${
+      toString (
+        lib.any (
+          p: toString p == "/run/mcp-proxy/client.env"
+        ) containerMcpConfig.services.hermes-agent.environmentFiles
+      )
+    }" = "1"
     touch "$out"
   '';
 
   drop-in = pkgs.runCommand "hermes-pnp-drop-in-eval" { } ''
+    test "${toString dropInConfig.services.hermes-agent.addToSystemPackages}" = ""
     test "${toString dropInConfig.services.hermesPnP.enable}" = ""
     test "${toString dropInConfig.services.hermesPnP.git.credentialHelper.enable}" = ""
     test "${toString dropInConfig.services.hermes-webui.enable}" = ""
@@ -271,6 +352,7 @@ in
     test "${optionsEval.config.services.hermesPnP.models.medium.model}" = "deepseek-v4-pro"
     test "${optionsEval.config.services.hermesPnP.models.high.model}" = "grok-4.6"
     test "${toString (optionsEval.options.services.hermesPnP ? extraPlugins)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP ? extraPluginDirs)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? pluginInstall)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.webui.enable.isDefined or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.webui ? container)}" = "1"
@@ -283,7 +365,9 @@ in
     test "${toString (optionsEval.options.services.hermesPnP.toolbox.enable.isDefined or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser.enable.default or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser.cdpPort.default or 0)}" = "9222"
-    test "${toString (optionsEval.options.services.hermesPnP.browser.gate.enable.default or false)}" = "1"
+    test "${
+      toString (optionsEval.options.services.hermesPnP.browser.gate.enable.default or false)
+    }" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser.gate.port.default or 0)}" = "4848"
     test "${toString (optionsEval.options.services.hermesPnP ? runtime)}" = ""
     test "${toString optionsEval.options.services.hermesPnP.gbrain.enable.default}" = ""
@@ -307,7 +391,9 @@ in
   examples = pkgs.runCommand "hermes-pnp-examples-eval" { } ''
     test "${toString mcpProxyConfig.services.hermesPnP.mcpProxy.enable}" = "1"
     test "${mcpProxyConfig.services.hermesPnP.mcpProxy.clientAuth}" = "none"
-    test "${toString (mcpProxyConfig.services.hermes-agent.mcpServers.github.headers."X-MCP-Proxy-Token" or "")}" = ""
+    test "${
+      toString (mcpProxyConfig.services.hermes-agent.mcpServers.github.headers."X-MCP-Proxy-Token" or "")
+    }" = ""
     test "${mcpProxyConfig.services.hermesPnP.mcpProxy.backends.github.auth.mode}" = "passthrough"
     test "${mcpProxyConfig.services.hermesPnP.mcpProxy.backends.docs.upstream}" = "https://example.invalid/mcp"
     test "${mcpProxyConfig.services.hermes-agent.mcpServers.github.url}" = "http://127.0.0.1:3140/github"
@@ -317,6 +403,24 @@ in
     test "${browserConfig.services.hermesPnP.browser.gate.publicUrl}" = "https://browser.example.com/"
     test "${toString (browserConfig.services.hermesPnP.browser.package == pkgs.brave)}" = "1"
     test "${toString (builtins.elem pkgs.sops toolboxConfig.services.hermesPnP.toolbox.extraPackages)}" = "1"
+    test "${toString (builtins.elem pkgs.sops toolboxConfig.services.hermesPnP.toolbox.paths)}" = "1"
+    test "${toString (builtins.elem pkgs.sops foldedPackagesConfig.services.hermes-agent.extraPackages)}" = "1"
+    test "${toString (builtins.elem pkgs.sops foldedPackagesConfig.services.hermesPnP.toolbox.paths)}" = "1"
+    test "${
+      toString (
+        lib.any (
+          p: lib.hasPrefix "hermes-toolbox" (p.name or "")
+        ) foldedPackagesConfig.services.hermes-agent.extraPackages
+      )
+    }" = ""
+    test "${toString officialContainerOnly.services.hermesPnP.container.enable}" = ""
+    test "${toString officialContainerOnly.services.hermes-agent.container.enable}" = "1"
+    test "${toString officialContainerOnly.services.hermesPnP.webui.container.enable}" = "1"
+    test "${toString officialContainerOnly.services.hermesPnP.browser.container.enable}" = "1"
+    test "${toString (lib.hasInfix "--network host" officialContainerOnly.systemd.services.hermes-webui.preStart)}" = "1"
+    test "${toString (builtins.elem "hello" extraPluginUnion.services.hermes-agent.settings.plugins.enabled)}" = "1"
+    test "${toString (builtins.elem "nix-managed-hello" extraPluginUnion.services.hermes-agent.settings.plugins.enabled)}" = "1"
+    test "${toString (builtins.elem "model-router" extraPluginUnion.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${toString (skillsConfig.services.hermesPnP.skills.extraSkills ? site-runbook)}" = "1"
     test "${toString (hmcConfig.services.hermesPnP.hmc.compressPercent == 0.30)}" = "1"
     test "${toString hmcConfig.services.hermesPnP.hmc.enable}" = ""

@@ -11,11 +11,11 @@
   };
 
   outputs =
-    { self
-    , nixpkgs
-    , hermes-agent
-    , hermes-webui
-    ,
+    {
+      self,
+      nixpkgs,
+      hermes-agent,
+      hermes-webui,
     }:
     let
       inherit (nixpkgs) lib;
@@ -43,7 +43,7 @@
     in
     {
       lib = {
-        inherit (import ./lib/env.nix { inherit lib; }) mkDockerEnv remapStatePath;
+        inherit (import ./lib/env.nix { inherit lib; }) mkDockerEnv remapStatePath agentContainerNetwork;
         forPkgs = pkgs: import ./lib { inherit pkgs lib; };
       };
 
