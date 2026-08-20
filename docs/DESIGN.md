@@ -325,8 +325,17 @@ Noto emoji). Without it, Skia FATALS
 pass a command-line URL (`about:blank`); that ties process
 lifetime to that tab.
 
+Browser CA is the host system bundle
+(`environment.etc."ssl/certs/ca-certificates.crt".source` — nss-cacert
+plus `security.pki` extras) bind-mounted onto Ubuntu
+`/etc/ssl/certs/ca-certificates.crt` + `/etc/ssl/cert.pem`. Do not
+bind `/etc/ssl` or `/etc/static`: Docker mounts the NixOS
+`/etc/static` symlink as an empty directory. Chromium shm is
+`--disable-dev-shm-usage` (jail `/tmp` tmpfs). Do not also set
+`shmSize` unless a consumer really wants `/dev/shm`.
+
 `hermesPnP.browser.maxTabs` (default 5) adds
-`--renderer-process-limit` and a CDP prune loop. Gate watchdog is
+`--renderer-process-limit`. Gate watchdog is
 CDP + session `default.pid` + `dashboard.pid`. Do not curl dashboard
 HTTP (GET `/` blocks during `/api/exec` and looks like a drop).
 Do not `dashboard stop` / `connect` while those pids are alive —
@@ -357,9 +366,11 @@ WebUI mounts: `/nix/store:ro`, agent stateDir → `/data`, agent home →
 bind-mounts the NixOS `/etc/static` symlink as an empty dir). Not
 `/etc/nixos`, not docker.sock.
 
-Browser mounts: workspace, profile, cookies, logs, gate. Not hermes
-home, not `.hermes`, not `/etc`. `--no-sandbox`: the container is the
-jail.
+Browser mounts: workspace, profile, cookies, logs, gate, system CA
+bundle onto Ubuntu ssl paths. Not hermes home, not `.hermes`, not
+host `/etc` / `/etc/static`. `--no-sandbox`: the container is the
+jail. `--cap-drop=ALL` and docker `no-new-privileges` stay; do not
+also `setpriv` in the entrypoint.
 
 Agent jail also bind-mounts `/etc/gitconfig:ro` when
 `hermesPnP.git.credentialHelper.enable` (composer default). That file

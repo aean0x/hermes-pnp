@@ -29,27 +29,16 @@ let
     waitForDisplay
     chromiumExec
     fontconfigFile
-    cdpPort
     ;
 
-  pruneTabs = pkgs.writeScript "hermes-browser-prune-tabs" ''
-    #!${pkgs.python3}/bin/python3
-    import json, sys, urllib.request
-    port, cap = sys.argv[1], int(sys.argv[2])
-    try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=2) as r:
-            targets = json.load(r)
-    except Exception:
-        raise SystemExit(0)
-    pages = [t for t in targets if t.get("type") == "page" and t.get("id")]
-    for t in pages[:-cap]:
-        try:
-            urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/json/close/{t['id']}", timeout=2
-            ).read()
-        except Exception:
-            pass
-  '';
+  # Host /etc/static is a symlink; Docker bind-mounts that as an empty
+  # dir. The etc entry is the resolved store path of the system bundle
+  # (nss-cacert plus security.pki extras). /nix/store is already bound.
+  caBundle = config.environment.etc."ssl/certs/ca-certificates.crt".source;
+  caBinds = [
+    "${caBundle}:/etc/ssl/certs/ca-certificates.crt:ro"
+    "${caBundle}:/etc/ssl/cert.pem:ro"
+  ];
 
   supervisor = pkgs.writeShellApplication {
     name = "hermes-browser-supervisor";
@@ -82,22 +71,8 @@ let
           ""
       }
 
-      ${
-        if cfg.maxTabs != null then
-          ''
-            while true; do
-              ${pruneTabs} ${toString cdpPort} ${toString cfg.maxTabs} || true
-              sleep 20
-            done &
-          ''
-        else
-          ""
-      }
-
       # Restart the engine in-process. Xvfb and the gate stay up.
-      # Drop root-owned leftovers in logDir so >> as hermes cannot fail.
       # Keep Chromium session-restore; extraArgs hide the crash bubble.
-      rm -f ${logDir}/browser.stdout ${logDir}/browser.stderr
       while true; do
         echo "$(date -Iseconds) start" >> ${logDir}/supervisor.log
         # chromiumExec is a multi-line command; wrap so the log redirects bind.
@@ -124,14 +99,18 @@ let
       "${cookiesDir}:${cookiesDir}"
       "${logDir}:${logDir}"
       "${gateHome}:${gateHome}"
-    ];
+    ]
+    ++ caBinds;
     extraEnv = {
       FONTCONFIG_FILE = fontconfigFile;
+      SSL_CERT_FILE = toString caBundle;
+      NIX_SSL_CERT_FILE = toString caBundle;
+      CURL_CA_BUNDLE = toString caBundle;
     };
     command = [ "${supervisor}/bin/hermes-browser-supervisor" ];
     identity = {
       package = "${supervisor}";
-      inherit fontconfigFile;
+      inherit fontconfigFile caBundle;
     };
   };
 in

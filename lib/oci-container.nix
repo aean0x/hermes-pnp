@@ -43,9 +43,6 @@ let
       export HOME="''${HOME:-/home/hermes}"
       export USER="''${USER:-hermes}"
       export LOGNAME="''${LOGNAME:-hermes}"
-      if command -v setpriv >/dev/null 2>&1; then
-        exec setpriv --no-new-privs -- "$@"
-      fi
       exec "$@"
     '';
 
