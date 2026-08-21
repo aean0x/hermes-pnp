@@ -23,9 +23,10 @@ sandboxing, and the add-ons that should have been one enable.
 
     browser.package = pkgs.brave; # engine follows package.meta.mainProgram
 
-    models.low    = { provider = "deepseek";  model = "deepseek-v4-flash"; }; # cheap helper, cron + mechanical aux
-    models.medium = { provider = "deepseek";  model = "deepseek-v4-pro"; };   # workhorse, delegation + reasoning aux
-    models.high   = { provider = "xai-oauth"; model = "grok-4.6"; };          # session voice + fallback
+    models.low       = { provider = "deepseek";  model = "deepseek-v4-flash"; }; # cheap helper, cron
+    models.medium    = { provider = "deepseek";  model = "deepseek-v4-pro"; };   # workhorse, delegation
+    models.high      = { provider = "xai-oauth"; model = "grok-4.6"; };          # session voice + fallback
+    # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; }; # aux tasks; reasoning_effort = "none"
 
     plugins = [
       "model-router"

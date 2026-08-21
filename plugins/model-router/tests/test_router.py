@@ -56,6 +56,11 @@ class Names(unittest.TestCase):
         self.assertEqual(self.mod._higher("medium"), "high")
         self.assertEqual(self.mod._higher("high"), "high")
 
+    def test_router_does_not_touch_reasoning_config(self) -> None:
+        src = (ROOT / "__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("reasoning_config", src)
+        self.assertNotIn(".reasoning_effort", src)
+
 
 if __name__ == "__main__":
     unittest.main()

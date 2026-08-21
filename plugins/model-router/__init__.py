@@ -61,7 +61,7 @@ _PROVIDER_HOSTS = _s.PROVIDER_HOSTS
 _CLASSIFIER = _s.CLASSIFIER
 _MIN = "low"
 _MID = "medium"
-_TOP = NAMES[-1]  # "high" — the only tier that keeps a reasoning_config
+_TOP = NAMES[-1]  # "high"
 
 
 def _attach_file_handler() -> None:
@@ -364,11 +364,8 @@ def _apply_tier(agent: Any, name: str) -> bool:
         logger.warning("model-router: switch_model %s failed: %s", name, exc)
         return False
 
-    # switch_model does not touch reasoning_config. The top-tier model keeps
-    # its configured reasoning effort; cheaper tiers must not inherit it
-    # (wasted tokens or provider 400s).
-    if _rank(name) < _rank(_TOP):
-        agent.reasoning_config = None
+    # Jurisdiction is model/provider only. Session reasoning stays
+    # whatever Hermes set. Auxiliary effort is Nix-seeded, not here.
 
     # Prefer agent attributes; fall back to what we just applied.
     live_model = getattr(agent, "model", "") or result.new_model

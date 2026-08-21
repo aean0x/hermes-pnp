@@ -148,7 +148,7 @@ the official option PnP set via `mkDefault`.
 - `services.hermesPnP.enable` — composer on. Default `false`.
 - `services.hermesPnP.environmentFiles` — forwarded to official
   `environmentFiles`. Key list: `docs/hermes.env.example`.
-- `services.hermesPnP.models.{low,medium,high}` — `{ provider, model }`.
+- `services.hermesPnP.models.{low,medium,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Auxiliary is Nix-only; effort unset except auxiliary (`"none"`).
 - `services.hermesPnP.plugins` — `listOf str`. Composer on defaults
   via `mkDefault` to model-router, tool-call-coherency, secret-handoff.
 - `services.hermesPnP.extraPluginDirs` — `attrsOf path` beside the catalog
@@ -202,21 +202,29 @@ When `services.hermesPnP.enable = false`, PnP is inert except
 explicit `plugins` / `extraPluginDirs`, `mcpProxy.enable`, and opt-in
 `gbrain` / `hmc`.
 
-## Three models
+## Named models
 
-Exactly three named models. User-facing Nix, README, plugin.yaml,
-WebUI labels, and slash commands speak `low` / `medium` / `high` only.
+Model-router, WebUI labels, and slash commands speak `low` / `medium` /
+`high` only. Nix also has `models.auxiliary` for official auxiliary
+slots — not a router tier, no `/auxiliary`.
 
-| name   | role                     | seeds                                    |
-| ------ | ------------------------ | ---------------------------------------- |
-| low    | cheap helper             | mechanical auxiliary slots + cron        |
-| medium | workhorse                | `settings.delegation` + reasoning slots  |
-| high   | session identity + voice | `model.default`, `fallback_model`        |
+Each named model has `reasoning_effort` (`nullOr str`). Default is
+unset (Hermes session defaults) except auxiliary, which defaults to
+`"none"`. Model-router never writes `reasoning_config` /
+`reasoning_effort`.
+
+| name       | role                     | seeds                                         |
+| ---------- | ------------------------ | --------------------------------------------- |
+| low        | cheap helper             | `settings.cron`                               |
+| medium     | workhorse                | `settings.delegation`                         |
+| high       | session identity + voice | `model.default`, `fallback_model`             |
+| auxiliary  | official aux tasks       | every seeded `settings.auxiliary.<slot>`      |
 
 ```nix
-models.low    = { provider = "deepseek";  model = "deepseek-v4-flash"; };
-models.medium = { provider = "deepseek";  model = "deepseek-v4-pro"; };
-models.high   = { provider = "xai-oauth"; model = "grok-4.6"; };
+models.low       = { provider = "deepseek";  model = "deepseek-v4-flash"; };
+models.medium    = { provider = "deepseek";  model = "deepseek-v4-pro"; };
+models.high      = { provider = "xai-oauth"; model = "grok-4.6"; };
+models.auxiliary = { provider = "deepseek";  model = "deepseek-v4-flash"; }; # reasoning_effort = "none"
 ```
 
 When `hermesPnP.enable` (`modules/models.nix`):
@@ -225,12 +233,14 @@ When `hermesPnP.enable` (`modules/models.nix`):
 - `settings.fallback_model.{provider,model}` ← high
 - `settings.delegation.{provider,model}` ← medium
 - `settings.cron.{model,model_provider}` ← low
-- `settings.auxiliary.<slot> = { inherit (models.low or models.medium) provider model; }`
+- `settings.auxiliary.<slot>` ← `models.auxiliary` (provider, model, and `reasoning_effort` when set)
+- `settings.agent.reasoning_effort` ← high only when `models.high.reasoning_effort` is set
+- `delegation` / `cron` `reasoning_effort` ← medium / low only when those options are set
 
-Slots match official DEFAULT_CONFIG. Medium: `background_review`,
-`curator`, `kanban_decomposer`. Low: `title_generation`, `compression`,
+Slots match official DEFAULT_CONFIG: `title_generation`, `compression`,
 `approval`, `web_extract`, `skills_hub`, `mcp`, `triage_specifier`,
-`profile_describer`, `monitor`, `memory_query_rewrite`. Do not seed
+`profile_describer`, `monitor`, `memory_query_rewrite`,
+`background_review`, `curator`, `kanban_decomposer`. Do not seed
 vision, tts, moa, or goal_judge.
 
 `settings` is official `deepConfigType`. Do not wrap those leaves in
@@ -483,7 +493,7 @@ this host). Jail entrypoint `umask 0077`; host unit `UMask=0077`.
 - `checks.${system}.drop-in` — composer off, official-only options
 - `checks.${system}.options` — user-facing option paths; no
   `plugins.enable` / `plugins.modelRouter`; composer seeds
-  `settings.auxiliary.triage_specifier.model` from `models.low` and
+  `settings.auxiliary.triage_specifier.model` from `models.auxiliary` and
   `settings.model.default` from `models.high`
 - `checks.${system}.examples` — every file in `examples/`
 

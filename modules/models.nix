@@ -1,6 +1,10 @@
 # Seed services.hermes-agent.settings from hermesPnP.models.
 # settings is deepConfigType: do not wrap leaves in mkDefault.
 # Last writer wins; assign consumer settings after the PnP import.
+#
+# Model-router only switches model/provider. reasoning_effort is Hermes
+# session state except for official auxiliary slots, which seed from
+# models.auxiliary (default effort "none").
 {
   config,
   lib,
@@ -12,6 +16,7 @@ let
     genAttrs
     mkIf
     mkOption
+    optionalAttrs
     types
     ;
 
@@ -29,6 +34,15 @@ let
       default = defaults.model;
       description = "Model id (official settings / plugin).";
     };
+    reasoning_effort = mkOption {
+      type = types.nullOr types.str;
+      default = defaults.reasoning_effort;
+      description = ''
+        Official reasoning_effort for this named model. null leaves
+        Hermes session defaults. Model-router never writes this.
+        Auxiliary defaults to "none".
+      '';
+    };
   };
 
   mkNamedModel =
@@ -36,24 +50,33 @@ let
       provider,
       model,
       description,
+      reasoning_effort ? null,
     }:
     mkOption {
-      type = types.submodule { options = mkModelFields { inherit provider model; }; };
+      type = types.submodule {
+        options = mkModelFields {
+          inherit provider model reasoning_effort;
+        };
+      };
       default = { };
       inherit description;
       example = { inherit provider model; };
     };
 
-  lowSlot = {
-    inherit (models.low) provider model;
-  };
+  # Only emit reasoning_effort when the named model set it.
+  mkSeed =
+    m:
+    {
+      inherit (m) provider model;
+    }
+    // optionalAttrs (m.reasoning_effort != null) {
+      reasoning_effort = m.reasoning_effort;
+    };
 
-  mediumSlot = {
-    inherit (models.medium) provider model;
-  };
+  auxiliarySlot = mkSeed models.auxiliary;
 
-  # Mechanical auxiliary tasks.
-  auxiliaryLowSlots = [
+  # Official auxiliary tasks. Vision, tts, moa, and goal_judge stay unset.
+  auxiliarySlots = [
     "title_generation"
     "compression"
     "approval"
@@ -64,10 +87,6 @@ let
     "profile_describer"
     "monitor"
     "memory_query_rewrite"
-  ];
-
-  # Reasoning auxiliary tasks. Vision, tts, moa, and goal_judge stay unset.
-  auxiliaryMediumSlots = [
     "background_review"
     "curator"
     "kanban_decomposer"
@@ -78,13 +97,13 @@ in
     low = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-flash";
-      description = "Cheap helper. OOBE seed for mechanical auxiliary slots + unpinned cron.";
+      description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
     };
 
     medium = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-pro";
-      description = "Workhorse. OOBE seed for delegation + reasoning auxiliary slots (background_review, curator, kanban_decomposer).";
+      description = "Workhorse. OOBE seed for delegation and model-router medium.";
     };
 
     high = mkNamedModel {
@@ -95,6 +114,17 @@ in
         and fallback. Override here — not settings.model.default —
         unless you assign settings after the PnP import (deepConfigType
         last writer wins; mkDefault on a leaf is stored as a literal).
+      '';
+    };
+
+    auxiliary = mkNamedModel {
+      provider = "deepseek";
+      model = "deepseek-v4-flash";
+      reasoning_effort = "none";
+      description = ''
+        Official auxiliary tasks (title generation, compression, …).
+        Nix-only — not a model-router tier. reasoning_effort defaults
+        to "none" (overridable). Provider/model default like low.
       '';
     };
   };
@@ -112,13 +142,21 @@ in
       delegation = {
         provider = models.medium.provider;
         model = models.medium.model;
+      }
+      // optionalAttrs (models.medium.reasoning_effort != null) {
+        reasoning_effort = models.medium.reasoning_effort;
       };
       cron = {
         model = models.low.model;
         model_provider = models.low.provider;
+      }
+      // optionalAttrs (models.low.reasoning_effort != null) {
+        reasoning_effort = models.low.reasoning_effort;
       };
-      auxiliary =
-        genAttrs auxiliaryLowSlots (_: lowSlot) // genAttrs auxiliaryMediumSlots (_: mediumSlot);
+      auxiliary = genAttrs auxiliarySlots (_: auxiliarySlot);
+    }
+    // optionalAttrs (models.high.reasoning_effort != null) {
+      agent.reasoning_effort = models.high.reasoning_effort;
     };
   };
 }
