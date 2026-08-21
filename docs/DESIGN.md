@@ -213,6 +213,13 @@ unset (Hermes session defaults) except auxiliary, which defaults to
 `"none"`. Model-router never writes `reasoning_config` /
 `reasoning_effort`.
 
+Each of low / medium / high may set `ladder`, an ordered list of
+`{ provider, model }`. On a successful tier switch the plugin replaces
+the live agent's fallback chain with that list (primary excluded).
+Empty (default) means no extra failover on that tier; the plugin still
+climbs on tool errors. `models.high.ladder` also seeds official
+`settings.fallback_providers` when non-empty. Auxiliary has no ladder.
+
 | name       | role                     | seeds                                         |
 | ---------- | ------------------------ | --------------------------------------------- |
 | low        | cheap helper             | `settings.cron`                               |
@@ -231,6 +238,7 @@ When `hermesPnP.enable` (`modules/models.nix`):
 
 - `settings.model.{provider,default}` ← high
 - `settings.fallback_model.{provider,model}` ← high
+- `settings.fallback_providers` ← `models.high.ladder` when non-empty
 - `settings.delegation.{provider,model}` ← medium
 - `settings.cron.{model,model_provider}` ← low
 - `settings.auxiliary.<slot>` ← `models.auxiliary` (provider, model, and `reasoning_effort` when set)

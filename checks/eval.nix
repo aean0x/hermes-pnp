@@ -125,6 +125,24 @@ let
     { services.hermesPnP.hmc.enable = lib.mkForce false; }
   ];
 
+  ladderConfig = eval [
+    ../examples/composer.nix
+    {
+      services.hermesPnP.models.low.ladder = [
+        {
+          provider = "openrouter";
+          model = "google/gemini-2.5-flash";
+        }
+      ];
+      services.hermesPnP.models.high.ladder = [
+        {
+          provider = "anthropic";
+          model = "claude-opus-4-6";
+        }
+      ];
+    }
+  ];
+
   optionsEval = evalSystem [ ];
 
   dropAux = (dropInConfig.services.hermes-agent.settings.auxiliary or { }).triage_specifier or { };
@@ -369,6 +387,9 @@ in
     test "${optionsEval.config.services.hermesPnP.models.auxiliary.reasoning_effort}" = "none"
     test "${toString (optionsEval.config.services.hermesPnP.models.low.reasoning_effort == null)}" = "1"
     test "${toString (optionsEval.config.services.hermesPnP.models.high.reasoning_effort == null)}" = "1"
+    test "${toString (optionsEval.config.services.hermesPnP.models.low.ladder == [ ])}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.models.low ? ladder)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.models.auxiliary ? ladder)}" = ""
     test "${toString (optionsEval.options.services.hermesPnP ? extraPlugins)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? extraPluginDirs)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? pluginInstall)}" = "1"
@@ -442,6 +463,10 @@ in
     test "${toString (skillsConfig.services.hermesPnP.skills.extraSkills ? site-runbook)}" = "1"
     test "${toString (hmcConfig.services.hermesPnP.hmc.compressPercent == 0.30)}" = "1"
     test "${toString hmcConfig.services.hermesPnP.hmc.enable}" = ""
+    test "${(builtins.head ladderConfig.services.hermesPnP.models.low.ladder).model}" = "google/gemini-2.5-flash"
+    test "${(builtins.head ladderConfig.services.hermes-agent.settings.fallback_providers).provider}" = "anthropic"
+    test "${(builtins.head ladderConfig.services.hermes-agent.settings.fallback_providers).model}" = "claude-opus-4-6"
+    test "${toString (modulesConfig.services.hermes-agent.settings ? fallback_providers)}" = ""
     touch "$out"
   '';
 }

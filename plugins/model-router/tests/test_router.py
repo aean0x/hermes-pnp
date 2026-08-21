@@ -6,6 +6,7 @@ import importlib.util
 import os
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -60,6 +61,41 @@ class Names(unittest.TestCase):
         src = (ROOT / "__init__.py").read_text(encoding="utf-8")
         self.assertNotIn("reasoning_config", src)
         self.assertNotIn(".reasoning_effort", src)
+
+
+class Ladders(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.mod = _load()
+
+    def test_apply_replaces_live_fallback_chain(self) -> None:
+        agent = SimpleNamespace(
+            _fallback_chain=[{"provider": "xai-oauth", "model": "grok-4.6"}],
+            _fallback_model={"provider": "xai-oauth", "model": "grok-4.6"},
+            _fallback_index=2,
+            _fallback_activated=True,
+            _unavailable_fallback_keys={"xai-oauth:grok-4.6"},
+        )
+        meta = {
+            "ladder": [{"provider": "openrouter", "model": "google/gemini-2.5-flash"}]
+        }
+        self.mod._apply_tier_ladder(agent, meta)
+        self.assertEqual(
+            agent._fallback_chain,
+            [{"provider": "openrouter", "model": "google/gemini-2.5-flash"}],
+        )
+        self.assertEqual(agent._fallback_index, 0)
+        self.assertFalse(agent._fallback_activated)
+        self.assertEqual(agent._unavailable_fallback_keys, set())
+
+    def test_empty_ladder_clears_chain(self) -> None:
+        agent = SimpleNamespace(
+            _fallback_chain=[{"provider": "xai-oauth", "model": "grok-4.6"}],
+            _fallback_model={"provider": "xai-oauth", "model": "grok-4.6"},
+        )
+        self.mod._apply_tier_ladder(agent, {})
+        self.assertEqual(agent._fallback_chain, [])
+        self.assertIsNone(agent._fallback_model)
 
 
 if __name__ == "__main__":

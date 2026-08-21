@@ -66,6 +66,9 @@ let
       inherit (routerMeta.${name}) label;
       inherit (pnp.models.${name}) model provider;
       short = routerMeta.${name}.label;
+      ladder = map (e: {
+        inherit (e) provider model;
+      }) pnp.models.${name}.ladder;
     });
     escalate_max = "high";
     escalation_errors = {

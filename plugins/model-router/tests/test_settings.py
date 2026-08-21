@@ -16,8 +16,10 @@ _ENV_KEYS = (
     "MODEL_ROUTER_CONFIG",
     "MODEL_ROUTER_LOW_MODEL",
     "MODEL_ROUTER_LOW_PROVIDER",
+    "MODEL_ROUTER_LOW_LADDER",
     "MODEL_ROUTER_MEDIUM_MODEL",
     "MODEL_ROUTER_HIGH_MODEL",
+    "MODEL_ROUTER_HIGH_LADDER",
 )
 
 
@@ -113,6 +115,50 @@ class RejectFourth(unittest.TestCase):
                 with self.assertRaises(Exception) as ctx:
                     _load("mr_fourth")
             self.assertIn("ultra", str(ctx.exception))
+
+
+class Ladders(unittest.TestCase):
+    def test_file_ladder_drops_primary_and_junk(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / "cfg.json"
+            cfg.write_text(
+                json.dumps(
+                    {
+                        "models": {
+                            "low": {
+                                "model": "flash",
+                                "provider": "deepseek",
+                                "ladder": [
+                                    {"provider": "deepseek", "model": "flash"},
+                                    {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
+                                    {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
+                                    {"model": "orphan"},
+                                    "nope",
+                                ],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with _clean_env(MODEL_ROUTER_CONFIG=str(cfg)):
+                mod = _load("mr_ladder_file")
+        self.assertEqual(
+            mod.MODELS["low"]["ladder"],
+            [{"provider": "openrouter", "model": "google/gemini-2.5-flash"}],
+        )
+        self.assertEqual(mod.MODELS["medium"]["ladder"], [])
+
+    def test_env_ladder_json(self) -> None:
+        payload = json.dumps(
+            [{"provider": "openrouter", "model": "google/gemini-2.5-flash"}]
+        )
+        with _clean_env(MODEL_ROUTER_LOW_LADDER=payload):
+            mod = _load("mr_ladder_env")
+        self.assertEqual(
+            mod.MODELS["low"]["ladder"],
+            [{"provider": "openrouter", "model": "google/gemini-2.5-flash"}],
+        )
 
 
 if __name__ == "__main__":

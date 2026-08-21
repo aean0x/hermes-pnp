@@ -286,6 +286,21 @@ def _install_agent_capture() -> None:
     logger.info("model-router: AIAgent capture installed")
 
 
+def _apply_tier_ladder(agent: Any, meta: dict[str, Any]) -> None:
+    """Replace the live fallback chain with this tier's ladder."""
+    chain = list(meta.get("ladder") or [])
+    try:
+        agent._fallback_chain = chain
+        agent._fallback_model = chain[0] if chain else None
+        agent._fallback_index = 0
+        agent._fallback_activated = False
+        unavailable = getattr(agent, "_unavailable_fallback_keys", None)
+        if isinstance(unavailable, (set, dict)):
+            unavailable.clear()
+    except Exception:
+        logger.debug("model-router: could not apply tier ladder", exc_info=True)
+
+
 def _apply_tier(agent: Any, name: str) -> bool:
     meta = MODELS.get(name)
     if not meta or agent is None:
@@ -293,6 +308,7 @@ def _apply_tier(agent: Any, name: str) -> bool:
     model = meta["model"]
     provider = meta["provider"]
     if _same_route(agent, model, provider):
+        _apply_tier_ladder(agent, meta)
         return True
     try:
         from hermes_cli.config import load_config
@@ -400,6 +416,7 @@ def _apply_tier(agent: Any, name: str) -> bool:
         )
         return False
 
+    _apply_tier_ladder(agent, meta)
     logger.info(
         "model-router: applied %s → %s / %s (base=%s)",
         meta["label"],

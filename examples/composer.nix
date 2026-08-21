@@ -21,6 +21,7 @@
       provider = "xai-oauth";
       model = "grok-4.6";
     };
+    # models.low.ladder = [ { provider = "openrouter"; model = "google/gemini-2.5-flash"; } ];
     # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; };
     # models.high.reasoning_effort = "high"; # else Hermes session default
 

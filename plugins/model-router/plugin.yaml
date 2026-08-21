@@ -1,9 +1,10 @@
 name: model-router
-version: 0.4.0
+version: 0.5.0
 description: >-
   Per-turn cost router across three named tiers (low / medium / high).
   Classifies each user turn, switches the agent, and climbs on tool errors.
-  Pins with /low /medium /high /auto. Models/providers from config.json or
+  Optional per-tier ladder is provider failover for that pin. Pins with
+  /low /medium /high /auto. Models/providers from config.json or
   MODEL_ROUTER_* env. Uses AIAgent.switch_model — no Hermes/WebUI core edits.
 author: aean0x
 kind: standalone
