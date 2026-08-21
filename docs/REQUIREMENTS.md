@@ -1,12 +1,15 @@
 # Hermes PnP — requirements
 
-- One Nix block (`services.hermesPnP.models`) names three models:
-  `low`, `medium`, `high`. That block seeds official settings,
-  model-router `config.json`, WebUI, and slash commands.
+- One Nix block (`services.hermesPnP.models`) names `low`, `medium`,
+  `high` (router + session seeds) and `auxiliary` (official aux slots
+  only — not a router tier, no slash command).
 - Defaults: low = deepseek / deepseek-v4-flash; medium = deepseek /
-  deepseek-v4-pro; high = xai-oauth / grok-4.6.
-- No fourth model. No `T1`/`T2`/`T3` in Nix options, README,
-  plugin.yaml, WebUI labels, or slash commands.
+  deepseek-v4-pro; high = xai-oauth / grok-4.6; auxiliary = same as
+  low. Each has `reasoning_effort` (`nullOr str`); default unset
+  except auxiliary = `"none"`.
+- No fourth **router** model. No `T1`/`T2`/`T3` in plugin.yaml, WebUI
+  labels, or slash commands. Model-router never writes
+  `reasoning_effort` / `reasoning_config`.
 - `plugins` is `listOf str`; `extraPluginDirs` is `attrsOf path`
   (`extraPlugins` is a renamed alias). Official
   `services.hermes-agent.extraPlugins` (`listOf package`) stays
@@ -17,9 +20,10 @@
   writing back into the `plugins` option. Listing those plugins does
   not require `gbrain.enable`.
 - When composer is on, seed official `settings.model` +
-  `fallback_model` from high, `delegation` from medium, `cron` +
-  listed auxiliary slots from low or medium.
-  Do not seed vision / tts / moa / goal_judge.
+  `fallback_model` from high, `delegation` from medium, `cron` from
+  low, and listed auxiliary slots from `models.auxiliary` (including
+  `reasoning_effort` when that option is set). Do not seed vision /
+  tts / moa / goal_judge.
 - Users override seeds with `hermesPnP.models.*`, or official
   `services.hermes-agent.settings.*` assigned **after** the PnP import
   (`deepConfigType` last writer wins). Do not assign
@@ -38,12 +42,11 @@
 - Official keys: `model.{provider,default}`,
   `fallback_model.{provider,model}`, `delegation.{provider,model}`,
   `cron.{model,model_provider}`,
-  `auxiliary.<slot>.{provider,model}`.
-- Auxiliary slots seeded: title_generation, compression, approval,
-  web_extract, skills_hub, mcp, triage_specifier, kanban_decomposer,
-  profile_describer, curator, background_review, monitor,
-  memory_query_rewrite. Medium: background_review, curator,
-  kanban_decomposer. The rest ride low.
+  `auxiliary.<slot>.{provider,model,reasoning_effort?}`.
+- Auxiliary slots seeded from `models.auxiliary`: title_generation,
+  compression, approval, web_extract, skills_hub, mcp,
+  triage_specifier, kanban_decomposer, profile_describer, curator,
+  background_review, monitor, memory_query_rewrite.
 - GBrain URL stays on typed `mcpServers.gbrain.url`.
 - `nix flake check` stays eval-cheap (dummy agent/webui packages).
 - Composer off + `plugins = [ "model-router" ]` still materializes the

@@ -73,8 +73,11 @@ skills/                   # first-party skill trees
 
 Adding a plugin: drop `plugins/<name>/` and add one catalog line.
 
-Three models: `models.low` / `models.medium` / `models.high`. No T1/T2/T3
-in Nix options, README, plugin.yaml, WebUI, or slash commands.
+Router tiers: `models.low` / `models.medium` / `models.high`. Nix also
+has `models.auxiliary` (official aux slots; not a slash command).
+`reasoning_effort` is unset except auxiliary (`"none"`). Model-router
+never writes reasoning. No T1/T2/T3 in plugin.yaml, WebUI, or slash
+commands.
 
 ## Checks
 

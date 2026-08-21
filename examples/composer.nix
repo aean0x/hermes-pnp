@@ -21,6 +21,8 @@
       provider = "xai-oauth";
       model = "grok-4.6";
     };
+    # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; };
+    # models.high.reasoning_effort = "high"; # else Hermes session default
 
     plugins = [
       "model-router"
