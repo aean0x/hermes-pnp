@@ -46,12 +46,10 @@ let
 
   lowSlot = {
     inherit (models.low) provider model;
-    reasoning_effort = "none";
   };
 
   mediumSlot = {
     inherit (models.medium) provider model;
-    reasoning_effort = "none";
   };
 
   # Mechanical auxiliary tasks.

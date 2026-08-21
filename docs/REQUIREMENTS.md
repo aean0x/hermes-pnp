@@ -18,7 +18,7 @@
   not require `gbrain.enable`.
 - When composer is on, seed official `settings.model` +
   `fallback_model` from high, `delegation` from medium, `cron` +
-  listed auxiliary slots from low or medium (`reasoning_effort = "none"`).
+  listed auxiliary slots from low or medium.
   Do not seed vision / tts / moa / goal_judge.
 - Users override seeds with `hermesPnP.models.*`, or official
   `services.hermes-agent.settings.*` assigned **after** the PnP import
@@ -38,7 +38,7 @@
 - Official keys: `model.{provider,default}`,
   `fallback_model.{provider,model}`, `delegation.{provider,model}`,
   `cron.{model,model_provider}`,
-  `auxiliary.<slot>.{provider,model,reasoning_effort}`.
+  `auxiliary.<slot>.{provider,model}`.
 - Auxiliary slots seeded: title_generation, compression, approval,
   web_extract, skills_hub, mcp, triage_specifier, kanban_decomposer,
   profile_describer, curator, background_review, monitor,

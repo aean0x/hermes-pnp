@@ -225,7 +225,7 @@ When `hermesPnP.enable` (`modules/models.nix`):
 - `settings.fallback_model.{provider,model}` ← high
 - `settings.delegation.{provider,model}` ← medium
 - `settings.cron.{model,model_provider}` ← low
-- `settings.auxiliary.<slot> = { inherit (models.low or models.medium) provider model; reasoning_effort = "none"; }`
+- `settings.auxiliary.<slot> = { inherit (models.low or models.medium) provider model; }`
 
 Slots match official DEFAULT_CONFIG. Medium: `background_review`,
 `curator`, `kanban_decomposer`. Low: `title_generation`, `compression`,
