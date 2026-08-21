@@ -150,7 +150,8 @@ installed through official `extraPlugins`. `extraPluginDirs` is
 **model-router** — per-turn low / medium / high. Classifies the user
 turn, switches the live model, climbs on tool errors. Pins:
 `/low` `/medium` `/high` `/auto`. Writes `config.json` + WebUI
-extension from `hermesPnP.models`.
+extension from `hermesPnP.models`. Optional `models.<tier>.ladder`
+is the provider failover list for that pin.
 
 **tool-call-coherency** — unwrap double-nested `tool_call`, rewrite
 bare skill names, stop Grok/OpenRouter thrash on MCP and deferred

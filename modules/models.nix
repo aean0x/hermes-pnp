@@ -23,27 +23,56 @@ let
   pnp = config.services.hermesPnP;
   inherit (pnp) models;
 
-  mkModelFields = defaults: {
-    provider = mkOption {
-      type = types.str;
-      default = defaults.provider;
-      description = "Provider id (official settings / plugin).";
-    };
-    model = mkOption {
-      type = types.str;
-      default = defaults.model;
-      description = "Model id (official settings / plugin).";
-    };
-    reasoning_effort = mkOption {
-      type = types.nullOr types.str;
-      default = defaults.reasoning_effort;
-      description = ''
-        Official reasoning_effort for this named model. null leaves
-        Hermes session defaults. Model-router never writes this.
-        Auxiliary defaults to "none".
-      '';
+  modelPair = types.submodule {
+    options = {
+      provider = mkOption {
+        type = types.str;
+        description = "Fallback provider id.";
+      };
+      model = mkOption {
+        type = types.str;
+        description = "Fallback model id.";
+      };
     };
   };
+
+  mkModelFields =
+    defaults:
+    {
+      provider = mkOption {
+        type = types.str;
+        default = defaults.provider;
+        description = "Provider id (official settings / plugin).";
+      };
+      model = mkOption {
+        type = types.str;
+        default = defaults.model;
+        description = "Model id (official settings / plugin).";
+      };
+      reasoning_effort = mkOption {
+        type = types.nullOr types.str;
+        default = defaults.reasoning_effort;
+        description = ''
+          Official reasoning_effort for this named model. null leaves
+          Hermes session defaults. Model-router never writes this.
+          Auxiliary defaults to "none".
+        '';
+      };
+    }
+    // optionalAttrs (defaults.withLadder or false) {
+      ladder = mkOption {
+        type = types.listOf modelPair;
+        default = [ ];
+        description = ''
+          Extra {provider, model} pairs the plugin tries if this
+          tier's primary fails. Order is try-order. Empty keeps only
+          the primary; the plugin still climbs on tool errors. Does
+          not change cron, delegation, or auxiliary seeds.
+          high.ladder also seeds official
+          settings.fallback_providers when non-empty.
+        '';
+      };
+    };
 
   mkNamedModel =
     {
@@ -51,11 +80,17 @@ let
       model,
       description,
       reasoning_effort ? null,
+      withLadder ? false,
     }:
     mkOption {
       type = types.submodule {
         options = mkModelFields {
-          inherit provider model reasoning_effort;
+          inherit
+            provider
+            model
+            reasoning_effort
+            withLadder
+            ;
         };
       };
       default = { };
@@ -98,12 +133,14 @@ in
       provider = "deepseek";
       model = "deepseek-v4-flash";
       description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
+      withLadder = true;
     };
 
     medium = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-pro";
       description = "Workhorse. OOBE seed for delegation and model-router medium.";
+      withLadder = true;
     };
 
     high = mkNamedModel {
@@ -114,7 +151,10 @@ in
         and fallback. Override here — not settings.model.default —
         unless you assign settings after the PnP import (deepConfigType
         last writer wins; mkDefault on a leaf is stored as a literal).
+        Optional ladder is plugin failover for /high and official
+        fallback_providers.
       '';
+      withLadder = true;
     };
 
     auxiliary = mkNamedModel {
@@ -157,6 +197,11 @@ in
     }
     // optionalAttrs (models.high.reasoning_effort != null) {
       agent.reasoning_effort = models.high.reasoning_effort;
+    }
+    // optionalAttrs (models.high.ladder != [ ]) {
+      fallback_providers = map (e: {
+        inherit (e) provider model;
+      }) models.high.ladder;
     };
   };
 }

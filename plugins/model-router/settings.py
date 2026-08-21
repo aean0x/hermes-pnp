@@ -83,6 +83,34 @@ def as_name(raw: Any) -> str | None:
     return name if name in RANK else None
 
 
+def as_ladder(
+    raw: Any,
+    primary_provider: str = "",
+    primary_model: str = "",
+) -> list[dict[str, str]]:
+    """Ordered failover pairs. Drops junk and the live primary."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    primary = (primary_provider.strip(), primary_model.strip())
+    if primary[0] and primary[1]:
+        seen.add(primary)
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        provider = item.get("provider")
+        model = item.get("model")
+        if not isinstance(provider, str) or not isinstance(model, str):
+            continue
+        provider, model = provider.strip(), model.strip()
+        if not provider or not model or (provider, model) in seen:
+            continue
+        seen.add((provider, model))
+        out.append({"provider": provider, "model": model})
+    return out
+
+
 def _coerce_models_map(raw: Any, *, origin: str) -> dict[str, dict[str, Any]]:
     if not isinstance(raw, dict):
         return {}
@@ -224,6 +252,12 @@ def load_settings() -> dict[str, Any]:
         if label:
             models[name]["label"] = label.strip()
             models[name].setdefault("short", label.strip().split()[0])
+        raw_ladder = os.environ.get(prefix + "LADDER")
+        if raw_ladder and raw_ladder.strip():
+            try:
+                models[name]["ladder"] = json.loads(raw_ladder)
+            except json.JSONDecodeError:
+                pass
 
     if state["escalate_max"] not in models:
         state["escalate_max"] = "high" if "high" in models else next(iter(models))
@@ -232,6 +266,11 @@ def load_settings() -> dict[str, Any]:
         meta.setdefault("short", name.capitalize())
         meta.setdefault("label", name.capitalize())
         meta.setdefault("best_for", [])
+        meta["ladder"] = as_ladder(
+            meta.get("ladder"),
+            str(meta.get("provider") or ""),
+            str(meta.get("model") or ""),
+        )
 
     if not state["classifier_system"]:
         state["classifier_system"] = _generated_classifier(models)

@@ -23,7 +23,9 @@
   `fallback_model` from high, `delegation` from medium, `cron` from
   low, and listed auxiliary slots from `models.auxiliary` (including
   `reasoning_effort` when that option is set). Do not seed vision /
-  tts / moa / goal_judge.
+  tts / moa / goal_judge. `models.{low,medium,high}.ladder` is the
+  plugin failover list for that tier (empty default). Non-empty
+  `models.high.ladder` also seeds official `settings.fallback_providers`.
 - Users override seeds with `hermesPnP.models.*`, or official
   `services.hermes-agent.settings.*` assigned **after** the PnP import
   (`deepConfigType` last writer wins). Do not assign
