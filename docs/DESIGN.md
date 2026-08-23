@@ -9,6 +9,19 @@ IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/dashboard
 provisioning is a composer opinion (`services.hermesPnP.browser`); the
 engine stays in the consumer.
 
+## Enforcement is here
+
+hermes-pnp is the **primary enforcement mechanism** for Hermes runtime
+behaviour. The guarantees that keep the agent honest live in this repo,
+not in ad-hoc consumer edits: the first-party plugins
+(`model-router`, `tool-call-coherency`, `secret-handoff`, `git-hook`),
+the `packageFixes` patches (silence-marker wrap, etc.), and the plugin
++ package-fix discipline the SOUL tool-routing / cron contracts depend
+on. When a runtime behaviour fix is needed, land it here first —
+plugin-shaped fixes go in a plugin tree, core-workaround patches go in
+`packageFixes`, wiring in the modules. Do not scatter the enforcement
+logic into the consumer flake or a skill; point back here.
+
 ## Goal
 
 A native Hermes NixOS user adds one extra enable:
