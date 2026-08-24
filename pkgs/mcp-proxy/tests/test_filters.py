@@ -7,7 +7,7 @@ from filters import (
     auth_mode,
     denial_result,
     filter_listed_tools,
-    looks_like_permanent_denial,
+    looks_like_hard_stop,
     rewrite_call_result_if_denied,
     rewrite_tokens,
 )
@@ -306,11 +306,11 @@ class ToolkitGmail(unittest.TestCase):
         self.assertEqual(decision.arguments["query"], "is:inbox")
 
 
-class PermanentDenial(unittest.TestCase):
-    def test_proxy_message_is_permanent(self) -> None:
-        self.assertTrue(looks_like_permanent_denial("mcp-proxy: tool GMAIL_X is denied"))
-        self.assertTrue(looks_like_permanent_denial("do NOT retry this request"))
-        self.assertFalse(looks_like_permanent_denial("rate limited, try again later"))
+class HardStop(unittest.TestCase):
+    def test_proxy_message_is_hard_stop(self) -> None:
+        self.assertTrue(looks_like_hard_stop("mcp-proxy: tool GMAIL_X is denied"))
+        self.assertTrue(looks_like_hard_stop("do NOT retry this request"))
+        self.assertFalse(looks_like_hard_stop("rate limited, try again later"))
 
     def test_rewrite_upstream_composio_denial(self) -> None:
         payload = {
@@ -333,6 +333,8 @@ class PermanentDenial(unittest.TestCase):
         body = denial_result(4, "mcp-proxy: tool X is denied")
         self.assertNotIn("error", body)
         self.assertFalse(body["result"]["structuredContent"]["retry"])
+        self.assertEqual(body["result"]["structuredContent"]["cooldown_s"], 60)
+        self.assertNotIn("permanent", body["result"]["content"][0]["text"].lower())
 
 
 if __name__ == "__main__":

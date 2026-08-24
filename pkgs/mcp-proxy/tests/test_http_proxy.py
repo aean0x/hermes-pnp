@@ -6,6 +6,10 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from http_proxy import (
+    _call_fingerprint,
+    _deny_cache,
+    _deny_cache_get,
+    _DENY_TTL_S,
     apply_rpc_request,
     backend_for_path,
     load_client_token,
@@ -116,7 +120,9 @@ class RpcRewrite(unittest.TestCase):
         self.assertFalse(result["structuredContent"]["retry"])
         text = result["content"][0]["text"]
         self.assertTrue(text.startswith("POLICY_DENIED:"))
-        self.assertIn("Do not retry", text)
+        self.assertIn("Do not retry this call immediately", text)
+        self.assertIn("60s", text)
+        self.assertNotIn("permanent", text.lower())
         self.assertNotIn('"error"', text)
 
     def test_deny_cache_replays_without_changing_shape(self):
@@ -137,6 +143,23 @@ class RpcRewrite(unittest.TestCase):
         _, b = apply_rpc_request(second, backend, "cache-x")
         self.assertEqual(b["id"], 2)
         self.assertEqual(b["result"]["structuredContent"]["reason"], a["result"]["structuredContent"]["reason"])
+        self.assertEqual(a["result"]["structuredContent"]["cooldown_s"], 60)
+
+    def test_deny_cache_expires_and_allows_another_trial(self):
+        import time
+
+        key = _call_fingerprint("expire-x", "SECRET_LEAK", {"n": 9})
+        _deny_cache[key] = (time.monotonic() - _DENY_TTL_S - 1, {"id": 0, "stale": True})
+        self.assertIsNone(_deny_cache_get(key))
+        backend = {"tools": {"deny": ["SECRET_*"]}}
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "SECRET_LEAK", "arguments": {"n": 9}},
+        }
+        _, denied = apply_rpc_request(payload, backend, "expire-x")
+        self.assertTrue(denied["result"]["content"][0]["text"].startswith("POLICY_DENIED:"))
 
 
 class EchoUpstream(BaseHTTPRequestHandler):

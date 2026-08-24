@@ -51,10 +51,10 @@
   triage_specifier, kanban_decomposer, profile_describer, curator,
   background_review, monitor, memory_query_rewrite.
 - GBrain URL stays on typed `mcpServers.gbrain.url`.
-- mcp-proxy policy denials (and upstream permanent do-not-retry
-  results) are a completed `tools/call` result (`POLICY_DENIED`,
-  `retry=false`), not a JSON-RPC error. Identical retries are answered
-  from an in-process cache and never forwarded.
+- mcp-proxy policy denials (and upstream do-not-retry results) are a
+  completed `tools/call` result (`POLICY_DENIED`, `retry=false`), not
+  a JSON-RPC error. Identical arguments are held for 60s, then a new
+  attempt is forwarded — not a process-lifetime lockout.
 - `nix flake check` stays eval-cheap (dummy agent/webui packages).
 - Composer off + `plugins = [ "model-router" ]` still materializes the
   plugin and does not seed official settings.

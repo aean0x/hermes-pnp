@@ -14,7 +14,9 @@ class Denied(Exception):
         self.reason = reason
 
 
-_PERMANENT_DENIAL_RE = re.compile(
+DENY_COOLDOWN_S = 60
+
+_HARD_STOP_RE = re.compile(
     r"do\s*not\s*retry|don'?t\s*retry|policy[_\s-]?denied|"
     r"permanent\s+(auth|failure|denial)|not\s+authenticated|"
     r"access\s+denied|authorization\s+failed|tool\s+\S+\s+is\s+denied",
@@ -31,14 +33,14 @@ def denial_result(rpc_id: Any, reason: str) -> dict[str, Any]:
     """JSON-RPC *result* for a policy denial — not a protocol error.
 
     A JSON-RPC error looks like a transport failure and the agent retries
-    it. A completed tools/call result with retry=false is the below-model
-    stop: the tool already returned, and the text must not look like a
-    retriable `error`/`failed` payload.
+    it. A completed tools/call result is the below-model stop for this
+    turn. Identical arguments are held for DENY_COOLDOWN_S, then a new
+    attempt is allowed — this is not a process-lifetime lockout.
     """
     text = (
         f"POLICY_DENIED: {reason}. "
-        "This is a permanent policy or auth failure. "
-        "Do not retry this tool. Do not call it again with the same arguments."
+        f"Do not retry this call immediately. The same arguments are "
+        f"held for {DENY_COOLDOWN_S}s, then a new attempt is allowed."
     )
     return {
         "jsonrpc": "2.0",
@@ -49,6 +51,7 @@ def denial_result(rpc_id: Any, reason: str) -> dict[str, Any]:
             "structuredContent": {
                 "denied": True,
                 "retry": False,
+                "cooldown_s": DENY_COOLDOWN_S,
                 "reason": reason,
             },
         },
@@ -78,19 +81,19 @@ def result_text(payload: Any) -> str:
     return "\n".join(chunks)
 
 
-def looks_like_permanent_denial(text: str) -> bool:
+def looks_like_hard_stop(text: str) -> bool:
     body = (text or "").strip()
     if not body:
         return False
-    if _TRANSIENT_RE.search(body) and not _PERMANENT_DENIAL_RE.search(body):
+    if _TRANSIENT_RE.search(body) and not _HARD_STOP_RE.search(body):
         return False
     if body.startswith("POLICY_DENIED:"):
         return True
-    return bool(_PERMANENT_DENIAL_RE.search(body))
+    return bool(_HARD_STOP_RE.search(body))
 
 
 def rewrite_call_result_if_denied(payload: Any) -> dict[str, Any] | None:
-    """If an upstream tools/call result is a permanent denial, normalize it."""
+    """If an upstream tools/call result is a hard stop, normalize it."""
     if not isinstance(payload, dict):
         return None
     result = payload.get("result")
@@ -99,7 +102,7 @@ def rewrite_call_result_if_denied(payload: Any) -> dict[str, Any] | None:
     if "content" not in result and not result.get("isError"):
         return None
     text = result_text(payload)
-    if not looks_like_permanent_denial(text):
+    if not looks_like_hard_stop(text):
         return None
     if text.startswith("POLICY_DENIED:"):
         return None

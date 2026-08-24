@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from filters import (
+    DENY_COOLDOWN_S,
     Denied,
     apply_call,
     auth_mode,
@@ -39,7 +40,7 @@ HOP_BY_HOP = {
 
 CLIENT_TOKEN_HEADER = "X-MCP-Proxy-Token"
 
-_DENY_TTL_S = 600.0
+_DENY_TTL_S = float(DENY_COOLDOWN_S)
 _DENY_CACHE_MAX = 256
 _deny_cache: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
 
