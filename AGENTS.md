@@ -75,7 +75,8 @@ Adding a plugin: drop `plugins/<name>/` and add one catalog line.
 
 Router tiers: `models.low` / `models.medium` / `models.high`. Nix also
 has `models.auxiliary` (official aux slots; not a slash command).
-`reasoning_effort` is unset except auxiliary (`"none"`). Model-router
+`reasoning_effort` is unset except auxiliary (`"none"`). Router tiers
+have `best_for` (classifier matrix; plugin JSON defaults). Model-router
 never writes reasoning. No T1/T2/T3 in plugin.yaml, WebUI, or slash
 commands.
 

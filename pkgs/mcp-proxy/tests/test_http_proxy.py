@@ -100,7 +100,7 @@ class RpcRewrite(unittest.TestCase):
         q = out["params"]["arguments"]["tools"][0]["arguments"]["query"]
         self.assertEqual(q, "is:unread -label:x")
 
-    def test_deny_returns_rpc_error(self):
+    def test_deny_returns_terminal_tool_result(self):
         backend = {"tools": {"deny": ["SECRET_*"]}}
         payload = {
             "jsonrpc": "2.0",
@@ -108,9 +108,35 @@ class RpcRewrite(unittest.TestCase):
             "method": "tools/call",
             "params": {"name": "SECRET_LEAK", "arguments": {}},
         }
-        _, err = apply_rpc_request(payload, backend, "x")
-        self.assertEqual(err["id"], 9)
-        self.assertIn("denied", err["error"]["message"])
+        _, denied = apply_rpc_request(payload, backend, "x")
+        self.assertEqual(denied["id"], 9)
+        self.assertNotIn("error", denied)
+        result = denied["result"]
+        self.assertFalse(result["isError"])
+        self.assertFalse(result["structuredContent"]["retry"])
+        text = result["content"][0]["text"]
+        self.assertTrue(text.startswith("POLICY_DENIED:"))
+        self.assertIn("Do not retry", text)
+        self.assertNotIn('"error"', text)
+
+    def test_deny_cache_replays_without_changing_shape(self):
+        backend = {"tools": {"deny": ["SECRET_*"]}}
+        first = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "SECRET_LEAK", "arguments": {"n": 1}},
+        }
+        _, a = apply_rpc_request(first, backend, "cache-x")
+        second = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "SECRET_LEAK", "arguments": {"n": 1}},
+        }
+        _, b = apply_rpc_request(second, backend, "cache-x")
+        self.assertEqual(b["id"], 2)
+        self.assertEqual(b["result"]["structuredContent"]["reason"], a["result"]["structuredContent"]["reason"])
 
 
 class EchoUpstream(BaseHTTPRequestHandler):

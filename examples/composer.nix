@@ -23,6 +23,7 @@
     };
     # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; };
     # models.high.reasoning_effort = "high"; # else Hermes session default
+    # models.low.best_for = [ "Short acknowledgements" ];
 
     plugins = [
       "model-router"

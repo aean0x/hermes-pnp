@@ -83,6 +83,26 @@ def as_name(raw: Any) -> str | None:
     return name if name in RANK else None
 
 
+def as_best_for(raw: Any) -> list[str]:
+    """Coerce a config/env best_for value to a list of descriptors."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return []
+        if text.startswith("["):
+            try:
+                raw = json.loads(text)
+            except json.JSONDecodeError:
+                return [text]
+        else:
+            return [part.strip() for part in text.split(";") if part.strip()]
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    return [str(raw).strip()] if str(raw).strip() else []
+
+
 def _coerce_models_map(raw: Any, *, origin: str) -> dict[str, dict[str, Any]]:
     if not isinstance(raw, dict):
         return {}
@@ -224,6 +244,9 @@ def load_settings() -> dict[str, Any]:
         if label:
             models[name]["label"] = label.strip()
             models[name].setdefault("short", label.strip().split()[0])
+        raw_best = os.environ.get(prefix + "BEST_FOR")
+        if raw_best and raw_best.strip():
+            models[name]["best_for"] = as_best_for(raw_best)
 
     if state["escalate_max"] not in models:
         state["escalate_max"] = "high" if "high" in models else next(iter(models))
@@ -231,7 +254,7 @@ def load_settings() -> dict[str, Any]:
     for name, meta in models.items():
         meta.setdefault("short", name.capitalize())
         meta.setdefault("label", name.capitalize())
-        meta.setdefault("best_for", [])
+        meta["best_for"] = as_best_for(meta.get("best_for"))
 
     if not state["classifier_system"]:
         state["classifier_system"] = _generated_classifier(models)

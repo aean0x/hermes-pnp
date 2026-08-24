@@ -5,7 +5,10 @@ from filters import (
     Denied,
     apply_call,
     auth_mode,
+    denial_result,
     filter_listed_tools,
+    looks_like_permanent_denial,
+    rewrite_call_result_if_denied,
     rewrite_tokens,
 )
 
@@ -301,6 +304,35 @@ class ToolkitGmail(unittest.TestCase):
         }
         decision = apply_call("GMAIL_FETCH_EMAILS", {"query": "nope"}, backend)
         self.assertEqual(decision.arguments["query"], "is:inbox")
+
+
+class PermanentDenial(unittest.TestCase):
+    def test_proxy_message_is_permanent(self) -> None:
+        self.assertTrue(looks_like_permanent_denial("mcp-proxy: tool GMAIL_X is denied"))
+        self.assertTrue(looks_like_permanent_denial("do NOT retry this request"))
+        self.assertFalse(looks_like_permanent_denial("rate limited, try again later"))
+
+    def test_rewrite_upstream_composio_denial(self) -> None:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+                "content": [
+                    {"type": "text", "text": "Permission denied. do NOT retry."}
+                ],
+                "isError": True,
+            },
+        }
+        out = rewrite_call_result_if_denied(payload)
+        self.assertIsNotNone(out)
+        assert out is not None
+        self.assertFalse(out["result"]["isError"])
+        self.assertTrue(out["result"]["content"][0]["text"].startswith("POLICY_DENIED:"))
+
+    def test_denial_result_is_not_rpc_error(self) -> None:
+        body = denial_result(4, "mcp-proxy: tool X is denied")
+        self.assertNotIn("error", body)
+        self.assertFalse(body["result"]["structuredContent"]["retry"])
 
 
 if __name__ == "__main__":

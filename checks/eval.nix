@@ -127,6 +127,14 @@ let
 
   optionsEval = evalSystem [ ];
 
+  pluginRouterDefaults =
+    (builtins.fromJSON (builtins.readFile ../plugins/model-router/config.default.json)).models;
+
+  bestForConfig = eval [
+    ../examples/composer.nix
+    { services.hermesPnP.models.low.best_for = [ "Only acks" ]; }
+  ];
+
   dropAux = (dropInConfig.services.hermes-agent.settings.auxiliary or { }).triage_specifier or { };
 
   # plugins is listOf, not a submodule.
@@ -369,6 +377,10 @@ in
     test "${optionsEval.config.services.hermesPnP.models.auxiliary.reasoning_effort}" = "none"
     test "${toString (optionsEval.config.services.hermesPnP.models.low.reasoning_effort == null)}" = "1"
     test "${toString (optionsEval.config.services.hermesPnP.models.high.reasoning_effort == null)}" = "1"
+    test "${toString (optionsEval.config.services.hermesPnP.models.low ? best_for)}" = "1"
+    test "${toString (optionsEval.config.services.hermesPnP.models.auxiliary ? best_for)}" = ""
+    test "${builtins.head optionsEval.config.services.hermesPnP.models.low.best_for}" = "${builtins.head pluginRouterDefaults.low.best_for}"
+    test "${builtins.head optionsEval.config.services.hermesPnP.models.high.best_for}" = "${builtins.head pluginRouterDefaults.high.best_for}"
     test "${toString (optionsEval.options.services.hermesPnP ? extraPlugins)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? extraPluginDirs)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? pluginInstall)}" = "1"
@@ -442,6 +454,8 @@ in
     test "${toString (skillsConfig.services.hermesPnP.skills.extraSkills ? site-runbook)}" = "1"
     test "${toString (hmcConfig.services.hermesPnP.hmc.compressPercent == 0.30)}" = "1"
     test "${toString hmcConfig.services.hermesPnP.hmc.enable}" = ""
+    test "${builtins.head bestForConfig.services.hermesPnP.models.low.best_for}" = "Only acks"
+    test "${builtins.head bestForConfig.services.hermesPnP.models.medium.best_for}" = "${builtins.head pluginRouterDefaults.medium.best_for}"
     touch "$out"
   '';
 }

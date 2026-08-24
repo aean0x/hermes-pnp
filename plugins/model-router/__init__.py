@@ -11,8 +11,10 @@ Policy:
   • Multi-sentence / long messages floor at medium (never the cheapest model).
   • Consecutive tool errors climb one tier, capped at escalate_max.
   • Manual /low /medium /high pins pause auto-routing until /auto.
-  • Every pre_api_request re-heals a half-switch (model name on the wrong
-    API host — e.g. a WebUI credential refresh desync).
+  • Classifier matrices (`best_for`) are config — Nix / config.json / env.
+  • Client rebuilds that pair the live provider with the previous API host
+    (WebUI credential_refresh) are refused at `_replace_primary_openai_client`.
+    pre_api_request still re-heals if a stomp lands between rebuilds.
 
 No Hermes/WebUI core file edits. Live switch uses AIAgent.switch_model via
 the same hermes_cli.model_switch resolver as /model (native providers, not
@@ -138,6 +140,7 @@ _pinned: dict[str, bool] = {}
 _last_tier: dict[str, str] = {}
 _last_msg: dict[str, tuple[str, str]] = {}  # (msg, tier) to skip re-classifying a repeat
 _tool_errors: dict[str, int] = {}
+_good_routes: dict[int, dict[str, str]] = {}
 _manager = None
 _patched = False
 
@@ -205,6 +208,74 @@ def _same_route(agent: Any, model: str, provider: str) -> bool:
     return True
 
 
+def _set_agent_base_url(agent: Any, base: str) -> None:
+    agent.base_url = base
+    kw = getattr(agent, "_client_kwargs", None)
+    if isinstance(kw, dict):
+        kw = dict(kw)
+        kw["base_url"] = base
+        agent._client_kwargs = kw
+
+
+def _remember_route(agent: Any) -> None:
+    """Snapshot a coherent model/provider/host triple for host-stomp repair."""
+    if agent is None:
+        return
+    model = getattr(agent, "model", "") or ""
+    provider = getattr(agent, "provider", "") or ""
+    base = _agent_base_url(agent)
+    if not (model and provider and base):
+        return
+    if not _base_url_matches_provider(base, provider):
+        return
+    with _lock:
+        _good_routes[id(agent)] = {
+            "model": _norm(model),
+            "provider": _norm(provider),
+            "base_url": base,
+        }
+
+
+def _repair_host_stomp(agent: Any) -> bool:
+    """Undo a credential-refresh write that put the live provider on the old host.
+
+    WebUI `_refresh_cached_agent_runtime` copies base_url from the request's
+    original kwargs while leaving model/provider. Restore the last coherent
+    host for this (model, provider) instead of rebuilding the client on x.ai
+    with a DeepSeek model name.
+    """
+    if agent is None:
+        return False
+    model = _norm(getattr(agent, "model", "") or "")
+    provider = _norm(getattr(agent, "provider", "") or "")
+    base = _agent_base_url(agent)
+    if not (model and provider):
+        return False
+
+    with _lock:
+        snap = _good_routes.get(id(agent))
+    if not (
+        snap
+        and snap.get("model") == model
+        and snap.get("provider") == provider
+        and snap.get("base_url")
+        and _norm(snap["base_url"]) != _norm(base)
+    ):
+        return False
+    want = snap["base_url"]
+    if not want or _norm(want) == _norm(base):
+        return False
+    logger.warning(
+        "model-router: blocked host stomp model=%s provider=%s was=%s restore=%s",
+        getattr(agent, "model", ""),
+        getattr(agent, "provider", ""),
+        base,
+        want,
+    )
+    _set_agent_base_url(agent, want)
+    return True
+
+
 def bind_agent(session_id: str, agent: Any) -> None:
     if agent is None:
         return
@@ -253,35 +324,80 @@ def _get_agent(session_id: str = "") -> Any | None:
     return None
 
 
+def _wrap_cls_method(cls: Any, name: str, factory: Any) -> bool:
+    orig = getattr(cls, name, None)
+    if orig is None:
+        return False
+    if getattr(orig, "_model_router_wrapped", False):
+        return True
+    wrapped = factory(orig)
+    wrapped._model_router_wrapped = True  # type: ignore[attr-defined]
+    setattr(cls, name, wrapped)
+    return True
+
+
 def _install_agent_capture() -> None:
     global _patched
-    if _patched:
-        return
     try:
         import run_agent
     except Exception as exc:
         logger.warning("model-router: cannot import run_agent for capture: %s", exc)
         return
 
-    orig_init = run_agent.AIAgent.__init__
-    if getattr(orig_init, "_model_router_wrapped", False):
-        _patched = True
-        return
+    cls = run_agent.AIAgent
 
-    def wrapped_init(self, *args, **kwargs):
-        orig_init(self, *args, **kwargs)
-        bind_agent(getattr(self, "session_id", None) or "", self)
+    def wrap_init(orig):
+        def wrapped_init(self, *args, **kwargs):
+            orig(self, *args, **kwargs)
+            bind_agent(getattr(self, "session_id", None) or "", self)
+            _remember_route(self)
 
-    wrapped_init._model_router_wrapped = True  # type: ignore[attr-defined]
-    run_agent.AIAgent.__init__ = wrapped_init  # type: ignore[method-assign]
+        return wrapped_init
 
-    orig_run = run_agent.AIAgent.run_conversation
+    def wrap_run(orig):
+        def wrapped_run(self, *args, **kwargs):
+            bind_agent(getattr(self, "session_id", None) or "", self)
+            return orig(self, *args, **kwargs)
 
-    def wrapped_run(self, *args, **kwargs):
-        bind_agent(getattr(self, "session_id", None) or "", self)
-        return orig_run(self, *args, **kwargs)
+        return wrapped_run
 
-    run_agent.AIAgent.run_conversation = wrapped_run  # type: ignore[method-assign]
+    def wrap_switch(orig):
+        def wrapped_switch(self, *args, **kwargs):
+            result = orig(self, *args, **kwargs)
+            _remember_route(self)
+            return result
+
+        return wrapped_switch
+
+    def wrap_replace(orig):
+        def wrapped_replace(self, *args, **kwargs):
+            repaired = _repair_host_stomp(self)
+            prov = getattr(self, "provider", "") or ""
+            if not repaired and not _base_url_matches_provider(_agent_base_url(self), prov):
+                logger.warning(
+                    "model-router: skip client rebuild on unresolved host mismatch "
+                    "model=%s provider=%s base_url=%s",
+                    getattr(self, "model", ""),
+                    prov,
+                    _agent_base_url(self),
+                )
+                # True: WebUI treats False as "rebuild from original kwargs"
+                # (the session's xAI host). Keep the live client instead.
+                return True
+            result = orig(self, *args, **kwargs)
+            _remember_route(self)
+            return result
+
+        return wrapped_replace
+
+    _wrap_cls_method(cls, "__init__", wrap_init)
+    _wrap_cls_method(cls, "run_conversation", wrap_run)
+    _wrap_cls_method(cls, "switch_model", wrap_switch)
+    if not _wrap_cls_method(cls, "_replace_primary_openai_client", wrap_replace):
+        logger.info(
+            "model-router: AIAgent has no _replace_primary_openai_client; "
+            "host-stomp guard is pre_api_request only"
+        )
     _patched = True
     logger.info("model-router: AIAgent capture installed")
 
@@ -293,6 +409,7 @@ def _apply_tier(agent: Any, name: str) -> bool:
     model = meta["model"]
     provider = meta["provider"]
     if _same_route(agent, model, provider):
+        _remember_route(agent)
         return True
     try:
         from hermes_cli.config import load_config
@@ -407,6 +524,7 @@ def _apply_tier(agent: Any, name: str) -> bool:
         result.new_model,
         live_base or "-",
     )
+    _remember_route(agent)
     return True
 
 

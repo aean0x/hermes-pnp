@@ -6,12 +6,20 @@ import hmac
 import json
 import logging
 import os
+import time
 from http.client import HTTPConnection, HTTPSConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlparse
 
-from filters import Denied, apply_call, auth_mode, filter_listed_tools
+from filters import (
+    Denied,
+    apply_call,
+    auth_mode,
+    denial_result,
+    filter_listed_tools,
+    rewrite_call_result_if_denied,
+)
 
 log = logging.getLogger("mcp-proxy")
 
@@ -30,6 +38,36 @@ HOP_BY_HOP = {
 
 
 CLIENT_TOKEN_HEADER = "X-MCP-Proxy-Token"
+
+_DENY_TTL_S = 600.0
+_DENY_CACHE_MAX = 256
+_deny_cache: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
+
+
+def _call_fingerprint(backend_name: str, name: Any, arguments: Any) -> tuple[str, str, str]:
+    try:
+        blob = json.dumps(arguments, sort_keys=True, default=str)
+    except Exception:
+        blob = str(arguments)
+    return (backend_name, str(name or ""), blob)
+
+
+def _deny_cache_get(key: tuple[str, str, str]) -> dict[str, Any] | None:
+    hit = _deny_cache.get(key)
+    if hit is None:
+        return None
+    stamped, payload = hit
+    if time.monotonic() - stamped > _DENY_TTL_S:
+        _deny_cache.pop(key, None)
+        return None
+    return payload
+
+
+def _deny_cache_put(key: tuple[str, str, str], payload: dict[str, Any]) -> None:
+    if len(_deny_cache) >= _DENY_CACHE_MAX:
+        oldest = min(_deny_cache, key=lambda item: _deny_cache[item][0])
+        _deny_cache.pop(oldest, None)
+    _deny_cache[key] = (time.monotonic(), payload)
 
 
 def load_client_token(spec: dict[str, Any] | None, credentials_dir: str | None) -> str | None:
@@ -126,15 +164,21 @@ def apply_rpc_request(payload: Any, backend: dict[str, Any], backend_name: str) 
             "error": {"code": -32602, "message": "mcp-proxy: tools/call params must be an object"},
         }
     name = params.get("name")
+    arguments = params.get("arguments")
+    cache_key = _call_fingerprint(backend_name, name, arguments)
+    cached = _deny_cache_get(cache_key)
+    if cached is not None:
+        log.info("deny-cache hit backend=%s tool=%s", backend_name, name)
+        replay = dict(cached)
+        replay["id"] = payload.get("id")
+        return payload, replay
     try:
-        decision = apply_call(name if isinstance(name, str) else "", params.get("arguments"), backend)
+        decision = apply_call(name if isinstance(name, str) else "", arguments, backend)
     except Denied as exc:
         log.warning("deny backend=%s tool=%s reason=%s", backend_name, name, exc.reason)
-        return payload, {
-            "jsonrpc": "2.0",
-            "id": payload.get("id"),
-            "error": {"code": -32000, "message": f"mcp-proxy: {exc.reason}"},
-        }
+        denied = denial_result(payload.get("id"), f"mcp-proxy: {exc.reason}")
+        _deny_cache_put(cache_key, denied)
+        return payload, denied
     params["arguments"] = decision.arguments
     payload["params"] = params
     if decision.notes:
@@ -163,16 +207,23 @@ def filter_rpc_response(body: bytes, content_type: str, backend: dict[str, Any])
     ctype = content_type.lower()
     if "text/event-stream" in ctype:
         prefix, payload = _extract_sse_json(body)
-        rewritten = _filter_tools_list_payload(payload, backend)
+        rewritten = _rewrite_rpc_payload(payload, backend)
         if rewritten is None:
             return None
         lines = prefix + [f"data: {json.dumps(rewritten, separators=(',', ':'))}", ""]
         return ("\n".join(lines) + "\n").encode("utf-8")
     payload = parse_rpc(body)
-    rewritten = _filter_tools_list_payload(payload, backend)
+    rewritten = _rewrite_rpc_payload(payload, backend)
     if rewritten is None:
         return None
     return json.dumps(rewritten, separators=(",", ":")).encode("utf-8")
+
+
+def _rewrite_rpc_payload(payload: Any, backend: dict[str, Any]) -> Any | None:
+    listed = _filter_tools_list_payload(payload, backend)
+    if listed is not None:
+        return listed
+    return rewrite_call_result_if_denied(payload)
 
 
 def _filter_tools_list_payload(payload: Any, backend: dict[str, Any]) -> Any | None:
@@ -324,6 +375,23 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 filtered = filter_rpc_response(resp_body, content_type, backend)
                 if filtered is not None:
                     resp_body = filtered
+                    rewritten = parse_rpc(filtered)
+                    result = rewritten.get("result") if isinstance(rewritten, dict) else None
+                    structured = result.get("structuredContent") if isinstance(result, dict) else None
+                    if (
+                        isinstance(rpc, dict)
+                        and isinstance(structured, dict)
+                        and structured.get("denied")
+                    ):
+                        params = rpc.get("params") or {}
+                        _deny_cache_put(
+                            _call_fingerprint(
+                                backend_name,
+                                params.get("name"),
+                                params.get("arguments"),
+                            ),
+                            rewritten,
+                        )
             self.send_response(resp.status, resp.reason)
             skip = HOP_BY_HOP | {"content-length"}
             for key, value in resp.getheaders():

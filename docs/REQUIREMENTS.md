@@ -36,6 +36,9 @@
 - model-router keys are `low` / `medium` / `high`. Commands `/low`
   `/medium` `/high` `/auto`. Classifier replies with exactly one of
   those three words. Escalation 4 on low, 3 on medium, cap high.
+  Each router tier has `best_for` (`listOf str`); defaults come from
+  `plugins/model-router/config.default.json`. Overlay via Nix, plugin
+  `config.json`, or `MODEL_ROUTER_{LOW,MEDIUM,HIGH}_BEST_FOR`.
 - Official `settings` is `deepConfigType`: `mkDefault` on a leaf is
   stored as a literal. Seeds are plain attrsets; last writer wins via
   `recursiveUpdate`. Consumer settings come after the PnP import.
@@ -48,6 +51,10 @@
   triage_specifier, kanban_decomposer, profile_describer, curator,
   background_review, monitor, memory_query_rewrite.
 - GBrain URL stays on typed `mcpServers.gbrain.url`.
+- mcp-proxy policy denials (and upstream permanent do-not-retry
+  results) are a completed `tools/call` result (`POLICY_DENIED`,
+  `retry=false`), not a JSON-RPC error. Identical retries are answered
+  from an in-process cache and never forwarded.
 - `nix flake check` stays eval-cheap (dummy agent/webui packages).
 - Composer off + `plugins = [ "model-router" ]` still materializes the
   plugin and does not seed official settings.
