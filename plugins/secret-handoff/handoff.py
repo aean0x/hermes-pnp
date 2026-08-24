@@ -111,7 +111,14 @@ def resolve_session_key_for_tool(**kwargs: Any) -> str:
 
 
 def _find_clarify_callback(session_key: str) -> Optional[Callable]:
-    """Best-effort: same-process agent.clarify_callback (gateway worker)."""
+    """Best-effort: same-process agent.clarify_callback (gateway worker).
+
+    Prefers an exact session-key match. When the WebUI worker cannot resolve a
+    real session key (``resolve_session_key_for_tool`` returns ``"default"``),
+    falls back to the first callable ``clarify_callback`` on the heap — there is
+    a single active agent per worker process, so the fallback is unambiguous.
+    """
+    fallback: Optional[Callable] = None
     try:
         import gc
 
@@ -119,6 +126,8 @@ def _find_clarify_callback(session_key: str) -> Optional[Callable]:
             cb = getattr(obj, "clarify_callback", None)
             if not callable(cb):
                 continue
+            if fallback is None:
+                fallback = cb
             gsk = getattr(obj, "_gateway_session_key", None) or getattr(
                 obj, "gateway_session_key", None
             )
@@ -129,7 +138,7 @@ def _find_clarify_callback(session_key: str) -> Optional[Callable]:
                 return cb
     except Exception:
         return None
-    return None
+    return fallback
 
 
 # ---------------------------------------------------------------------------
