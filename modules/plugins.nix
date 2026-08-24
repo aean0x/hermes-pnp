@@ -64,7 +64,7 @@ let
   modelRouterConfig = {
     models = lib.genAttrs routerOrder (name: {
       inherit (routerMeta.${name}) label;
-      inherit (pnp.models.${name}) model provider;
+      inherit (pnp.models.${name}) model provider best_for;
       short = routerMeta.${name}.label;
     });
     escalate_max = "high";

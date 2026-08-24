@@ -23,27 +23,48 @@ let
   pnp = config.services.hermesPnP;
   inherit (pnp) models;
 
-  mkModelFields = defaults: {
-    provider = mkOption {
-      type = types.str;
-      default = defaults.provider;
-      description = "Provider id (official settings / plugin).";
+  # Classifier matrices live in the plugin JSON. Nix option defaults
+  # follow that file so composer config.json and standalone defaults
+  # cannot drift.
+  pluginModels =
+    (builtins.fromJSON (
+      builtins.readFile ../plugins/model-router/config.default.json
+    )).models;
+
+  mkModelFields =
+    defaults:
+    {
+      provider = mkOption {
+        type = types.str;
+        default = defaults.provider;
+        description = "Provider id (official settings / plugin).";
+      };
+      model = mkOption {
+        type = types.str;
+        default = defaults.model;
+        description = "Model id (official settings / plugin).";
+      };
+      reasoning_effort = mkOption {
+        type = types.nullOr types.str;
+        default = defaults.reasoning_effort;
+        description = ''
+          Official reasoning_effort for this named model. null leaves
+          Hermes session defaults. Model-router never writes this.
+          Auxiliary defaults to "none".
+        '';
+      };
+    }
+    // optionalAttrs (defaults.best_for != null) {
+      best_for = mkOption {
+        type = types.listOf types.str;
+        default = defaults.best_for;
+        description = ''
+          Classifier descriptors for this router tier. Sole source of
+          the model-router triage prompt. Plugin lists are the defaults;
+          override here to steer routing without editing Python.
+        '';
+      };
     };
-    model = mkOption {
-      type = types.str;
-      default = defaults.model;
-      description = "Model id (official settings / plugin).";
-    };
-    reasoning_effort = mkOption {
-      type = types.nullOr types.str;
-      default = defaults.reasoning_effort;
-      description = ''
-        Official reasoning_effort for this named model. null leaves
-        Hermes session defaults. Model-router never writes this.
-        Auxiliary defaults to "none".
-      '';
-    };
-  };
 
   mkNamedModel =
     {
@@ -51,11 +72,17 @@ let
       model,
       description,
       reasoning_effort ? null,
+      best_for ? null,
     }:
     mkOption {
       type = types.submodule {
         options = mkModelFields {
-          inherit provider model reasoning_effort;
+          inherit
+            provider
+            model
+            reasoning_effort
+            best_for
+            ;
         };
       };
       default = { };
@@ -97,18 +124,21 @@ in
     low = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-flash";
+      best_for = pluginModels.low.best_for;
       description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
     };
 
     medium = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-pro";
+      best_for = pluginModels.medium.best_for;
       description = "Workhorse. OOBE seed for delegation and model-router medium.";
     };
 
     high = mkNamedModel {
       provider = "xai-oauth";
       model = "grok-4.6";
+      best_for = pluginModels.high.best_for;
       description = ''
         Session identity + voice. OOBE seed for settings.model.default
         and fallback. Override here — not settings.model.default —

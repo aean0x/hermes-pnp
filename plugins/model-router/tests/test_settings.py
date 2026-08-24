@@ -16,6 +16,7 @@ _ENV_KEYS = (
     "MODEL_ROUTER_CONFIG",
     "MODEL_ROUTER_LOW_MODEL",
     "MODEL_ROUTER_LOW_PROVIDER",
+    "MODEL_ROUTER_LOW_BEST_FOR",
     "MODEL_ROUTER_MEDIUM_MODEL",
     "MODEL_ROUTER_HIGH_MODEL",
 )
@@ -70,6 +71,16 @@ class Defaults(unittest.TestCase):
         labels = [row["label"] for row in mod.webui_models()[:3]]
         self.assertEqual(labels, ["Low", "Medium", "High"])
 
+    def test_defaults_match_config_json(self) -> None:
+        with _clean_env():
+            mod = _load("mr_defaults_json")
+        cfg = json.loads((ROOT / "config.default.json").read_text(encoding="utf-8"))
+        for name in ("low", "medium", "high"):
+            self.assertEqual(
+                mod.MODELS[name]["best_for"],
+                cfg["models"][name]["best_for"],
+            )
+
 
 class EnvOverlay(unittest.TestCase):
     def test_named_env_override(self) -> None:
@@ -113,6 +124,37 @@ class RejectFourth(unittest.TestCase):
                 with self.assertRaises(Exception) as ctx:
                     _load("mr_fourth")
             self.assertIn("ultra", str(ctx.exception))
+
+
+class BestFor(unittest.TestCase):
+    def test_file_overlay_rebuilds_classifier(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / "cfg.json"
+            cfg.write_text(
+                json.dumps(
+                    {
+                        "models": {
+                            "low": {"best_for": ["Only pings"]},
+                            "high": {"best_for": ["Only architecture"]},
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with _clean_env(MODEL_ROUTER_CONFIG=str(cfg)):
+                mod = _load("mr_best_for_file")
+        self.assertEqual(mod.MODELS["low"]["best_for"], ["Only pings"])
+        self.assertIn("Only pings", mod.CLASSIFIER)
+        self.assertIn("Only architecture", mod.CLASSIFIER)
+        self.assertNotIn("Trivial Q&A", mod.CLASSIFIER)
+        self.assertIn("Default day-to-day work", mod.CLASSIFIER)
+
+    def test_env_json_overlay(self) -> None:
+        payload = json.dumps(["Status only"])
+        with _clean_env(MODEL_ROUTER_LOW_BEST_FOR=payload):
+            mod = _load("mr_best_for_env")
+        self.assertEqual(mod.MODELS["low"]["best_for"], ["Status only"])
+        self.assertIn("Status only", mod.CLASSIFIER)
 
 
 if __name__ == "__main__":

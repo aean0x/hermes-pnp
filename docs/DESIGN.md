@@ -148,7 +148,7 @@ the official option PnP set via `mkDefault`.
 - `services.hermesPnP.enable` — composer on. Default `false`.
 - `services.hermesPnP.environmentFiles` — forwarded to official
   `environmentFiles`. Key list: `docs/hermes.env.example`.
-- `services.hermesPnP.models.{low,medium,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Auxiliary is Nix-only; effort unset except auxiliary (`"none"`).
+- `services.hermesPnP.models.{low,medium,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Router tiers also have `best_for` (classifier matrix; plugin JSON defaults). Auxiliary is Nix-only; effort unset except auxiliary (`"none"`).
 - `services.hermesPnP.plugins` — `listOf str`. Composer on defaults
   via `mkDefault` to model-router, tool-call-coherency, secret-handoff.
 - `services.hermesPnP.extraPluginDirs` — `attrsOf path` beside the catalog
@@ -249,10 +249,14 @@ wins via `recursiveUpdate`. Consumers assign official
 `services.hermes-agent.settings.*` after importing PnP.
 
 When `model-router` is in `plugins`, the installer writes `config.json`
-+ `webui/config.js` from the same `models` block.
++ `webui/config.js` from the same `models` block, including each
+tier's `best_for` list (the classifier prompt's only source).
 
 Classifier: 4 consecutive tool errors on low, 3 on medium, cap
 `escalate_max` (high). High is reached by classification or `/high`.
+Client rebuilds that pair the live provider with the previous API host
+(WebUI `credential_refresh`) are refused at the agent client rebuild;
+`pre_api_request` still re-heals if a stomp lands between rebuilds.
 
 ## Plugins
 

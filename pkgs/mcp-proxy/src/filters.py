@@ -14,6 +14,102 @@ class Denied(Exception):
         self.reason = reason
 
 
+DENY_COOLDOWN_S = 60
+
+_HARD_STOP_RE = re.compile(
+    r"do\s*not\s*retry|don'?t\s*retry|policy[_\s-]?denied|"
+    r"permanent\s+(auth|failure|denial)|not\s+authenticated|"
+    r"access\s+denied|authorization\s+failed|tool\s+\S+\s+is\s+denied",
+    re.IGNORECASE,
+)
+
+_TRANSIENT_RE = re.compile(
+    r"rate\s*limit|try\s+again|temporar|timeout|503|429|unavailable",
+    re.IGNORECASE,
+)
+
+
+def denial_result(rpc_id: Any, reason: str) -> dict[str, Any]:
+    """JSON-RPC *result* for a policy denial — not a protocol error.
+
+    A JSON-RPC error looks like a transport failure and the agent retries
+    it. A completed tools/call result is the below-model stop for this
+    turn. Identical arguments are held for DENY_COOLDOWN_S, then a new
+    attempt is allowed — this is not a process-lifetime lockout.
+    """
+    text = (
+        f"POLICY_DENIED: {reason}. "
+        f"Do not retry this call immediately. The same arguments are "
+        f"held for {DENY_COOLDOWN_S}s, then a new attempt is allowed."
+    )
+    return {
+        "jsonrpc": "2.0",
+        "id": rpc_id,
+        "result": {
+            "content": [{"type": "text", "text": text}],
+            "isError": False,
+            "structuredContent": {
+                "denied": True,
+                "retry": False,
+                "cooldown_s": DENY_COOLDOWN_S,
+                "reason": reason,
+            },
+        },
+    }
+
+
+def result_text(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return ""
+    chunks: list[str] = []
+    content = result.get("content")
+    if isinstance(content, str):
+        chunks.append(content)
+    elif isinstance(content, list):
+        for item in content:
+            if isinstance(item, dict) and item.get("text"):
+                chunks.append(str(item.get("text") or ""))
+            elif isinstance(item, str):
+                chunks.append(item)
+    for key in ("message", "error"):
+        val = result.get(key)
+        if isinstance(val, str):
+            chunks.append(val)
+    return "\n".join(chunks)
+
+
+def looks_like_hard_stop(text: str) -> bool:
+    body = (text or "").strip()
+    if not body:
+        return False
+    if _TRANSIENT_RE.search(body) and not _HARD_STOP_RE.search(body):
+        return False
+    if body.startswith("POLICY_DENIED:"):
+        return True
+    return bool(_HARD_STOP_RE.search(body))
+
+
+def rewrite_call_result_if_denied(payload: Any) -> dict[str, Any] | None:
+    """If an upstream tools/call result is a hard stop, normalize it."""
+    if not isinstance(payload, dict):
+        return None
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return None
+    if "content" not in result and not result.get("isError"):
+        return None
+    text = result_text(payload)
+    if not looks_like_hard_stop(text):
+        return None
+    if text.startswith("POLICY_DENIED:"):
+        return None
+    reason = text.strip().splitlines()[0][:240]
+    return denial_result(payload.get("id"), reason)
+
+
 @dataclass
 class Decision:
     arguments: dict[str, Any]

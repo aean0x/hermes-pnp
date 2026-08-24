@@ -27,6 +27,7 @@ sandboxing, and the add-ons that should have been one enable.
     models.medium    = { provider = "deepseek";  model = "deepseek-v4-pro"; };   # workhorse, delegation
     models.high      = { provider = "xai-oauth"; model = "grok-4.6"; };          # session voice + fallback
     # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; }; # aux tasks; reasoning_effort = "none"
+    # models.low.best_for = [ "Short acknowledgements" ]; # classifier matrix; plugin defaults otherwise
 
     plugins = [
       "model-router"
@@ -150,7 +151,9 @@ installed through official `extraPlugins`. `extraPluginDirs` is
 **model-router** — per-turn low / medium / high. Classifies the user
 turn, switches the live model, climbs on tool errors. Pins:
 `/low` `/medium` `/high` `/auto`. Writes `config.json` + WebUI
-extension from `hermesPnP.models`.
+extension from `hermesPnP.models`. `models.<tier>.best_for` is the
+classifier matrix (plugin defaults; override in Nix). Auxiliary
+tasks use `models.auxiliary`, not low.
 
 **tool-call-coherency** — unwrap double-nested `tool_call`, rewrite
 bare skill names, stop Grok/OpenRouter thrash on MCP and deferred
