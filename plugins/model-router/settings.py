@@ -30,6 +30,7 @@ DEFAULT_MODELS: dict[str, dict[str, Any]] = {
         "best_for": [
             "Short acknowledgements",
             "Status checks",
+            "Code editing",
             "Trivial Q&A / look-ups",
             "Title generation",
         ],
@@ -41,9 +42,10 @@ DEFAULT_MODELS: dict[str, dict[str, Any]] = {
         "provider": "deepseek",
         "best_for": [
             "Default day-to-day work",
-            "Coding, research, debugging",
-            "Code review",
+            "Research and discovery",
+            "Code review, debugging",
             "Large-document synthesis",
+            "Migration planning",
         ],
     },
     "high": {
@@ -53,7 +55,6 @@ DEFAULT_MODELS: dict[str, dict[str, Any]] = {
         "provider": "xai-oauth",
         "best_for": [
             "Architecture",
-            "Migration planning",
             "Complex multi-step design",
             "Security-sensitive analysis",
             "Monetary transactions",
