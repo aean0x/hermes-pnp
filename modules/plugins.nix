@@ -50,13 +50,13 @@ let
   sources = catalog // extra;
 
   routerOrder = [
-    "low"
+    "auxiliary"
     "medium"
     "high"
   ];
 
   routerMeta = {
-    low.label = "Low";
+    auxiliary.label = "Auxiliary";
     medium.label = "Medium";
     high.label = "High";
   };
@@ -69,7 +69,7 @@ let
     });
     escalate_max = "high";
     escalation_errors = {
-      low = 4;
+      auxiliary = 4;
       medium = 3;
     };
   };

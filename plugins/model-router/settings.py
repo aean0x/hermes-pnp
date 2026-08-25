@@ -1,4 +1,4 @@
-"""model-router settings — three named tiers (low < medium < high).
+"""model-router settings — three named tiers (auxiliary < medium < high).
 
 Models, providers, and routing behaviour live here as defaults, overridable
 via a plugin-adjacent config.json, a MODEL_ROUTER_CONFIG path, or
@@ -18,13 +18,13 @@ from typing import Any
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
 
-NAMES: tuple[str, ...] = ("low", "medium", "high")
-RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
+NAMES: tuple[str, ...] = ("auxiliary", "medium", "high")
+RANK: dict[str, int] = {"auxiliary": 0, "medium": 1, "high": 2}
 
 DEFAULT_MODELS: dict[str, dict[str, Any]] = {
-    "low": {
-        "label": "Low",
-        "short": "Low",
+    "auxiliary": {
+        "label": "Auxiliary",
+        "short": "Auxiliary",
         "model": "deepseek-v4-flash",
         "provider": "deepseek",
         "best_for": [
@@ -76,7 +76,7 @@ class SettingsError(ValueError):
 
 
 def as_name(raw: Any) -> str | None:
-    """Map a config/env/classifier token onto low|medium|high, or None."""
+    """Map a config/env/classifier token onto auxiliary|medium|high, or None."""
     if raw is None:
         return None
     name = str(raw).strip().lower()
@@ -118,7 +118,7 @@ def _coerce_models_map(raw: Any, *, origin: str) -> dict[str, dict[str, Any]]:
     if extra:
         raise SettingsError(
             f"model-router: {origin} declares unknown models {extra}; "
-            "only low, medium, high are allowed"
+            "only auxiliary, medium, high are allowed"
         )
     if len(raw) > 3 or len(out) > 3:
         raise SettingsError(
@@ -156,7 +156,7 @@ def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
         best = meta.get("best_for") or []
         extra = "; ".join(str(x) for x in best) if best else label
         lines.append(f"{name} = {label} — {extra}")
-    lines.extend(["", "Respond with ONLY one word: low, medium, or high."])
+    lines.extend(["", "Respond with ONLY one word: auxiliary, medium, or high."])
     return "\n".join(lines)
 
 
@@ -188,7 +188,7 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         if extra:
             raise SettingsError(
                 f"model-router: {origin}.escalation_errors has unknown keys {extra}; "
-                "only low, medium, high are allowed"
+                "only auxiliary, medium, high are allowed"
             )
         state["escalation_errors"] = errors
     if "skip_platforms" in data and isinstance(data["skip_platforms"], list):
@@ -202,7 +202,7 @@ def load_settings() -> dict[str, Any]:
         "models": deepcopy(DEFAULT_MODELS),
         "provider_hosts": deepcopy(DEFAULT_PROVIDER_HOSTS),
         "escalate_max": "high",
-        "escalation_errors": {"low": 4, "medium": 3},
+        "escalation_errors": {"auxiliary": 4, "medium": 3},
         "skip_platforms": ["cron", "subagent"],
         "classifier_system": None,
     }
@@ -224,13 +224,13 @@ def load_settings() -> dict[str, Any]:
     extra = [name for name in models if name not in RANK]
     if extra:
         raise SettingsError(
-            f"model-router: unknown models {extra}; only low, medium, high are allowed"
+            f"model-router: unknown models {extra}; only auxiliary, medium, high are allowed"
         )
     if len(models) > 3:
         raise SettingsError("model-router: a fourth model is not allowed")
 
     for name, prefix in (
-        ("low", "MODEL_ROUTER_LOW_"),
+        ("auxiliary", "MODEL_ROUTER_AUXILIARY_"),
         ("medium", "MODEL_ROUTER_MEDIUM_"),
         ("high", "MODEL_ROUTER_HIGH_"),
     ):

@@ -124,8 +124,7 @@ in
     low = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-flash";
-      best_for = pluginModels.low.best_for;
-      description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
+      description = "Cheap helper. OOBE seed for unpinned cron. Auxiliary inherits provider/model.";
     };
 
     medium = mkNamedModel {
@@ -148,13 +147,15 @@ in
     };
 
     auxiliary = mkNamedModel {
-      provider = "deepseek";
-      model = "deepseek-v4-flash";
+      provider = models.low.provider;
+      model = models.low.model;
+      best_for = pluginModels.auxiliary.best_for;
       reasoning_effort = "none";
       description = ''
-        Official auxiliary tasks (title generation, compression, …).
-        Nix-only — not a model-router tier. reasoning_effort defaults
-        to "none" (overridable). Provider/model default like low.
+        Cheap no-reasoning tier. Official auxiliary tasks (title
+        generation, compression, …) and model-router's cheapest tier.
+        Provider/model follow models.low; reasoning_effort defaults to
+        "none" (overridable).
       '';
     };
   };

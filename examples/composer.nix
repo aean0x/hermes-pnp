@@ -21,7 +21,7 @@
       provider = "xai-oauth";
       model = "grok-4.6";
     };
-    # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; };
+    # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; }; # follows low; reasoning "none"
     # models.high.reasoning_effort = "high"; # else Hermes session default
     # models.low.best_for = [ "Short acknowledgements" ];
 

@@ -1,12 +1,13 @@
 # Hermes PnP — requirements
 
 - One Nix block (`services.hermesPnP.models`) names `low`, `medium`,
-  `high` (router + session seeds) and `auxiliary` (official aux slots
-  only — not a router tier, no slash command).
+  `high`, and `auxiliary`. `low` seeds cron; `auxiliary` is the
+  cheapest router tier and seeds official aux slots, its provider/model
+  following `low` by default.
 - Defaults: low = deepseek / deepseek-v4-flash; medium = deepseek /
-  deepseek-v4-pro; high = xai-oauth / grok-4.6; auxiliary = same as
-  low. Each has `reasoning_effort` (`nullOr str`); default unset
-  except auxiliary = `"none"`.
+  deepseek-v4-pro; high = xai-oauth / grok-4.6; auxiliary follows low.
+  Each has `reasoning_effort` (`nullOr str`); default unset except
+  auxiliary = `"none"`.
 - No fourth **router** model. No `T1`/`T2`/`T3` in plugin.yaml, WebUI
   labels, or slash commands. Model-router never writes
   `reasoning_effort` / `reasoning_config`.

@@ -1,16 +1,16 @@
 {
   "models": {
-    "low": {
-      "label": "Low",
-      "short": "Low",
+    "auxiliary": {
+      "label": "Auxiliary",
+      "short": "Auxiliary",
       "model": "deepseek-v4-flash",
       "provider": "deepseek",
       "best_for": [
+        "Default day-to-day work",
         "Short acknowledgements",
         "Status checks",
         "Code editing",
-        "Trivial Q&A / look-ups",
-        "Title generation"
+        "Trivial Q&A / look-ups"
       ]
     },
     "medium": {
@@ -19,7 +19,6 @@
       "model": "deepseek-v4-pro",
       "provider": "deepseek",
       "best_for": [
-        "Default day-to-day work",
         "Research and discovery",
         "Code review, debugging",
         "Large-document synthesis",
@@ -40,5 +39,5 @@
     }
   },
   "escalate_max": "high",
-  "escalation_errors": { "low": 4, "medium": 3 }
+  "escalation_errors": { "auxiliary": 4, "medium": 3 }
 }

@@ -1,6 +1,6 @@
 """model-router — per-turn cost routing for Hermes across three named tiers.
 
-Exactly three models: low < medium < high. Models, providers, labels, and
+Exactly three models: auxiliary < medium < high. Models, providers, labels, and
 escalation are config — see settings.py and config.default.json. Override via
 a plugin-adjacent config.json, a MODEL_ROUTER_CONFIG path, or MODEL_ROUTER_*
 env vars.
@@ -10,7 +10,7 @@ Policy:
     for the whole multi-tool turn.
   • Multi-sentence / long messages floor at medium (never the cheapest model).
   • Consecutive tool errors climb one tier, capped at escalate_max.
-  • Manual /low /medium /high pins pause auto-routing until /auto.
+  • Manual /auxiliary /medium /high pins pause auto-routing until /auto.
   • Classifier matrices (`best_for`) are config — Nix / config.json / env.
   • Client rebuilds that pair the live provider with the previous API host
     (WebUI credential_refresh) are refused at `_replace_primary_openai_client`.
@@ -61,7 +61,7 @@ _ESCALATION_ERRORS = _s.ESCALATION_ERRORS
 _SKIP_PLATFORMS = _s.SKIP_PLATFORMS
 _PROVIDER_HOSTS = _s.PROVIDER_HOSTS
 _CLASSIFIER = _s.CLASSIFIER
-_MIN = "low"
+_MIN = "auxiliary"
 _MID = "medium"
 _TOP = NAMES[-1]  # "high"
 
@@ -108,7 +108,7 @@ def _escalation_threshold(name: str) -> int:
 _ERROR_PAT = re.compile(r'"(?:error|failed)"\s*:\s*(?!\s*null\b)(?!\s*false\b)(?!\s*"")')
 
 _NAME_RE = re.compile(
-    r"(?:^|(?<=\s)|(?<=\())/?(low|medium|high)(?:\b|(?=\)))",
+    r"(?:^|(?<=\s)|(?<=\())/?(auxiliary|medium|high)(?:\b|(?=\)))",
     re.IGNORECASE,
 )
 _ACK_RE = re.compile(
@@ -122,12 +122,12 @@ _WEBUI_WORKSPACE_RE = re.compile(
     r"^\[Workspace::v1:\s*[^\]]+\]\s*",
     re.IGNORECASE,
 )
-# Explicit pin-style requests only — bare "low" inside a long critique is NOT a pin.
+# Explicit pin-style requests only — bare "auxiliary" inside a long critique is NOT a pin.
 _EXPLICIT_REQ_RE = re.compile(
     r"(?:^|\s)(?:/"
-    r"(low|medium|high)\b"
+    r"(auxiliary|medium|high)\b"
     r"|(?:use|pin|switch\s+to|run\s+(?:on|at)|please\s+use)\s+"
-    r"(low|medium|high)\b)",
+    r"(auxiliary|medium|high)\b)",
     re.IGNORECASE,
 )
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?]+\s+|\n+")
@@ -564,7 +564,7 @@ def _detect_explicit_tier(msg: str) -> str | None:
 
 
 def _classify(user_message: str, history: list) -> str:
-    """Return low|medium|high. Fail-open to medium — never silent low on errors."""
+    """Return auxiliary|medium|high. Fail-open to medium — never silent auxiliary on errors."""
     try:
         from agent.auxiliary_client import call_llm
 
@@ -929,7 +929,7 @@ def register(ctx: Any) -> None:
     ctx.register_command("auto", _cmd_auto, "Resume model-router auto routing")
     labels = " / ".join(f"{n} {MODELS[n].get('label')}" for n in NAMES)
     logger.info(
-        "model-router: %s | escalate≤%s | /low /medium /high /auto | no SOUL writes",
+        "model-router: %s | escalate≤%s | /auxiliary /medium /high /auto | no SOUL writes",
         labels,
         _ESCALATE_MAX,
     )

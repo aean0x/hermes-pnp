@@ -26,7 +26,7 @@ class Pins(unittest.TestCase):
         cls.mod = _load()
 
     def test_named_slash_pins(self) -> None:
-        self.assertEqual(self.mod._detect_explicit_tier("/low"), "low")
+        self.assertEqual(self.mod._detect_explicit_tier("/auxiliary"), "auxiliary")
         self.assertEqual(self.mod._detect_explicit_tier("/medium"), "medium")
         self.assertEqual(self.mod._detect_explicit_tier("/high please"), "high")
 
@@ -35,7 +35,7 @@ class Pins(unittest.TestCase):
         self.assertEqual(self.mod._detect_explicit_tier("pin high"), "high")
 
     def test_bare_name_in_long_critique_is_not_a_pin(self) -> None:
-        msg = "The low estimate in the budget is wrong because the medium path is already over cost."
+        msg = "The auxiliary estimate in the budget is wrong because the medium path is already over cost."
         self.assertIsNone(self.mod._detect_explicit_tier(msg))
 
     def test_short_bare_name_is_a_pin(self) -> None:
@@ -48,12 +48,12 @@ class Names(unittest.TestCase):
         cls.mod = _load()
 
     def test_as_name_named_only(self) -> None:
-        self.assertEqual(self.mod.as_name("low"), "low")
+        self.assertEqual(self.mod.as_name("auxiliary"), "auxiliary")
         self.assertEqual(self.mod.as_name("HIGH"), "high")
         self.assertIsNone(self.mod.as_name("ultra"))
 
     def test_higher_climbs_to_high(self) -> None:
-        self.assertEqual(self.mod._higher("low"), "medium")
+        self.assertEqual(self.mod._higher("auxiliary"), "medium")
         self.assertEqual(self.mod._higher("medium"), "high")
         self.assertEqual(self.mod._higher("high"), "high")
 

@@ -3,7 +3,7 @@
   window.__modelRouterExtLoaded = true;
 
   const DEFAULT_MODELS = [
-    { cmd: "/low", label: "Low", short: "Low", model: "deepseek-v4-flash", title: "Pin Low" },
+    { cmd: "/auxiliary", label: "Auxiliary", short: "Auxiliary", model: "deepseek-v4-flash", title: "Pin Auxiliary" },
     { cmd: "/medium", label: "Medium", short: "Medium", model: "deepseek-v4-pro", title: "Pin Medium" },
     { cmd: "/high", label: "High", short: "High", model: "grok-4.6", title: "Pin High" },
   ];
