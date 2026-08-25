@@ -28,11 +28,11 @@ DEFAULT_MODELS: dict[str, dict[str, Any]] = {
         "model": "deepseek-v4-flash",
         "provider": "deepseek",
         "best_for": [
+            "Default day-to-day work",
             "Short acknowledgements",
             "Status checks",
             "Code editing",
             "Trivial Q&A / look-ups",
-            "Title generation",
         ],
     },
     "medium": {
@@ -41,7 +41,6 @@ DEFAULT_MODELS: dict[str, dict[str, Any]] = {
         "model": "deepseek-v4-pro",
         "provider": "deepseek",
         "best_for": [
-            "Default day-to-day work",
             "Research and discovery",
             "Code review, debugging",
             "Large-document synthesis",
