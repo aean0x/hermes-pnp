@@ -61,6 +61,8 @@ _ESCALATION_ERRORS = _s.ESCALATION_ERRORS
 _SKIP_PLATFORMS = _s.SKIP_PLATFORMS
 _PROVIDER_HOSTS = _s.PROVIDER_HOSTS
 _CLASSIFIER = _s.CLASSIFIER
+_HANDOFF_TAIL_CHARS = _s.HANDOFF_TAIL_CHARS
+_CLASSIFIER_CONTEXT_CHARS = _s.CLASSIFIER_CONTEXT_CHARS
 _MIN = "auxiliary"
 _MID = "medium"
 _TOP = NAMES[-1]  # "high"
@@ -140,9 +142,21 @@ _pinned: dict[str, bool] = {}
 _last_tier: dict[str, str] = {}
 _last_msg: dict[str, tuple[str, str]] = {}  # (msg, tier) to skip re-classifying a repeat
 _tool_errors: dict[str, int] = {}
+_checkpoint: dict[str, bool] = {}  # session -> escalation checkpoint nudge pending
 _good_routes: dict[int, dict[str, str]] = {}
 _manager = None
 _patched = False
+
+# Injected into the next tool-continuation turn when an escalation checkpoint
+# is pending. The working model (not the classifier) decides whether to call
+# escalate_model — this is just a nudge.
+_CHECKPOINT_NUDGE = (
+    "⚠️ Repeated tool failures on this task. If you are stuck, you may call the "
+    "`escalate_model` tool to hand off to a stronger model. Provide a summary of "
+    "the conversation, the current task and intent, what you already tried, where "
+    "it failed (include the exact error), and your best next hypothesis. Otherwise, "
+    "continue working normally."
+)
 
 
 def _norm(s: str) -> str:
@@ -563,45 +577,126 @@ def _detect_explicit_tier(msg: str) -> str | None:
     return None
 
 
-def _classify(user_message: str, history: list) -> str:
-    """Return auxiliary|medium|high. Fail-open to medium — never silent auxiliary on errors."""
+def _resolve_tier_runtime(name: str, agent: Any) -> dict[str, str] | None:
+    """Resolve (model, provider, base_url, api_key, api_mode) for a tier without switching.
+
+    Reuses the same ``resolve_switch`` path as ``_apply_tier`` so the classifier
+    and the escalate tool can address a tier's model/provider directly. Returns
+    None on any failure.
+    """
+    meta = MODELS.get(name)
+    if not meta:
+        return None
+    model = meta["model"]
+    provider = meta["provider"]
+    try:
+        from hermes_cli.config import load_config
+        from hermes_cli.model_switch import switch_model as resolve_switch
+    except Exception as exc:
+        logger.warning("model-router: model_switch import failed: %s", exc)
+        return None
+    try:
+        cfg = load_config() or {}
+        cur_base = _agent_base_url(agent)
+        cur_prov = getattr(agent, "provider", "") or ""
+        if not _base_url_matches_provider(cur_base, provider):
+            cur_base = ""
+            cur_prov = provider
+        result = resolve_switch(
+            raw_input=model,
+            current_provider=cur_prov,
+            current_model=getattr(agent, "model", "") or "",
+            current_base_url=cur_base,
+            current_api_key=getattr(agent, "api_key", "") or "",
+            is_global=False,
+            explicit_provider=provider,
+            user_providers=cfg.get("providers"),
+            custom_providers=cfg.get("custom_providers"),
+        )
+        if not getattr(result, "success", False):
+            return None
+        base = (getattr(result, "base_url", None) or "").strip()
+        prov = getattr(result, "target_provider", None) or provider
+        if not base or not _base_url_matches_provider(base, prov):
+            return None
+        return {
+            "model": getattr(result, "new_model", model),
+            "provider": prov,
+            "base_url": base,
+            "api_key": result.api_key or "",
+            "api_mode": result.api_mode or "",
+        }
+    except Exception as exc:
+        logger.warning("model-router: resolve %s runtime failed: %s", name, exc)
+        return None
+
+
+def _classify(user_message: str, history: list, session_id: str = "") -> str:
+    """Return auxiliary|medium. Fail-open to medium — never silent auxiliary on errors.
+
+    Runs on the previous turn's tier (never ``high``/grok) with real history so
+    the classifier sees the same conversation the previous model already read.
+    """
     try:
         from agent.auxiliary_client import call_llm
 
-        context_turns = []
-        n = 0
+        with _lock:
+            prev = _last_tier.get(session_id, _MID)
+        if prev not in (_MIN, _MID):
+            prev = _MID
+
+        body = _strip_platform_prefix(user_message)
+        messages: list[dict[str, Any]] = [{"role": "system", "content": _CLASSIFIER}]
+        ctx_parts: list[str] = []
+        budget = _CLASSIFIER_CONTEXT_CHARS
         for msg in reversed(history or []):
-            if isinstance(msg, dict) and msg.get("role") == "assistant":
-                content = msg.get("content", "")
-                if isinstance(content, str) and content.strip():
-                    context_turns.insert(0, content[:300])
-                    n += 1
-                    if n >= 2:
-                        break
-        messages = [{"role": "system", "content": _CLASSIFIER}]
-        if context_turns:
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+            if role not in ("assistant", "user"):
+                continue
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                content = " ".join(
+                    (c.get("text", "") if isinstance(c, dict) else str(c))
+                    for c in content
+                )
+            if not isinstance(content, str):
+                content = str(content)
+            text = content.strip()
+            if not text:
+                continue
+            ctx_parts.insert(0, f"{role}: {text}")
+            budget -= len(text)
+            if budget <= 0:
+                break
+        if ctx_parts:
             messages.append(
-                {
-                    "role": "user",
-                    "content": "[Recent assistant context]\n" + "\n---\n".join(context_turns),
-                }
+                {"role": "user", "content": "[Conversation context]\n" + "\n---\n".join(ctx_parts)}
             )
             messages.append({"role": "assistant", "content": "Understood."})
-        payload = _strip_platform_prefix(user_message)[:800] or user_message[:800]
-        messages.append({"role": "user", "content": payload})
-        response = call_llm(
-            task="triage_specifier",
-            messages=messages,
-            max_tokens=8,
-            temperature=0.0,
-        )
+        messages.append({"role": "user", "content": body[:800] or user_message[:800]})
+
+        call_kwargs: dict[str, Any] = {"messages": messages, "max_tokens": 8, "temperature": 0.0}
+        rt = _resolve_tier_runtime(prev, _get_agent(session_id))
+        if rt and rt.get("base_url"):
+            call_kwargs.update(
+                model=rt["model"],
+                provider=rt["provider"],
+                base_url=rt["base_url"],
+                api_key=rt["api_key"] or None,
+            )
+            response = call_llm(**call_kwargs)
+        else:
+            response = call_llm(task="triage_specifier", **call_kwargs)
+
         raw = (response.choices[0].message.content or "").strip()
         raw_l = raw.lower()
-        found = [n for n in NAMES if re.search(rf"\b{n}\b", raw_l)]
+        found = [n for n in (_MIN, _MID) if re.search(rf"\b{n}\b", raw_l)]
         if len(found) == 1:
             return found[0]
         named = as_name(raw)
-        if named:
+        if named in (_MIN, _MID):
             return named
         logger.warning("model-router: classifier non-name %r — default medium", raw[:40])
     except Exception as exc:
@@ -629,11 +724,16 @@ def _target_tier(session_id: str, msg: str, history: list) -> tuple[str, str]:
     elif _ACK_RE.match(body) and len(words) <= 6:
         name, reason = _MIN, "ack"
     else:
-        name = _classify(msg, history)
+        name = _classify(msg, history, session_id)
         reason = "classify"
         # Deterministic floor: multi-sentence work is never the cheapest model.
         if _rank(name) < _rank(_MID) and (n_sent > 1 or len(words) > 12):
             name, reason = _MID, "classify+floor"
+
+    # ``high`` is escalation-only in Auto mode — never a turn-start outcome.
+    # /high still pins explicitly; escalation reaches it via escalate_model.
+    if _rank(name) > _rank(_MID):
+        name, reason = _MID, reason + "+clamp(high escalation-only)"
 
     logger.info(
         "model-router: route %s (%s) words=%d sentences=%d preview=%r",
@@ -695,10 +795,10 @@ def on_pre_llm_call(
     session_id: str = "",
     platform: str = "",
     **kwargs: Any,
-) -> None:
+) -> dict | None:
     try:
         if _should_skip(platform, kwargs):
-            return
+            return None
         sid = session_id or ""
         if (user_message or "").strip():
             # A real user turn anchors which session the human is talking in;
@@ -712,26 +812,39 @@ def on_pre_llm_call(
         with _lock:
             pinned = _pinned.get(sid, False)
             current = _last_tier.get(sid)
+            checkpoint = _checkpoint.get(sid, False)
 
         if pinned:
             # Still heal half-switch on pinned sessions (WebUI credential refresh).
             if agent is not None:
                 _apply_tier(agent, current or _TOP)
-            return
+            if checkpoint:
+                with _lock:
+                    _checkpoint[sid] = False
+            return None
 
         msg = (user_message or "").strip()
         if not msg:
-            # Empty hook payload (tool-call continuation) still needs coherence.
+            # Empty hook payload (tool-call continuation): keep the route
+            # coherent, and if an escalation checkpoint is pending, nudge the
+            # working model toward escalate_model (one-shot).
             if agent is not None and current:
                 _apply_tier(agent, current)
-            return
+            if checkpoint:
+                with _lock:
+                    _checkpoint[sid] = False
+                return {"context": _CHECKPOINT_NUDGE}
+            return None
 
         name, reason = _target_tier(sid, msg, conversation_history or [])
         with _lock:
             _tool_errors[sid] = 0
+            _checkpoint[sid] = False
         _set_tier(sid, name, reason)
+        return None
     except Exception as exc:
         logger.warning("model-router: on_pre_llm_call error: %s", exc, exc_info=True)
+        return None
 
 
 def on_pre_api_request(*, session_id: str = "", platform: str = "", **kwargs: Any) -> None:
@@ -786,7 +899,7 @@ def on_post_tool_call(
     session_id: str = "",
     **kwargs: Any,
 ) -> None:
-    """Count consecutive tool errors and climb one tier past the threshold."""
+    """Count consecutive tool errors; at threshold, stage an escalation checkpoint."""
     try:
         sid = session_id or ""
         if not sid:
@@ -829,9 +942,17 @@ def on_post_tool_call(
 
         threshold = _escalation_threshold(current)
         if is_error and count >= threshold and _rank(current) < _rank(_ESCALATE_MAX):
-            _set_tier(sid, _higher(current), f"auto-escalate after {count} tool errors")
+            # Stage an escalation checkpoint instead of climbing directly: the
+            # working model decides whether to escalate via escalate_model.
             with _lock:
+                _checkpoint[sid] = True
                 _tool_errors[sid] = 0
+            logger.info(
+                "model-router: escalation checkpoint staged sid=%s after %d tool errors (tier=%s)",
+                sid,
+                count,
+                current,
+            )
     except Exception as exc:
         logger.warning("model-router: on_post_tool_call error: %s", exc, exc_info=True)
 
@@ -910,6 +1031,136 @@ def _deferred_install_capture() -> None:
     )
 
 
+ESCALATE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "Escalate to the next-higher model when the current model is stuck. "
+        "Provide a structured handoff so the stronger model can continue without "
+        "re-reading the full conversation."
+    ),
+    "properties": {
+        "summary": {
+            "type": "string",
+            "description": "Concise summary of what has been established/decided so far.",
+        },
+        "task_state": {
+            "type": "string",
+            "description": "What this turn is trying to accomplish, in detail.",
+        },
+        "tried_so_far": {
+            "type": "string",
+            "description": "What approaches were already attempted.",
+        },
+        "failure_point": {
+            "type": "string",
+            "description": "Where it is stuck, including the exact error text if any.",
+        },
+        "next_hypothesis": {
+            "type": "string",
+            "description": "Best next approach to try on the stronger model (optional).",
+        },
+    },
+    "required": ["summary", "task_state", "failure_point"],
+}
+
+
+def _handle_escalate_model(**kwargs: Any) -> str:
+    """Switch to the next tier and stash a structured handoff for the context engine."""
+    try:
+        sid = _resolve_cmd_sid()
+        agent = _get_agent(sid) if sid else _get_agent("")
+        with _lock:
+            pinned = _pinned.get(sid, False)
+            current = _last_tier.get(sid, _MIN)
+        if pinned:
+            return "Pinned session — escalation disabled. /auto to resume auto-routing."
+        if _rank(current) >= _rank(_ESCALATE_MAX):
+            return f"Already at the highest tier ({_ESCALATE_MAX}); nothing to escalate to."
+
+        target = _higher(current)
+        handoff = {
+            "summary": str(kwargs.get("summary") or "").strip(),
+            "task_state": str(kwargs.get("task_state") or "").strip(),
+            "tried_so_far": str(kwargs.get("tried_so_far") or "").strip(),
+            "failure_point": str(kwargs.get("failure_point") or "").strip(),
+            "next_hypothesis": str(kwargs.get("next_hypothesis") or "").strip(),
+        }
+
+        # Stash the handoff on the context engine so select_context swaps the
+        # next request to a compact handoff (request-scoped, no history mutation).
+        engine = getattr(agent, "context_compressor", None) if agent is not None else None
+        if engine is not None and hasattr(engine, "handoff"):
+            try:
+                engine.handoff = handoff
+            except Exception as exc:
+                logger.warning("model-router: handoff stash failed: %s", exc)
+        else:
+            logger.warning(
+                "model-router: no handoff engine on agent — escalation falls back to "
+                "per-model compaction thresholds only"
+            )
+
+        _set_tier(sid, target, "escalate_model")
+        with _lock:
+            _tool_errors[sid] = 0
+            _checkpoint[sid] = False
+        meta = MODELS[target]
+        return (
+            f"Escalated to {meta['label']} ({meta.get('provider')}/{meta.get('model')}). "
+            "A handoff summary was prepared so the stronger model can continue without "
+            "re-reading the full conversation."
+        )
+    except Exception as exc:
+        logger.warning("model-router: escalate_model failed: %s", exc, exc_info=True)
+        return f"escalate_model failed: {exc}"
+
+
+def _register_escalate_tool(ctx: Any) -> None:
+    kwargs = {
+        "name": "escalate_model",
+        "handler": _handle_escalate_model,
+        "schema": ESCALATE_SCHEMA,
+        "toolset": "plugin",
+        "description": ESCALATE_SCHEMA["description"],
+        "emoji": "🪜",
+    }
+    try:
+        import inspect as _inspect
+
+        sig = _inspect.signature(ctx.register_tool)
+        params = sig.parameters
+        if any(p.kind == _inspect.Parameter.VAR_KEYWORD for p in params.values()):
+            ctx.register_tool(**kwargs)
+            return
+        accepted = {
+            name
+            for name, p in params.items()
+            if p.kind
+            in (_inspect.Parameter.POSITIONAL_OR_KEYWORD, _inspect.Parameter.KEYWORD_ONLY)
+        }
+        ctx.register_tool(**{k: v for k, v in kwargs.items() if k in accepted})
+    except TypeError:
+        ctx.register_tool(
+            name="escalate_model",
+            toolset="plugin",
+            schema=ESCALATE_SCHEMA,
+            handler=_handle_escalate_model,
+            description=ESCALATE_SCHEMA["description"],
+            emoji="🪜",
+        )
+
+
+def _register_engine(ctx: Any) -> None:
+    try:
+        from . import engine as _engine
+
+        inst = _engine.ModelRouterContextEngine()
+        ctx.register_context_engine(inst)
+        logger.info("model-router: handoff context engine registered (name=%s)", _engine.ENGINE_NAME)
+    except Exception as exc:
+        logger.warning("model-router: handoff engine registration failed: %s", exc)
+
+
 def register(ctx: Any) -> None:
     global _manager
     _manager = getattr(ctx, "_manager", None)
@@ -918,6 +1169,8 @@ def register(ctx: Any) -> None:
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
     ctx.register_hook("pre_api_request", on_pre_api_request)
     ctx.register_hook("post_tool_call", on_post_tool_call)
+    _register_escalate_tool(ctx)
+    _register_engine(ctx)
     for name in NAMES:
         meta = MODELS[name]
         label = meta.get("label") or name.capitalize()

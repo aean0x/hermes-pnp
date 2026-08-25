@@ -252,8 +252,15 @@ When `model-router` is in `plugins`, the installer writes `config.json`
 + `webui/config.js` from the same `models` block, including each
 tier's `best_for` list (the classifier prompt's only source).
 
-Classifier: 4 consecutive tool errors on low, 3 on medium, cap
-`escalate_max` (high). High is reached by classification or `/high`.
+Turn-start classification is binary (`auxiliary`/`medium` only) and runs on
+the previous turn's model with real history — never grok. `high` is
+escalation-only: after N consecutive tool errors (4 on auxiliary, 3 on
+medium) an escalation checkpoint stages, the working model may call the
+`escalate_model` tool, and the router swaps to a 20–30k handoff (summary +
+recent verbatim tail) via the `model-router` context engine
+(`context.engine = "model-router"`). Per-model compaction ceilings:
+auxiliary overflow-only, medium ~260k, high ~140k (fractions of the 384k
+`context_length`).
 Client rebuilds that pair the live provider with the previous API host
 (WebUI `credential_refresh`) are refused at the agent client rebuild;
 `pre_api_request` still re-heals if a stomp lands between rebuilds.

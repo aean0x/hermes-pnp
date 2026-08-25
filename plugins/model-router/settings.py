@@ -148,15 +148,21 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
-    """Build the triage prompt from each tier's `best_for` list — nothing else."""
+    """Build the turn-start triage prompt — auxiliary vs medium only.
+
+    ``high`` is escalation-only in Auto mode, so it is deliberately absent from
+    turn-start classification (reachable only via escalate_model or /high).
+    """
     lines = ["Pick the model for this turn.", ""]
-    for name in NAMES:
+    for name in ("auxiliary", "medium"):
+        if name not in models:
+            continue
         meta = models[name]
         label = meta.get("label") or name.capitalize()
         best = meta.get("best_for") or []
         extra = "; ".join(str(x) for x in best) if best else label
         lines.append(f"{name} = {label} — {extra}")
-    lines.extend(["", "Respond with ONLY one word: auxiliary, medium, or high."])
+    lines.extend(["", "Respond with ONLY one word: auxiliary or medium."])
     return "\n".join(lines)
 
 
@@ -195,6 +201,10 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         state["skip_platforms"] = [str(x) for x in data["skip_platforms"]]
     if data.get("classifier_system"):
         state["classifier_system"] = str(data["classifier_system"])
+    if "handoff_tail_chars" in data:
+        state["handoff_tail_chars"] = max(1000, int(data["handoff_tail_chars"]))
+    if "classifier_context_chars" in data:
+        state["classifier_context_chars"] = max(1000, int(data["classifier_context_chars"]))
 
 
 def load_settings() -> dict[str, Any]:
@@ -205,6 +215,8 @@ def load_settings() -> dict[str, Any]:
         "escalation_errors": {"auxiliary": 4, "medium": 3},
         "skip_platforms": ["cron", "subagent"],
         "classifier_system": None,
+        "handoff_tail_chars": 64000,
+        "classifier_context_chars": 12000,
     }
 
     for candidate, origin in (
@@ -270,6 +282,8 @@ ESCALATION_ERRORS: dict[str, int] = _SETTINGS["escalation_errors"]
 SKIP_PLATFORMS: frozenset[str] = frozenset(_SETTINGS["skip_platforms"])
 PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = _SETTINGS["provider_hosts"]
 CLASSIFIER: str = _SETTINGS["classifier_system"]
+HANDOFF_TAIL_CHARS: int = _SETTINGS["handoff_tail_chars"]
+CLASSIFIER_CONTEXT_CHARS: int = _SETTINGS["classifier_context_chars"]
 
 
 def webui_models() -> list[dict[str, str]]:

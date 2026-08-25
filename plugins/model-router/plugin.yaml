@@ -1,14 +1,18 @@
 name: model-router
-version: 0.6.0
+version: 0.7.0
 description: >-
   Per-turn cost router across three named tiers (auxiliary / medium / high).
-  Classifies each user turn, switches the agent, and climbs on tool errors.
-  Pins with /auxiliary /medium /high /auto. Models, providers, and best_for
-  matrices from config.json or MODEL_ROUTER_* env. Uses AIAgent.switch_model
-  — no Hermes/WebUI core edits. Blocks credential-refresh host stomps.
+  Classifies each user turn (auxiliary/medium only), switches the agent, and
+  escalates on tool failures via the escalate_model tool with an aggressive
+  handoff compaction. Pins with /auxiliary /medium /high /auto. Models,
+  providers, and best_for matrices from config.json or MODEL_ROUTER_* env.
+  Uses AIAgent.switch_model — no Hermes/WebUI core edits. Blocks
+  credential-refresh host stomps.
 author: aean0x
 kind: standalone
 provides_hooks:
   - pre_llm_call
   - pre_api_request
   - post_tool_call
+provides_tools:
+  - escalate_model

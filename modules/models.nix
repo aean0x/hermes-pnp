@@ -165,6 +165,28 @@ in
       model = {
         provider = models.high.provider;
         default = models.high.model;
+        # Hard context ceiling. The per-model compaction thresholds below are
+        # expressed as fractions of this, so they assume 384k. If your consumer
+        # flake assigns model.context_length after the PnP import, that wins
+        # (deepConfigType last-writer-wins) — remove it or match it.
+        context_length = 384000;
+      };
+      # Activate the model-router handoff context engine. Without this the
+      # escalate_model tool still switches models, but the aggressive 20-30k
+      # handoff compaction is inactive (falls back to normal thresholds).
+      context = {
+        engine = "model-router";
+      };
+      # Per-model compaction ceilings (fractions of context_length).
+      #   auxiliary (deepseek-v4-flash) ~0.95 → overflow-only ("idc" cache)
+      #   medium    (deepseek-v4-pro)   ~0.68 → ~260k
+      #   high      (grok-4.6)          ~0.37 → ~140k
+      compression = {
+        model_thresholds = {
+          "${models.auxiliary.model}" = 0.95;
+          "${models.medium.model}" = 0.68;
+          "${models.high.model}" = 0.37;
+        };
       };
       fallback_model = {
         provider = models.high.provider;
