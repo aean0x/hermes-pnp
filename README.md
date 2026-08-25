@@ -165,14 +165,14 @@ disk or in the tool result.
 
 **git-hook** — fetch/pull before reads; commit/push only the files
 this turn dirtied. `GIT_HOOK_COMMIT=0` / `GIT_HOOK_PUSH=0` to mute.
-HTTPS GitHub uses `GITHUB_PAT` via the credential helper.
+HTTPS GitHub uses `GITHUB_TOKEN` via the credential helper.
 
 GBrain plugins live under [GBrain](#gbrain).
 
 ## Misc
 
 **Git.** Composer installs `git-credential-github-env` on
-`programs.git` (fail-open if `GITHUB_PAT` / `GH_TOKEN` is unset).
+`programs.git` (fail-open if `GITHUB_TOKEN` / `GH_TOKEN` is unset).
 `user.name` / `user.email` stay in the consumer.
 
 **Secrets.** One rendered env file on `environmentFiles`. 
