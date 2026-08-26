@@ -13,10 +13,12 @@
 
 let
   inherit (lib)
+    foldl'
     genAttrs
     mkIf
     mkOption
     optionalAttrs
+    recursiveUpdate
     types
     ;
 
@@ -53,6 +55,29 @@ let
           Auxiliary defaults to "none".
         '';
       };
+      compression_ratio = mkOption {
+        type = types.addCheck types.float (x: x > 0 && x <= 1);
+        default = defaults.compression_ratio;
+        description = ''
+          Fraction of this model's own context window at which Hermes
+          auto-compaction fires. Seeded into
+          settings.compression.model_thresholds.<model>. Hermes
+          resolves the window automatically (built-in table +
+          models.dev + live probe) unless context_length is set.
+          0.95 ≈ overflow-only.
+        '';
+      };
+      context_length = mkOption {
+        type = types.nullOr types.ints.positive;
+        default = defaults.context_length;
+        description = ''
+          Optional hard window for this model, in tokens. null
+          (default) lets Hermes resolve it. When set, PnP writes
+          model_overrides.<provider>.<model>.context_window. Do
+          not set settings.model.context_length in the consumer —
+          that one value stamps every model until the first switch.
+        '';
+      };
     }
     // optionalAttrs (defaults.best_for != null) {
       best_for = mkOption {
@@ -73,6 +98,8 @@ let
       description,
       reasoning_effort ? null,
       best_for ? null,
+      compression_ratio ? 0.95,
+      context_length ? null,
     }:
     mkOption {
       type = types.submodule {
@@ -82,6 +109,8 @@ let
             model
             reasoning_effort
             best_for
+            compression_ratio
+            context_length
             ;
         };
       };
@@ -118,18 +147,47 @@ let
     "curator"
     "kanban_decomposer"
   ];
+
+  namedModels = [
+    models.low
+    models.medium
+    models.high
+    models.auxiliary
+  ];
+
+  # Longest-match model_thresholds keys. Same model id on two names:
+  # later entry wins (auxiliary after low).
+  modelThresholds = foldl' (
+    acc: m: acc // { "${m.model}" = m.compression_ratio; }
+  ) { } namedModels;
+
+  modelOverrides = foldl' (
+    acc: m:
+    if m.context_length == null then
+      acc
+    else
+      recursiveUpdate acc {
+        ${m.provider} = {
+          ${m.model} = {
+            context_window = m.context_length;
+          };
+        };
+      }
+  ) { } namedModels;
 in
 {
   options.services.hermesPnP.models = {
     low = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-flash";
+      compression_ratio = 0.95;
       description = "Cheap helper. OOBE seed for unpinned cron. Auxiliary inherits provider/model.";
     };
 
     medium = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-pro";
+      compression_ratio = 0.26;
       best_for = pluginModels.medium.best_for;
       description = "Workhorse. OOBE seed for delegation and model-router medium.";
     };
@@ -137,6 +195,7 @@ in
     high = mkNamedModel {
       provider = "xai-oauth";
       model = "grok-4.6";
+      compression_ratio = 0.28;
       best_for = pluginModels.high.best_for;
       description = ''
         Session identity + voice. OOBE seed for settings.model.default
@@ -149,6 +208,7 @@ in
     auxiliary = mkNamedModel {
       provider = models.low.provider;
       model = models.low.model;
+      compression_ratio = 0.95;
       best_for = pluginModels.auxiliary.best_for;
       reasoning_effort = "none";
       description = ''
@@ -165,31 +225,18 @@ in
       model = {
         provider = models.high.provider;
         default = models.high.model;
-        # No context_length here — it is model-specific and resolved from
-        # hermes-agent metadata (grok-4.6 = 500k; deepseek-v4-flash/-pro = 1M).
-        # The consumer flake owns the explicit model.context_length (500000);
-        # do not shadow it with a wrong fixed value.
+        # No global context_length. Hermes resolves each model's window
+        # (built-in table + models.dev + live probe). Override per name
+        # via models.<name>.context_length → model_overrides.
       };
-      # Activate the model-router handoff context engine. Without this the
-      # escalate_model tool still switches models, but the aggressive 20-30k
-      # handoff compaction is inactive (falls back to normal thresholds).
       context = {
         engine = "model-router";
       };
-      # Per-model compaction ceilings, as fractions of EACH model's own window.
-      # resolve_model_threshold: longest key wins. hermes-agent also floors any
-      # model under 512k at >=0.75, and the consumer's global
-      # compression.threshold_tokens takes the LOWER of fraction*window and the
-      # cap — so the effective ceiling is min(fraction*window, cap).
-      #   auxiliary (deepseek-v4-flash, 1M) 0.95 → overflow-only ("idc" cache)
-      #   medium    (deepseek-v4-pro,   1M) 0.26 → ~260k
-      #   high      (grok-4.6,        500k) 0.28 → ~140k intent (floored to 0.75)
+      # Ratios come from models.<name>.compression_ratio. Hermes
+      # multiplies by the auto-resolved window. Consumer
+      # compression.threshold_tokens, if set, still caps every model.
       compression = {
-        model_thresholds = {
-          "${models.auxiliary.model}" = 0.95;
-          "${models.medium.model}" = 0.26;
-          "${models.high.model}" = 0.28;
-        };
+        model_thresholds = modelThresholds;
       };
       fallback_model = {
         provider = models.high.provider;
@@ -210,6 +257,9 @@ in
         reasoning_effort = models.low.reasoning_effort;
       };
       auxiliary = genAttrs auxiliarySlots (_: auxiliarySlot);
+    }
+    // optionalAttrs (modelOverrides != { }) {
+      model_overrides = modelOverrides;
     }
     // optionalAttrs (models.high.reasoning_effort != null) {
       agent.reasoning_effort = models.high.reasoning_effort;

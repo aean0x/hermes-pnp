@@ -46,7 +46,12 @@
 - Official keys: `model.{provider,default}`,
   `fallback_model.{provider,model}`, `delegation.{provider,model}`,
   `cron.{model,model_provider}`,
-  `auxiliary.<slot>.{provider,model,reasoning_effort?}`.
+  `auxiliary.<slot>.{provider,model,reasoning_effort?}`,
+  `compression.model_thresholds.<model>` (from
+  `models.<name>.compression_ratio`),
+  `model_overrides.<provider>.<model>.context_window` (only when
+  `models.<name>.context_length` is set).
+  Do not set `settings.model.context_length` in the consumer.
 - Auxiliary slots seeded from `models.auxiliary`: title_generation,
   compression, approval, web_extract, skills_hub, mcp,
   triage_specifier, kanban_decomposer, profile_describer, curator,

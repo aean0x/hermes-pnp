@@ -24,6 +24,8 @@
     # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; }; # follows low; reasoning "none"
     # models.high.reasoning_effort = "high"; # else Hermes session default
     # models.low.best_for = [ "Short acknowledgements" ];
+    # models.medium.compression_ratio = 0.26; # fraction of that model's window
+    # models.high.context_length = 500000;    # null = Hermes auto-resolves
 
     plugins = [
       "model-router"
