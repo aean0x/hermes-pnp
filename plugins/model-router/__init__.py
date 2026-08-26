@@ -730,9 +730,10 @@ def _target_tier(session_id: str, msg: str, history: list) -> tuple[str, str]:
         if _rank(name) < _rank(_MID) and (n_sent > 1 or len(words) > 12):
             name, reason = _MID, "classify+floor"
 
-    # ``high`` is escalation-only in Auto mode — never a turn-start outcome.
-    # /high still pins explicitly; escalation reaches it via escalate_model.
-    if _rank(name) > _rank(_MID):
+    # ``high`` is escalation-only in Auto mode — never a *classified*
+    # turn-start outcome. Explicit ``/high`` (or ``pin high``) still lands;
+    # slash-command pins already skip this function via ``_pinned``.
+    if reason != "explicit" and _rank(name) > _rank(_MID):
         name, reason = _MID, reason + "+clamp(high escalation-only)"
 
     logger.info(
@@ -1067,7 +1068,9 @@ ESCALATE_SCHEMA: dict[str, Any] = {
 def _handle_escalate_model(**kwargs: Any) -> str:
     """Switch to the next tier and stash a structured handoff for the context engine."""
     try:
-        sid = _resolve_cmd_sid()
+        sid = str(kwargs.get("session_id") or kwargs.get("task_id") or "").strip()
+        if not sid:
+            sid = _resolve_cmd_sid()
         agent = _get_agent(sid) if sid else _get_agent("")
         with _lock:
             pinned = _pinned.get(sid, False)
@@ -1078,7 +1081,11 @@ def _handle_escalate_model(**kwargs: Any) -> str:
             return f"Already at the highest tier ({_ESCALATE_MAX}); nothing to escalate to."
 
         target = _higher(current)
+        dest = MODELS[target]
         handoff = {
+            "from_tier": current,
+            "to_tier": target,
+            "to_model": dest.get("model") or target,
             "summary": str(kwargs.get("summary") or "").strip(),
             "task_state": str(kwargs.get("task_state") or "").strip(),
             "tried_so_far": str(kwargs.get("tried_so_far") or "").strip(),
@@ -1151,10 +1158,23 @@ def _register_escalate_tool(ctx: Any) -> None:
 
 
 def _register_engine(ctx: Any) -> None:
+    if not hasattr(ctx, "register_context_engine"):
+        logger.warning("model-router: ctx has no register_context_engine; handoff disabled")
+        return
     try:
-        from . import engine as _engine
+        try:
+            from . import engine as _engine
+        except ImportError:
+            import importlib.util
+            from pathlib import Path
 
-        inst = _engine.ModelRouterContextEngine()
+            path = Path(__file__).with_name("engine.py")
+            spec = importlib.util.spec_from_file_location("model_router_engine", path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"cannot load {path}")
+            _engine = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(_engine)
+        inst = _engine.ModelRouterContextEngine(model="")
         ctx.register_context_engine(inst)
         logger.info("model-router: handoff context engine registered (name=%s)", _engine.ENGINE_NAME)
     except Exception as exc:

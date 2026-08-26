@@ -41,10 +41,16 @@ def _load_tail_chars() -> int:
 
 def _format_handoff(handoff: dict[str, Any]) -> str:
     """Render the structured handoff the escalating model supplied."""
+    dest = (handoff.get("to_tier") or "high").strip()
+    model = (handoff.get("to_model") or "").strip()
+    src = (handoff.get("from_tier") or "").strip()
+    dest_label = f"{dest}" + (f" ({model})" if model else "")
+    src_label = f" from {src}" if src else ""
     lines = [
-        "CONTEXT HANDOFF (model escalation): the previous model summarised the "
-        "conversation and its in-flight task so you can continue without "
-        "re-reading the full history. Continue from here.",
+        f"CONTEXT HANDOFF (model escalation{src_label} → {dest_label}): "
+        "the previous model summarised the conversation and its in-flight "
+        "task so you can continue without re-reading the full history. "
+        "Continue from here.",
         "",
     ]
     for key, label in (
@@ -102,11 +108,12 @@ class ModelRouterContextEngine(ContextCompressor):
 
             out.append({"role": "user", "content": _format_handoff(handoff)})
 
-            # Recent verbatim tail: keep the current tool loop and the failure
-            # context, capped by characters.
+            # Recent verbatim tail: prefer the live request (includes this
+            # turn's tool loop / failure text) over persisted history.
+            source = request_messages or conversation_messages or []
             tail: list[dict[str, Any]] = []
             budget = self._handoff_tail_chars
-            for msg in reversed(conversation_messages or []):
+            for msg in reversed(source):
                 if not isinstance(msg, dict):
                     continue
                 role = msg.get("role")
