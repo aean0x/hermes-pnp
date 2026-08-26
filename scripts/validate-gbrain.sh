@@ -142,6 +142,15 @@ else
   warn "hermes CLI not on host PATH"
 fi
 
+echo "=== 6. autopilot + jobs worker absent ==="
+for u in gbrain-autopilot gbrain-jobs gbrain-jobs-work; do
+  if systemctl is-enabled "$u" >/dev/null 2>&1 || systemctl is-active "$u" >/dev/null 2>&1; then
+    bad "$u present (must be absent next to serve on PGLite)"
+  else
+    ok "$u absent"
+  fi
+done
+
 echo "=== summary ==="
 if [ "$fail" -eq 0 ]; then
   echo "PASS validate-gbrain (MCP + reflex)"

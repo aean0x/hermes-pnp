@@ -24,6 +24,7 @@
     # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; };
     # models.high.reasoning_effort = "high"; # else Hermes session default
     # models.low.best_for = [ "Short acknowledgements" ];
+    # workspace = "/var/lib/hermes"; # host path; remaps to /data in the jail
 
     plugins = [
       "model-router"

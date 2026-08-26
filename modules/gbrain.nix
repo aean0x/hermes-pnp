@@ -137,6 +137,14 @@ in
         Restart = "on-failure";
         RestartSec = 10;
         TimeoutStartSec = "120";
+        # Conservative sandbox. Skip ProtectSystem=full / PrivateTmp:
+        # bun + PGLite WASM use $HOME/.gbrain and /tmp.
+        NoNewPrivileges = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
       };
     };
 

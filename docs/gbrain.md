@@ -9,7 +9,10 @@ Off by default. Two steps:
    `config.yaml` after official merge (Nix keys win; Hermes does not
    expand `${GBRAIN_REMOTE_TOKEN}`).
 2. `scripts/gbrain-setup.sh` (root; consumer `./deploy gbrain-setup`) —
-   bun CLI, PGLite init, mint token, import/embed.
+   bun CLI, PGLite init, mint token, import/embed. Optional
+   `GBRAIN_REF=vX.Y.Z` pins `bun install -g github:garrytan/gbrain#<ref>`.
+   Nix does **not** run this as a boot one-shot (PGLite single-writer;
+   import/embed takes the stack down).
 
 Nix does not ship PGLite, sources, or a memory registry.
 
