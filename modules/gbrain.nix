@@ -85,8 +85,8 @@ in
 
     tokenFile = mkOption {
       type = types.nullOr types.str;
-      default = "${agent.stateDir}/home/.gbrain/hermes-mcp.token";
-      defaultText = lib.literalExpression ''"''${config.services.hermes-agent.stateDir}/home/.gbrain/hermes-mcp.token"'';
+      default = "${agent.stateDir}/.gbrain/hermes-mcp.token";
+      defaultText = lib.literalExpression ''"''${config.services.hermes-agent.stateDir}/.gbrain/hermes-mcp.token"'';
       description = "Path to a token file. Injected as GBRAIN_TOKEN_FILE; never read into Nix.";
     };
   };
@@ -154,8 +154,19 @@ in
     # so re-apply a literal Bearer after that merge.
     system.activationScripts.hermes-gbrain = lib.stringAfter [ "hermes-agent-setup" ] ''
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}
-      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.gbrain
+      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${agent.stateDir}/.gbrain
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/brain
+      # .gbrain is canonical under stateDir now (sibling of .hermes). Migrate
+      # a pre-relocation brain once, then link it in from $HOME so gbrain's
+      # default ~/.gbrain keeps resolving. The relative target resolves in both
+      # the host namespace (gbrain-mcp-http) and the OCI jail; home and stateDir
+      # share a filesystem, so mv is an atomic rename.
+      if [ -d ${home}/.gbrain ] && [ ! -L ${home}/.gbrain ]; then
+        shopt -s dotglob nullglob 2>/dev/null || true
+        mv -f ${home}/.gbrain/* ${agent.stateDir}/.gbrain/ 2>/dev/null || true
+        rm -rf -- ${home}/.gbrain
+      fi
+      ln -sfn ../.gbrain ${home}/.gbrain
       if [ ! -e /home/hermes ]; then
         ln -sfn ${home} /home/hermes
       elif [ ! -L /home/hermes ] && [ ! -d /home/hermes ]; then
