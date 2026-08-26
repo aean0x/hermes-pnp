@@ -148,7 +148,7 @@ the official option PnP set via `mkDefault`.
 - `services.hermesPnP.enable` — composer on. Default `false`.
 - `services.hermesPnP.environmentFiles` — forwarded to official
   `environmentFiles`. Key list: `docs/hermes.env.example`.
-- `services.hermesPnP.models.{low,medium,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Router tiers (`auxiliary`/`medium`/`high`) also have `best_for` (classifier matrix; plugin JSON defaults). `auxiliary` provider/model follow `low`; effort unset except auxiliary (`"none"`).
+- `services.hermesPnP.models.{low,medium,high,auxiliary}` — `{ provider, model, reasoning_effort, compression_ratio, context_length }`. Router tiers (`auxiliary`/`medium`/`high`) also have `best_for` (classifier matrix; plugin JSON defaults). `auxiliary` provider/model follow `low`; effort unset except auxiliary (`"none"`). `compression_ratio` defaults 0.95 / 0.26 / 0.28 / 0.95. `context_length` null = Hermes auto-resolves.
 - `services.hermesPnP.plugins` — `listOf str`. Composer on defaults
   via `mkDefault` to model-router, tool-call-coherency, secret-handoff.
 - `services.hermesPnP.extraPluginDirs` — `attrsOf path` beside the catalog
@@ -213,6 +213,13 @@ unset (Hermes session defaults) except auxiliary, which defaults to
 `"none"`. Model-router never writes `reasoning_config` /
 `reasoning_effort`.
 
+Each named model also has `compression_ratio` (0–1) and optional
+`context_length`. Ratios seed `settings.compression.model_thresholds`.
+Hermes multiplies by the model's own window (built-in table +
+models.dev + live probe). Set `context_length` only to override; that
+writes `model_overrides.<provider>.<model>.context_window`. Do not
+set `settings.model.context_length` in the consumer.
+
 | name       | role                     | seeds                                         |
 | ---------- | ------------------------ | --------------------------------------------- |
 | low        | cheap helper             | `settings.cron`                               |
@@ -234,6 +241,8 @@ When `hermesPnP.enable` (`modules/models.nix`):
 - `settings.delegation.{provider,model}` ← medium
 - `settings.cron.{model,model_provider}` ← low
 - `settings.auxiliary.<slot>` ← `models.auxiliary` (provider, model, and `reasoning_effort` when set)
+- `settings.compression.model_thresholds.<model>` ← each name's `compression_ratio`
+- `settings.model_overrides.<provider>.<model>.context_window` ← only when `context_length` is set
 - `settings.agent.reasoning_effort` ← high only when `models.high.reasoning_effort` is set
 - `delegation` / `cron` `reasoning_effort` ← medium / low only when those options are set
 

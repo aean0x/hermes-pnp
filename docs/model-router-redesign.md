@@ -54,35 +54,23 @@ cost spike when the router climbs to `high`. This redesign makes the climb to
 
 ### 4. Per-model compaction ceilings
 
-Hermes auto-compaction keeps churning, but at per-model ceilings:
+Hermes auto-compaction keeps churning. The user-facing knob is
+`hermesPnP.models.<name>.compression_ratio` (fraction of that model's
+own window):
 
-- `auxiliary` (deepseek-v4-flash) → `~0.95` → overflow-only ("idc" cache).
-- `medium` (deepseek-v4-pro) → `~0.68` → ~260k.
-- `high` (grok-4.6) → `~0.37` → ~140k.
+- `auxiliary` / `low` default `0.95` → overflow-only on a 1M window
+- `medium` default `0.26` → ~260k on a 1M window
+- `high` default `0.28` → ~140k intent on a 500k window (Hermes
+  floors models under 512k at ≥0.75 unless a global
+  `compression.threshold_tokens` cap is lower)
 
-These are fractions of `model.context_length`, seeded in `modules/models.nix`
-alongside `context.engine = "model-router"` and `context_length = 384000`.
+Hermes resolves the window automatically. Set
+`models.<name>.context_length` only to override; that writes
+`model_overrides`, not a global `model.context_length`.
 
-## Config contract
-
-`modules/models.nix` seeds:
-
-```nix
-model.context_length = 384000;
-context.engine = "model-router";
-compression.model_thresholds = {
-  "<auxiliary.model>" = 0.95;
-  "<medium.model>"    = 0.68;
-  "<high.model>"      = 0.37;
-};
-```
-
-**Consumer action required:** the 260k/140k ceilings assume a 384k context
-window. If the consumer flake assigns `model.context_length` after the PnP
-import (deepConfigType last-writer-wins), it shadows the PnP default — remove
-or match it. Without `context.engine = "model-router"`, escalation still
-switches models but the aggressive handoff compaction is inactive (falls back
-to normal thresholds only).
+A consumer `compression.threshold_tokens` still caps every model.
+Drop the consumer `model.context_length` and the old
+`model_thresholds."deepseek-v4"` once this lands.
 
 ## Files
 
@@ -93,4 +81,4 @@ to normal thresholds only).
 - `plugins/model-router/config.default.json` — `handoff_tail_chars`,
   `classifier_context_chars`.
 - `plugins/model-router/plugin.yaml` — `provides_tools: [escalate_model]`, v0.7.0.
-- `modules/models.nix` — `context.engine`, `context_length`, `model_thresholds`.
+- `modules/models.nix` — `compression_ratio` / `context_length` on each named model; seeds `model_thresholds` + optional `model_overrides`.

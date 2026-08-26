@@ -138,6 +138,14 @@ let
     }
   ];
 
+  ratioConfig = eval [
+    ../examples/composer.nix
+    {
+      services.hermesPnP.models.medium.compression_ratio = 0.5;
+      services.hermesPnP.models.high.context_length = 500000;
+    }
+  ];
+
   dropAux = (dropInConfig.services.hermes-agent.settings.auxiliary or { }).triage_specifier or { };
 
   # plugins is listOf, not a submodule.
@@ -192,6 +200,14 @@ in
     test "${toString ((modulesConfig.services.hermes-agent.settings.agent or {}).reasoning_effort or "")}" = ""
     test "${modulesConfig.services.hermes-agent.settings.delegation.model}" = "${modulesConfig.services.hermesPnP.models.medium.model}"
     test "${modulesConfig.services.hermes-agent.settings.cron.model}" = "${modulesConfig.services.hermesPnP.models.low.model}"
+    test "${toString (modulesConfig.services.hermesPnP.models.low.compression_ratio == 0.95)}" = "1"
+    test "${toString (modulesConfig.services.hermesPnP.models.medium.compression_ratio == 0.26)}" = "1"
+    test "${toString (modulesConfig.services.hermesPnP.models.high.compression_ratio == 0.28)}" = "1"
+    test "${toString (modulesConfig.services.hermes-agent.settings.compression.model_thresholds.${modulesConfig.services.hermesPnP.models.low.model} == 0.95)}" = "1"
+    test "${toString (modulesConfig.services.hermes-agent.settings.compression.model_thresholds.${modulesConfig.services.hermesPnP.models.medium.model} == 0.26)}" = "1"
+    test "${toString (modulesConfig.services.hermes-agent.settings.compression.model_thresholds.${modulesConfig.services.hermesPnP.models.high.model} == 0.28)}" = "1"
+    test "${toString (modulesConfig.services.hermes-agent.settings.model ? context_length)}" = ""
+    test "${toString (modulesConfig.services.hermes-agent.settings ? model_overrides)}" = ""
     test "${modulesConfig.services.hermes-agent.settings.browser.cdp_url}" = "http://127.0.0.1:9222"
     test "${modulesConfig.services.hermes-agent.settings.browser.engine}" = "${modulesConfig.services.hermesPnP.browser.engine}"
     test "${toString (modulesConfig.systemd.services ? hermes-browser)}" = "1"
@@ -380,6 +396,8 @@ in
     test "${optionsEval.config.services.hermesPnP.models.auxiliary.reasoning_effort}" = "none"
     test "${toString (optionsEval.config.services.hermesPnP.models.low.reasoning_effort == null)}" = "1"
     test "${toString (optionsEval.config.services.hermesPnP.models.high.reasoning_effort == null)}" = "1"
+    test "${toString (optionsEval.config.services.hermesPnP.models.medium.compression_ratio == 0.26)}" = "1"
+    test "${toString (optionsEval.config.services.hermesPnP.models.high.context_length == null)}" = "1"
     test "${toString (optionsEval.config.services.hermesPnP.models.low ? best_for)}" = ""
     test "${toString (optionsEval.config.services.hermesPnP.models.auxiliary ? best_for)}" = "1"
     test "${builtins.head optionsEval.config.services.hermesPnP.models.auxiliary.best_for}" = "${builtins.head pluginRouterDefaults.auxiliary.best_for}"
@@ -460,6 +478,9 @@ in
     test "${builtins.head bestForConfig.services.hermesPnP.models.auxiliary.best_for}" = "Only acks"
     test "${bestForConfig.services.hermesPnP.models.auxiliary.model}" = "low-override"
     test "${builtins.head bestForConfig.services.hermesPnP.models.medium.best_for}" = "${builtins.head pluginRouterDefaults.medium.best_for}"
+    test "${toString (ratioConfig.services.hermesPnP.models.medium.compression_ratio == 0.5)}" = "1"
+    test "${toString (ratioConfig.services.hermes-agent.settings.compression.model_thresholds.${ratioConfig.services.hermesPnP.models.medium.model} == 0.5)}" = "1"
+    test "${toString (ratioConfig.services.hermes-agent.settings.model_overrides.${ratioConfig.services.hermesPnP.models.high.provider}.${ratioConfig.services.hermesPnP.models.high.model}.context_window == 500000)}" = "1"
     touch "$out"
   '';
 }
