@@ -142,6 +142,25 @@ else
   warn "hermes CLI not on host PATH"
 fi
 
+echo "=== 6. autopilot + jobs worker absent; bootstrap one-shot present ==="
+for u in gbrain-autopilot gbrain-jobs gbrain-jobs-work; do
+  if systemctl is-enabled "$u" >/dev/null 2>&1 || systemctl is-active "$u" >/dev/null 2>&1; then
+    bad "$u present (must be absent next to serve on PGLite)"
+  else
+    ok "$u absent"
+  fi
+done
+if systemctl cat gbrain-bootstrap.service >/dev/null 2>&1; then
+  ok "gbrain-bootstrap one-shot declared"
+  if [ -e "${STATE}/.gbrain/.bootstrap-ok" ]; then
+    ok "bootstrap stamp present ($(cat "${STATE}/.gbrain/.bootstrap-ok" 2>/dev/null || echo empty))"
+  else
+    warn "bootstrap stamp missing (one-shot re-runs at next boot)"
+  fi
+else
+  warn "gbrain-bootstrap one-shot not declared"
+fi
+
 echo "=== summary ==="
 if [ "$fail" -eq 0 ]; then
   echo "PASS validate-gbrain (MCP + reflex)"

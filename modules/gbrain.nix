@@ -32,7 +32,9 @@ let
     if pnp.enable && pnp.toolbox.enable then
       pnp.toolbox.hostPath
     else
-      "${home}/.bun/bin:${home}/.local/bin:/run/current-system/sw/bin:/usr/bin:/bin";
+      # ${pkgs.bun}/bin is a reproducible interpreter fallback; the ~/.bun/bin
+      # global shim (installed by the bootstrap one-shot) wins when present.
+      "${home}/.bun/bin:${home}/.local/bin:${pkgs.bun}/bin:/run/current-system/sw/bin:/usr/bin:/bin";
   gbrainBin = "${home}/.bun/bin/gbrain";
 
   gbrainHttpScript = pkgs.writeShellScript "gbrain-mcp-http" ''
@@ -52,6 +54,11 @@ let
   wireScript = pkgs.writeText "gbrain-wire-config.py" (
     builtins.readFile ../scripts/gbrain-wire-config.py
   );
+  # Store copy of the operator script so the one-shot can call it without
+  # needing the repo on the device. Invoked via `bash ${setupScript}`.
+  setupScript = builtins.toFile "gbrain-setup.sh" (
+    builtins.readFile ../scripts/gbrain-setup.sh
+  );
   tokenFile = if cfg.tokenFile != null then cfg.tokenFile else "";
 in
 {
@@ -62,7 +69,8 @@ in
       and re-apply a literal Bearer on config.yaml after official merge.
       Also installs the two gbrain plugins even if they are not listed.
       Off by default. Does not ship PGLite, sources, or a memory registry.
-      CLI install is a one-shot: scripts/gbrain-setup.sh.
+      State bootstrap (CLI + PGLite + bearer) is the gbrain-bootstrap one-shot
+      (runs scripts/gbrain-setup.sh, pinned to `ref`, stamped on success).
     '';
 
     url = mkOption {
@@ -88,6 +96,13 @@ in
       default = "${agent.stateDir}/.gbrain/hermes-mcp.token";
       defaultText = lib.literalExpression ''"''${config.services.hermes-agent.stateDir}/.gbrain/hermes-mcp.token"'';
       description = "Path to a token file. Injected as GBRAIN_TOKEN_FILE; never read into Nix.";
+    };
+
+    ref = mkOption {
+      type = types.str;
+      default = "v0.46.30.0";
+      defaultText = lib.literalExpression ''"v0.46.30.0"'';
+      description = "gbrain git ref the bootstrap one-shot installs (github:garrytan/gbrain#<ref>). Pin to a tag; bump on release.";
     };
   };
 
@@ -137,7 +152,53 @@ in
         Restart = "on-failure";
         RestartSec = 10;
         TimeoutStartSec = "120";
+        # Loopback server hardening (mirrors upstream minions worker flags,
+        # minus anything bun's JIT / PGLite IPC would trip on).
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "full";
+        ProtectControlGroups = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
       };
+    };
+
+    # One-shot state bootstrap: installs the pinned CLI + PGLite + bearer on a
+    # fresh host, no-ops once stamped. Runs the same script the operator would
+    # (scripts/gbrain-setup.sh) so there is one source of truth. Deliberately
+    # NOT ordered against gbrain-mcp-http: the script manages serve itself
+    # (mint needs serve up, import/embed needs it down); the serve unit just
+    # restarts until the CLI exists.
+    systemd.services.gbrain-bootstrap = {
+      description = "GBrain one-shot bootstrap (CLI + PGLite + token)";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      script = ''
+        set -euo pipefail
+        export PATH="/run/current-system/sw/bin:${home}/.bun/bin:/run/wrappers/bin"
+        # Stamp records the pinned ref. Re-run when the CLI is missing OR the
+        # stamp no longer matches `ref` (fresh host and ref-bump both re-run).
+        stamp="${agent.stateDir}/.gbrain/.bootstrap-ok"
+        if [ -x "${gbrainBin}" ] && [ "$(cat "$stamp" 2>/dev/null)" = "${cfg.ref}" ]; then
+          echo "gbrain-bootstrap: CLI present at pinned ref ${cfg.ref} — nothing to do"
+          exit 0
+        fi
+        export HERMES_HOME_DIR="${home}"
+        export HERMES_STATE="${hermesHome}"
+        export GBRAIN_REF="${cfg.ref}"
+        export GBRAIN_WIRE_PY="${wireScript}"
+        bash ${setupScript}
+        printf '%s' "${cfg.ref}" > "${agent.stateDir}/.gbrain/.bootstrap-ok"
+        chmod 0644 "${agent.stateDir}/.gbrain/.bootstrap-ok"
+        chown ${agent.user}:${agent.group} "${agent.stateDir}/.gbrain/.bootstrap-ok"
+      '';
     };
 
     systemd.services.hermes-agent = {

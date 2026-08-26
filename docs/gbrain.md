@@ -8,8 +8,11 @@ Off by default. Two steps:
    `gbrain-memory-flush`, and re-applies a literal Bearer on
    `config.yaml` after official merge (Nix keys win; Hermes does not
    expand `${GBRAIN_REMOTE_TOKEN}`).
-2. `scripts/gbrain-setup.sh` (root; consumer `./deploy gbrain-setup`) —
-   bun CLI, PGLite init, mint token, import/embed.
+2. Bootstrap is automatic: the `gbrain-bootstrap` one-shot installs the
+   pinned CLI (`ref`, default `v0.46.30.0`), initializes PGLite, mints
+   the bearer token, and imports/embeds on a fresh host — no-op once
+   stamped. Manual fallback: `scripts/gbrain-setup.sh` (root;
+   consumer `./deploy gbrain-setup`).
 
 Nix does not ship PGLite, sources, or a memory registry.
 
