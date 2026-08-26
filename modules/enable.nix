@@ -53,5 +53,19 @@ in
         description = "Official container.image.";
       };
     };
+
+    workspace = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      defaultText = lib.literalExpression "null";
+      description = ''
+        Default workspace directory, applied to BOTH the gateway
+        (services.hermes-agent.settings.terminal.cwd) and the WebUI
+        (HERMES_WEBUI_DEFAULT_WORKSPACE) so the two runtimes agree on
+        one path. Host path; the composer rewrites stateDir→/data (and
+        stateDir/home→/home/hermes) for the OCI jails. Unset (null):
+        leave both runtimes on their official defaults.
+      '';
+    };
   };
 }

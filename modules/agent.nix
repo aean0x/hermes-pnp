@@ -11,7 +11,7 @@
 let
   inherit (lib) mkDefault mkIf;
 
-  inherit (import ../lib { inherit lib; }) agentContainerNetwork;
+  inherit (import ../lib { inherit lib; }) agentContainerNetwork remapStatePath;
 
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;
@@ -26,6 +26,15 @@ in
       services.hermesPnP.pluginInstall.stateDir = mkDefault agent.stateDir;
       services.hermesPnP.pluginInstall.user = mkDefault agent.user;
       services.hermesPnP.pluginInstall.group = mkDefault agent.group;
+    })
+    (mkIf (pnp.enable && pnp.workspace != null) {
+      # Plain value, not mkDefault: settings is deepConfigType, where mkDefault
+      # is stored literally and never merges. The workspace option is the single
+      # knob, so a literal value is correct here.
+      services.hermes-agent.settings.terminal.cwd = remapStatePath {
+        inherit (agent) stateDir;
+        path = pnp.workspace;
+      };
     })
     (mkIf pnp.container.enable {
       services.hermes-agent.container.enable = mkDefault true;

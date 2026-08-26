@@ -77,6 +77,12 @@ in
         HERMES_WEBUI_EXTENSION_DIR = toString extensionDir;
         HERMES_WEBUI_EXTENSION_MANIFEST = "extensions.json";
       }
+      // optionalAttrs (pnp.workspace != null) {
+        HERMES_WEBUI_DEFAULT_WORKSPACE = mkDefault (oci.remapStatePath {
+          inherit (agent) stateDir;
+          path = pnp.workspace;
+        });
+      }
       // optionalAttrs pnp.toolbox.enable {
         PATH = if wctr.enable then pnp.toolbox.containerPath else pnp.toolbox.hostPath;
         # Writable ~/.venv (activation). ubuntu:24.04 has no distro
