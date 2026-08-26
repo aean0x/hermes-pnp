@@ -9,7 +9,9 @@
 #
 # Two-step consumer path:
 #   1. services.hermesPnP.gbrain.enable = true  (switch — unit + MCP URL + plugins)
-#   2. this script (bun CLI, mint token, import/embed)
+#   2. this script (bun CLI, mint token, import/embed).
+#      GBRAIN_REF=vX.Y.Z pins bun install -g github:garrytan/gbrain#<ref>.
+#      Not a systemd one-shot — import/embed stops serve (PGLite single-writer).
 # Official hermes-agent-setup drops headers on merge; composer activation
 # re-applies a literal Bearer. This script wires immediately so the first
 # start after mint does not 401.
@@ -52,7 +54,7 @@ die() { echo "[gbrain-setup] FAIL: $*" >&2; exit 1; }
 [[ "$(id -u)" -eq 0 ]] || die "run as root (sudo)"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WIRE_PY="${HERE}/gbrain-wire-config.py"
+WIRE_PY="${GBRAIN_WIRE_PY:-${HERE}/gbrain-wire-config.py}"
 
 if ! systemctl cat gbrain-mcp-http.service >/dev/null 2>&1; then
   die "gbrain-mcp-http unit missing — set services.hermesPnP.gbrain.enable = true and switch first"
@@ -104,12 +106,22 @@ ensure_dirs() {
 }
 
 ensure_bun_gbrain() {
+  local ref="${GBRAIN_REF:-}"
+  local need_install=0
   if [[ ! -x "${GBRAIN_BIN}" ]]; then
-    log "installing bun + gbrain CLI for hermes"
+    need_install=1
+  elif [[ -n "$ref" ]]; then
+    local ver refnum
+    ver="$(as_hermes "${GBRAIN_BIN}" --version 2>/dev/null | head -1 || true)"
+    refnum="${ref#v}"
+    [[ "$ver" == *"$ref"* || "$ver" == *"$refnum"* ]] || need_install=1
+  fi
+  if [[ "$need_install" -eq 1 ]]; then
+    log "installing bun + gbrain CLI for hermes${ref:+ (ref ${ref})}"
     if [[ ! -x "${BUN_BIN}/bun" ]]; then
       as_hermes bash -c 'curl -fsSL https://bun.sh/install | bash'
     fi
-    as_hermes bash -c 'export PATH="$HOME/.bun/bin:$PATH"; bun install -g github:garrytan/gbrain'
+    as_hermes bash -c "export PATH=\"\$HOME/.bun/bin:\$PATH\"; bun install -g 'github:garrytan/gbrain${ref:+#${ref}}'"
   fi
   [[ -x "${GBRAIN_BIN}" ]] || die "gbrain binary missing at ${GBRAIN_BIN}"
   log "gbrain: $(as_hermes "${GBRAIN_BIN}" --version 2>/dev/null | head -1 || echo ok)"

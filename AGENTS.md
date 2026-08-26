@@ -15,7 +15,9 @@ consumer.
   `services.hermesPnP.mcpProxy`. Official services stay off unless the
   consumer enables them. Opt-in `gbrain` / `hmc` still work.
 - `services.hermesPnP.enable = true`: WebUI pairing, share env, optional
-  silence wrap, toolbox, browser.
+  silence wrap, toolbox, browser. `workspace` (optional) is one host
+  path for gateway `terminal.cwd` and WebUI default; remapped only in
+  the jail.
 
 ## Git identity
 

@@ -53,5 +53,19 @@ in
         description = "Official container.image.";
       };
     };
+
+    workspace = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      defaultText = lib.literalExpression "null";
+      description = ''
+        Default workspace for both the gateway
+        (services.hermes-agent.settings.terminal.cwd) and the WebUI
+        (HERMES_WEBUI_DEFAULT_WORKSPACE). Host path. Remapped to the
+        jail (/data, /home/hermes) only when that runtime is
+        containerised; native keeps the host path. Unset (null): leave
+        both runtimes on their official defaults.
+      '';
+    };
   };
 }

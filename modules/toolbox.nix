@@ -8,12 +8,15 @@
   config,
   lib,
   pkgs,
+  options,
   ...
 }:
 
 let
   inherit (lib)
     concatStringsSep
+    filter
+    getExe
     literalExpression
     mkIf
     mkOption
@@ -86,6 +89,33 @@ let
     ln -s ${pythonEnv}/bin/python3 "$out/bin/python"
   '';
 
+  # Hermes strips GITHUB_TOKEN / GH_TOKEN from terminal children
+  # (Copilot provider blocklist). Reuse the git helper — one token
+  # source. Standalone nixosModules.toolbox has no git option → raw gh.
+  wrapGh =
+    (options.services.hermesPnP ? git)
+    && pnp.git.credentialHelper.enable;
+
+  ghForToolbox =
+    if wrapGh then
+      pkgs.writeShellApplication {
+        name = "gh";
+        runtimeInputs = [
+          pkgs.git
+          pkgs.gnused
+          pkgs.coreutils
+        ];
+        text = ''
+          t=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null | sed -n 's/^password=//p' || true)
+          if [ -n "$t" ]; then
+            export GH_TOKEN="$t"
+          fi
+          exec ${getExe pkgs.gh} "$@"
+        '';
+      }
+    else
+      pkgs.gh;
+
   defaultToolboxPackages = [
     pythonEnv
     pkgs.pandoc
@@ -124,12 +154,14 @@ let
     pkgs.ncdu
     pkgs.lsof
     pkgs.netcat-gnu
-    pkgs.gh
+    ghForToolbox
   ];
 
   # Official extraPackages fold in. Do not put this env back onto
-  # extraPackages — that is a cycle.
-  toolboxPaths = defaultToolboxPackages ++ cfg.extraPackages ++ agent.extraPackages;
+  # extraPackages — that is a cycle. Drop raw pkgs.gh when wrapping
+  # so bin/gh does not collide.
+  extras = cfg.extraPackages ++ agent.extraPackages;
+  toolboxPaths = defaultToolboxPackages ++ (if wrapGh then filter (p: p != pkgs.gh) extras else extras);
 
   hermesToolbox = pkgs.buildEnv {
     name = "hermes-toolbox";

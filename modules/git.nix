@@ -40,7 +40,9 @@ in
       GITHUB_TOKEN / GH_TOKEN for github.com HTTPS.
       No token in env or the usual Hermes env files → helper exits 0.
       Composer enable mkDefaults this on. Site user.name / user.email
-      stay in the consumer.
+      stay in the consumer. When on, toolbox wraps `gh` so it injects
+      GH_TOKEN from `git credential fill` (Hermes strips those env
+      names from terminal children).
     '';
   };
 
