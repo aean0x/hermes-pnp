@@ -165,11 +165,10 @@ in
       model = {
         provider = models.high.provider;
         default = models.high.model;
-        # Hard context ceiling. The per-model compaction thresholds below are
-        # expressed as fractions of this, so they assume 384k. If your consumer
-        # flake assigns model.context_length after the PnP import, that wins
-        # (deepConfigType last-writer-wins) — remove it or match it.
-        context_length = 384000;
+        # No context_length here — it is model-specific and resolved from
+        # hermes-agent metadata (grok-4.6 = 500k; deepseek-v4-flash/-pro = 1M).
+        # The consumer flake owns the explicit model.context_length (500000);
+        # do not shadow it with a wrong fixed value.
       };
       # Activate the model-router handoff context engine. Without this the
       # escalate_model tool still switches models, but the aggressive 20-30k
@@ -177,15 +176,19 @@ in
       context = {
         engine = "model-router";
       };
-      # Per-model compaction ceilings (fractions of context_length).
-      #   auxiliary (deepseek-v4-flash) ~0.95 → overflow-only ("idc" cache)
-      #   medium    (deepseek-v4-pro)   ~0.68 → ~260k
-      #   high      (grok-4.6)          ~0.37 → ~140k
+      # Per-model compaction ceilings, as fractions of EACH model's own window.
+      # resolve_model_threshold: longest key wins. hermes-agent also floors any
+      # model under 512k at >=0.75, and the consumer's global
+      # compression.threshold_tokens takes the LOWER of fraction*window and the
+      # cap — so the effective ceiling is min(fraction*window, cap).
+      #   auxiliary (deepseek-v4-flash, 1M) 0.95 → overflow-only ("idc" cache)
+      #   medium    (deepseek-v4-pro,   1M) 0.26 → ~260k
+      #   high      (grok-4.6,        500k) 0.28 → ~140k intent (floored to 0.75)
       compression = {
         model_thresholds = {
           "${models.auxiliary.model}" = 0.95;
-          "${models.medium.model}" = 0.68;
-          "${models.high.model}" = 0.37;
+          "${models.medium.model}" = 0.26;
+          "${models.high.model}" = 0.28;
         };
       };
       fallback_model = {
