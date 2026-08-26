@@ -1,5 +1,5 @@
 # github.com HTTPS credential helper for Hermes git (git-hook, ad-hoc).
-# Nix cannot see sops GITHUB_PAT at eval, so the helper is installed
+# Nix cannot see sops GITHUB_TOKEN at eval, so the helper is installed
 # when the composer is on and no-ops at runtime if no token exists.
 {
   config,
@@ -37,7 +37,7 @@ in
     default = false;
     description = ''
       Install git-credential-github-env on programs.git. Feeds
-      GITHUB_PAT / GH_TOKEN / GITHUB_TOKEN for github.com HTTPS.
+      GITHUB_TOKEN / GH_TOKEN for github.com HTTPS.
       No token in env or the usual Hermes env files → helper exits 0.
       Composer enable mkDefaults this on. Site user.name / user.email
       stay in the consumer.

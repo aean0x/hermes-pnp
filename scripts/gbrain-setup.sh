@@ -274,7 +274,7 @@ harden_brain_durability() {
   }
   install -d -m 0700 -o hermes -g hermes "${GBRAIN_HOME}"
   if [[ ! -s "${pat_file}" && -r /run/hermes.env ]]; then
-    grep '^GITHUB_PAT=' /run/hermes.env | tail -1 | cut -d= -f2- | tr -d '\r\n"' \
+    grep -E '^(GITHUB_TOKEN|GH_TOKEN)=' /run/hermes.env | tail -1 | cut -d= -f2- | tr -d '\r\n"' \
       | sudo tee "${pat_file}" >/dev/null
     chown hermes:hermes "${pat_file}"
     chmod 600 "${pat_file}"
