@@ -147,7 +147,7 @@ class BestFor(unittest.TestCase):
         self.assertIn("Only pings", mod.CLASSIFIER)
         self.assertIn("Only architecture", mod.CLASSIFIER)
         self.assertNotIn("Trivial Q&A", mod.CLASSIFIER)
-        self.assertIn("Default day-to-day work", mod.CLASSIFIER)
+        self.assertIn("Research and discovery", mod.CLASSIFIER)
 
     def test_env_json_overlay(self) -> None:
         payload = json.dumps(["Status only"])
