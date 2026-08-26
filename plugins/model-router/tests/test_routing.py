@@ -142,6 +142,30 @@ class Escalate(unittest.TestCase):
         self.assertEqual(engine.handoff["to_tier"], "high")
         self.assertEqual(engine.handoff["to_model"], "grok-4.6")
 
+    def test_auto_after_high_pin_bumps_down(self) -> None:
+        # Live 0.5.0 bug: /auto after /high left the router on grok because the
+        # 3-way classifier kept returning high. 0.7.0 clears the pin+cached
+        # tier on /auto, and even a high-leaning classify is clamped to medium.
+        with self.mod._lock:
+            self.mod._pinned["s"] = True
+            self.mod._last_tier["s"] = "high"
+            self.mod._last_msg["s"] = ("previous turn", "high")
+            self.mod._tool_errors["s"] = 4
+            self.mod._last_user_sid = "s"
+        out = self.mod._cmd_auto("")
+        self.assertIn("resumed", out)
+        with self.mod._lock:
+            self.assertFalse("s" in self.mod._pinned)
+            self.assertFalse("s" in self.mod._last_tier)
+            self.assertFalse("s" in self.mod._last_msg)
+            self.assertFalse("s" in self.mod._tool_errors)
+        with patch.object(self.mod, "_classify", return_value="high"):
+            name, reason = self.mod._target_tier(
+                "s", "please review this architecture decision carefully", []
+            )
+        self.assertEqual(name, "medium")
+        self.assertIn("clamp", reason)
+
 
 @unittest.skipUnless(HERMES_SRC.is_dir(), "hermes-agent source not present")
 class HandoffEngine(unittest.TestCase):
