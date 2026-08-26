@@ -14,6 +14,8 @@
 let
   inherit (lib)
     concatStringsSep
+    filter
+    getExe
     literalExpression
     mkIf
     mkOption
@@ -124,17 +126,53 @@ let
     pkgs.ncdu
     pkgs.lsof
     pkgs.netcat-gnu
-    pkgs.gh
   ];
 
-  # Official extraPackages fold in. Do not put this env back onto
-  # extraPackages — that is a cycle.
-  toolboxPaths = defaultToolboxPackages ++ cfg.extraPackages ++ agent.extraPackages;
+  # Hermes strips GITHUB_TOKEN / GH_TOKEN from terminal children
+  # (Copilot provider blocklist). Wrap gh so it reads the same env
+  # files as git-credential-github-env. Do not ship raw pkgs.gh —
+  # buildEnv would collide on bin/gh.
+  hermesGithubToken = pkgs.writeShellApplication {
+    name = "hermes-github-token";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    text = builtins.readFile ../scripts/hermes-github-token;
+  };
 
-  hermesToolbox = pkgs.buildEnv {
+  ghWrap = (pkgs.writeShellApplication {
+    name = "gh";
+    runtimeInputs = [ hermesGithubToken ];
+    text = ''
+      if t=$(hermes-github-token 2>/dev/null); then
+        export GH_TOKEN="$t"
+      fi
+      exec ${getExe pkgs.gh} "$@"
+    '';
+  }).overrideAttrs (old: {
+    passthru = (old.passthru or { }) // {
+      hermesGithubTokenWrap = true;
+    };
+  });
+
+  isRawGh = p: (p.pname or "") == "gh";
+
+  # Official extraPackages fold in. Do not put this env back onto
+  # extraPackages — that is a cycle. Drop a raw pkgs.gh from extras
+  # so the wrap owns bin/gh.
+  toolboxPaths =
+    filter (p: !isRawGh p) (defaultToolboxPackages ++ cfg.extraPackages ++ agent.extraPackages)
+    ++ [ ghWrap ];
+
+  hermesToolbox = (pkgs.buildEnv {
     name = "hermes-toolbox";
     paths = toolboxPaths;
-  };
+  }).overrideAttrs (old: {
+    passthru = (old.passthru or { }) // {
+      ghWrapped = true;
+    };
+  });
 
   # Official activation writes environment{} into .env. Strip jail PATH
   # so a host hermes CLI does not inherit /data/toolbox.

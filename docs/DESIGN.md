@@ -394,6 +394,12 @@ feeds `GITHUB_TOKEN` / `GH_TOKEN` for `github.com` HTTPS (git-hook
 push/pull). No token → exit 0. Nix cannot see sops at eval, so the
 helper is not gated on the secret existing.
 
+Toolbox `gh` is a wrap (`scripts/hermes-github-token`). Hermes strips
+`GITHUB_TOKEN` / `GH_TOKEN` from terminal children (Copilot provider
+blocklist), so bare `pkgs.gh` always looks logged out. The wrap
+exports `GH_TOKEN` from the same env files and execs real `gh`.
+Fail-open if no token. Do not `gh auth login` (second secret copy).
+
 When official `container.enable` is on, **stable** jail paths go on
 `container.extraOptions --env` (`mkDockerEnv`), not `$HERMES_HOME/.env`:
 

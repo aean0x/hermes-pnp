@@ -205,6 +205,9 @@ in
         lib.any (p: lib.hasPrefix "hermes-toolbox" (p.name or "")) modulesConfig.users.users.hermes.packages
       )
     }" = "1"
+    test "${
+      toString (lib.any (p: p.passthru.ghWrapped or false) modulesConfig.users.users.hermes.packages)
+    }" = "1"
     test "${toString modulesConfig.services.hermes-agent.addToSystemPackages}" = "1"
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_PROFILE}" = "${modulesConfig.services.hermes-agent.stateDir}/browser-profile"
     test "${gbrainConfig.services.hermes-agent.environment.GBRAIN_TOKEN_FILE}" = "${gbrainConfig.services.hermes-agent.stateDir}/home/.gbrain/hermes-mcp.token"

@@ -6,5 +6,6 @@ in
 {
   mcp-proxy = import ./mcp-proxy.nix { inherit pkgs; };
   plugins = import ./plugins.nix { inherit pkgs; };
+  github-token = import ./github-token.nix { inherit pkgs; };
 }
 // evalChecks

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Print a GitHub PAT to stdout. Exit 1 if none.
+#
+# Hermes strips GITHUB_TOKEN and GH_TOKEN from terminal children
+# (Copilot provider blocklist in tools/environments/local.py). Git
+# and gh wrappers scan env files for the same names.
+set -euo pipefail
+
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  printf '%s' "$GITHUB_TOKEN"
+  exit 0
+fi
+if [[ -n "${GH_TOKEN:-}" ]]; then
+  printf '%s' "$GH_TOKEN"
+  exit 0
+fi
+
+_token_from_envfile() {
+  local f="$1" name val
+  [[ -f "$f" ]] || return 1
+  for name in GITHUB_TOKEN GH_TOKEN; do
+    val="$(grep -E "^${name}=" "$f" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r\n"' || true)"
+    if [[ -n "$val" ]]; then
+      printf '%s' "$val"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_files=()
+[[ -n "${HERMES_HOME:-}" ]] && _files+=("${HERMES_HOME}/.env")
+_files+=(
+  /run/hermes.env
+  /run/keys/hermes.env
+  /data/.hermes/.env
+  /var/lib/hermes/.hermes/.env
+)
+[[ -n "${HOME:-}" ]] && _files+=("${HOME}/.hermes/.env" "${HOME}/.env")
+_files+=(/tmp/hermes-test.env)
+
+for f in "${_files[@]}"; do
+  if t="$(_token_from_envfile "$f")"; then
+    printf '%s' "$t"
+    exit 0
+  fi
+done
+
+exit 1

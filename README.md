@@ -166,6 +166,9 @@ disk or in the tool result.
 **git-hook** — fetch/pull before reads; commit/push only the files
 this turn dirtied. `GIT_HOOK_COMMIT=0` / `GIT_HOOK_PUSH=0` to mute.
 HTTPS GitHub uses `GITHUB_TOKEN` via the credential helper.
+Toolbox `gh` is wrapped: it injects `GH_TOKEN` from the same env
+files. Hermes strips `GITHUB_TOKEN` / `GH_TOKEN` from terminal
+children, so bare `gh` is not enough.
 
 GBrain plugins live under [GBrain](#gbrain).
 
@@ -173,7 +176,8 @@ GBrain plugins live under [GBrain](#gbrain).
 
 **Git.** Composer installs `git-credential-github-env` on
 `programs.git` (fail-open if `GITHUB_TOKEN` / `GH_TOKEN` is unset).
-`user.name` / `user.email` stay in the consumer.
+Toolbox `gh` is wrapped the same way. `user.name` / `user.email`
+stay in the consumer.
 
 **Secrets.** One rendered env file on `environmentFiles`. 
 
