@@ -392,7 +392,10 @@ is `programs.git` on the host: credential helper only — no
 `user.name` / `user.email`. The helper (`scripts/git-credential-github-env`)
 feeds `GITHUB_TOKEN` / `GH_TOKEN` for `github.com` HTTPS (git-hook
 push/pull). No token → exit 0. Nix cannot see sops at eval, so the
-helper is not gated on the secret existing.
+helper is not gated on the secret existing. When the helper is on,
+toolbox `gh` is a wrap: `git credential fill` → `GH_TOKEN` → real
+`gh`. Hermes strips those env names from terminal children, so
+bare `pkgs.gh` always looks logged out.
 
 When official `container.enable` is on, **stable** jail paths go on
 `container.extraOptions --env` (`mkDockerEnv`), not `$HERMES_HOME/.env`:

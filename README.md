@@ -173,7 +173,8 @@ GBrain plugins live under [GBrain](#gbrain).
 
 **Git.** Composer installs `git-credential-github-env` on
 `programs.git` (fail-open if `GITHUB_TOKEN` / `GH_TOKEN` is unset).
-`user.name` / `user.email` stay in the consumer.
+When that helper is on, toolbox `gh` wraps `git credential fill` into
+`GH_TOKEN`. `user.name` / `user.email` stay in the consumer.
 
 **Secrets.** One rendered env file on `environmentFiles`. 
 

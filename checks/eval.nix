@@ -102,6 +102,11 @@ let
 
   toolboxConfig = eval [ ../examples/toolbox.nix ];
 
+  ghUnwrappedConfig = eval [
+    ../examples/composer.nix
+    { services.hermesPnP.git.credentialHelper.enable = lib.mkForce false; }
+  ];
+
   foldedPackagesConfig = eval [
     ../examples/composer.nix
     { services.hermes-agent.extraPackages = [ pkgs.sops ]; }
@@ -227,6 +232,11 @@ in
       )
     }" = "1"
     test "${toString (lib.any (x: x ? user) modulesConfig.programs.git.config)}" = ""
+    test "${
+      toString (lib.any (p: (p.name or "") == "gh") modulesConfig.services.hermesPnP.toolbox.paths)
+    }" = "1"
+    test "${toString (builtins.elem pkgs.gh modulesConfig.services.hermesPnP.toolbox.paths)}" = ""
+    test "${toString (builtins.elem pkgs.gh ghUnwrappedConfig.services.hermesPnP.toolbox.paths)}" = "1"
     test "${toString containerConfig.services.hermes-agent.container.enable}" = "1"
     test "${
       toString (
