@@ -86,3 +86,11 @@ Model-router never writes reasoning. No T1/T2/T3, no `/auxiliary`.
 
 `nix flake check` stays eval-cheap for the composer (dummy packages).
 Keep plugin pytest and mcp-proxy tests.
+
+PR merge also requires `.github/workflows/lint.yml` (job `lint`):
+
+- Python: ruff C901 (`ruff.toml`, max-complexity 20)
+- JS: oxlint `complexity` (`.oxlintrc.json`, max 20)
+- Nix: statix (`statix.toml`; inherit/repeated-keys disabled — NixOS noise, not CC)
+
+statix is not cyclomatic complexity. There is no McCabe for Nix; this is the Nix antipattern gate.

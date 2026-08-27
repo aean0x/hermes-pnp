@@ -1,0 +1,10 @@
+# Complexity gate only. Do not expand to a full style lint in this file.
+target-version = "py312"
+
+[lint]
+select = ["C901"]
+
+[lint.mccabe]
+# McCabe textbook is 10. Current hotspots sit in the mid-teens after
+# splitting apply_field. 20 is the merge ceiling; ratchet toward 15.
+max-complexity = 20

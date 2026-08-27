@@ -162,6 +162,83 @@ def rewrite_tokens(value: str, require: list[str], deny: list[str]) -> str:
     return " ".join(parts)
 
 
+def _apply_deny_values(
+    args: dict[str, Any], field_name: str, rule: dict[str, Any], notes: list[str]
+) -> None:
+    deny_values = rule.get("denyValues") or []
+    current = args.get(field_name)
+    if not deny_values or current is None:
+        return
+    if isinstance(current, list):
+        filtered = [item for item in current if item not in deny_values]
+        if filtered != current:
+            args[field_name] = filtered
+            notes.append(f"denyValues {field_name}")
+        return
+    if current in deny_values:
+        raise Denied(f"argument {field_name} value is denied")
+
+
+def _apply_require_values(
+    args: dict[str, Any], field_name: str, rule: dict[str, Any], notes: list[str]
+) -> None:
+    require_values = rule.get("requireValues") or []
+    if not require_values:
+        return
+    existing = args.get(field_name)
+    if existing is None:
+        args[field_name] = list(require_values)
+        notes.append(f"requireValues {field_name}")
+        return
+    if not isinstance(existing, list):
+        raise Denied(f"argument {field_name} must be an array for requireValues")
+    changed = False
+    for item in require_values:
+        if item not in existing:
+            existing.append(item)
+            changed = True
+    if changed:
+        notes.append(f"requireValues {field_name}")
+
+
+def _apply_token_rules(
+    args: dict[str, Any], field_name: str, rule: dict[str, Any], notes: list[str]
+) -> None:
+    deny_tokens = rule.get("denyTokens") or []
+    require_tokens = rule.get("requireTokens") or []
+    if not deny_tokens and not require_tokens:
+        return
+    raw = args.get(field_name)
+    if raw is None:
+        raw = ""
+    if not isinstance(raw, str):
+        raise Denied(f"argument {field_name} must be a string for token rules")
+    rewritten = rewrite_tokens(raw, require_tokens, deny_tokens)
+    if rewritten != raw:
+        args[field_name] = rewritten
+        notes.append(f"tokens {field_name}")
+
+
+def _apply_affix(
+    args: dict[str, Any],
+    field_name: str,
+    rule: dict[str, Any],
+    notes: list[str],
+    kind: str,
+) -> None:
+    if kind not in rule:
+        return
+    raw = args.get(field_name)
+    piece = rule[kind]
+    if raw is None:
+        args[field_name] = piece
+    elif isinstance(raw, str):
+        args[field_name] = raw + piece if kind == "append" else piece + raw
+    else:
+        raise Denied(f"argument {field_name} must be a string for {kind}")
+    notes.append(f"{kind} {field_name}")
+
+
 def apply_field(args: dict[str, Any], field_name: str, rule: dict[str, Any], notes: list[str]) -> None:
     if rule.get("unset"):
         if field_name in args:
@@ -180,69 +257,13 @@ def apply_field(args: dict[str, Any], field_name: str, rule: dict[str, Any], not
     current = args.get(field_name)
     if current in (None, "") and "default" in rule:
         args[field_name] = rule["default"]
-        current = args[field_name]
         notes.append(f"default {field_name}")
 
-    deny_values = rule.get("denyValues") or []
-    if deny_values and current is not None:
-        if isinstance(current, list):
-            filtered = [item for item in current if item not in deny_values]
-            if filtered != current:
-                args[field_name] = filtered
-                current = filtered
-                notes.append(f"denyValues {field_name}")
-        elif current in deny_values:
-            raise Denied(f"argument {field_name} value is denied")
-
-    require_values = rule.get("requireValues") or []
-    if require_values:
-        existing = args.get(field_name)
-        if existing is None:
-            args[field_name] = list(require_values)
-            notes.append(f"requireValues {field_name}")
-        elif isinstance(existing, list):
-            changed = False
-            for item in require_values:
-                if item not in existing:
-                    existing.append(item)
-                    changed = True
-            if changed:
-                notes.append(f"requireValues {field_name}")
-        else:
-            raise Denied(f"argument {field_name} must be an array for requireValues")
-
-    deny_tokens = rule.get("denyTokens") or []
-    require_tokens = rule.get("requireTokens") or []
-    if deny_tokens or require_tokens:
-        raw = args.get(field_name)
-        if raw is None:
-            raw = ""
-        if not isinstance(raw, str):
-            raise Denied(f"argument {field_name} must be a string for token rules")
-        rewritten = rewrite_tokens(raw, require_tokens, deny_tokens)
-        if rewritten != raw:
-            args[field_name] = rewritten
-            notes.append(f"tokens {field_name}")
-
-    if "append" in rule:
-        raw = args.get(field_name)
-        if raw is None:
-            args[field_name] = rule["append"]
-        elif isinstance(raw, str):
-            args[field_name] = raw + rule["append"]
-        else:
-            raise Denied(f"argument {field_name} must be a string for append")
-        notes.append(f"append {field_name}")
-
-    if "prepend" in rule:
-        raw = args.get(field_name)
-        if raw is None:
-            args[field_name] = rule["prepend"]
-        elif isinstance(raw, str):
-            args[field_name] = rule["prepend"] + raw
-        else:
-            raise Denied(f"argument {field_name} must be a string for prepend")
-        notes.append(f"prepend {field_name}")
+    _apply_deny_values(args, field_name, rule, notes)
+    _apply_require_values(args, field_name, rule, notes)
+    _apply_token_rules(args, field_name, rule, notes)
+    _apply_affix(args, field_name, rule, notes, "append")
+    _apply_affix(args, field_name, rule, notes, "prepend")
 
 
 def _surface_allowed(name: str, tools_cfg: dict[str, Any] | None) -> None:

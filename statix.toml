@@ -1,0 +1,9 @@
+# NixOS modules assign the same top-level key (services, systemd, …)
+# many times on purpose. inherit-from is also a false positive when the
+# rhs comes from a different attrpath. Those are not complexity bugs.
+disabled = [
+  "manual_inherit",
+  "manual_inherit_from",
+  "repeated_keys",
+]
+ignore = [".direnv", "result"]
