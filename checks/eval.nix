@@ -472,6 +472,8 @@ in
     test "${toString optionsEval.options.services.hermesPnP.packageFixes.silenceMarkers.default}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? hmc)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.hmc.enable.default}" = ""
+    test "$(printf '%s\n' ${lib.escapeShellArg (builtins.readFile ../modules/hmc.nix)} | ${pkgs.gnugrep}/bin/grep -A1 'deduplication:' | ${pkgs.gnugrep}/bin/grep -c 'enabled: false')" = "1"
+    test "$(printf '%s\n' ${lib.escapeShellArg (builtins.readFile ../modules/hmc.nix)} | ${pkgs.gnugrep}/bin/grep -A1 'purge_errors:' | ${pkgs.gnugrep}/bin/grep -c 'enabled: false')" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? container)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.container.enable.default}" = ""
     test "${toString (optionsEval.options.services.hermesPnP ? admin)}" = "1"

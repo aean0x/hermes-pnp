@@ -171,7 +171,6 @@ def compute(snapshots: list):
     hit = 0
     busts = []
     prev_keys = None
-    prev_toks = None
     for turn, keys, toks in snapshots:
         total += sum(toks)
         if prev_keys is not None:
@@ -183,7 +182,6 @@ def compute(snapshots: list):
             if k < len(prev_keys):
                 busts.append((turn, k, len(prev_keys), prev_keys[k], keys[k]))
         prev_keys = keys
-        prev_toks = toks
     ratio = hit / total if total else 0.0
     return total, hit, ratio, busts
 
