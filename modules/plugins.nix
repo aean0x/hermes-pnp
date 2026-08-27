@@ -55,33 +55,31 @@ let
     "high"
   ];
 
-  routerMeta = {
-    low.label = "Low";
-    medium.label = "Medium";
-    high.label = "High";
-  };
+  # Display labels and plugin-only keys (classify_high, escalate_*) live
+  # in the plugin JSON. Composer overlay copies them and overlays Nix
+  # model/provider/best_for so config.json cannot drift.
+  pluginDefaults = builtins.fromJSON (
+    builtins.readFile ../plugins/model-router/config.default.json
+  );
 
-  modelRouterConfig = {
-    models = lib.genAttrs routerOrder (name: {
-      inherit (routerMeta.${name}) label;
-      inherit (pnp.models.${name}) model provider best_for;
-      short = routerMeta.${name}.label;
-    });
-    escalate_max = "high";
-    escalation_errors = {
-      low = 4;
-      medium = 3;
-    };
+  modelRouterConfig = pluginDefaults // {
+    models = lib.genAttrs routerOrder (
+      name:
+      pluginDefaults.models.${name}
+      // {
+        inherit (pnp.models.${name}) model provider best_for;
+      }
+    );
   };
 
   modelRouterWebui = {
     models =
       (map (name: {
         cmd = "/${name}";
-        label = routerMeta.${name}.label;
-        short = routerMeta.${name}.label;
+        label = pluginDefaults.models.${name}.label;
+        short = pluginDefaults.models.${name}.short;
         model = pnp.models.${name}.model;
-        title = "Pin ${routerMeta.${name}.label}";
+        title = "Pin ${pluginDefaults.models.${name}.label}";
       }) routerOrder)
       ++ [
         {
