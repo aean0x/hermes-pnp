@@ -157,10 +157,7 @@ def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
         extra = "; ".join(str(x) for x in best) if best else label
         lines.append(f"{name} = {label} — {extra}")
     lines.append("")
-    lines.append(
-        "high is ONLY for monetary transactions, irreversible/destructive/"
-        "publish actions, or security-sensitive decisions."
-    )
+    lines.append("high is ONLY the cases listed above — it is rare.")
     lines.append(
         "When uncertain between low and medium, prefer low — a wrong low "
         "route is cheaply corrected by escalation."

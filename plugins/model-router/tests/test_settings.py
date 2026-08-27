@@ -69,6 +69,8 @@ class Defaults(unittest.TestCase):
         self.assertIn("Short single-file edits", mod.CLASSIFIER)
         self.assertIn("Small to medium-scoped research", mod.CLASSIFIER)
         self.assertIn("Broad-subject conceptual or deep research", mod.CLASSIFIER)
+        self.assertIn("Published outbound voice", mod.CLASSIFIER)
+        self.assertIn("in excess of $20", mod.CLASSIFIER)
         self.assertIn("Monetary transactions", mod.CLASSIFIER)
         self.assertNotIn("Architecture", mod.CLASSIFIER)
         self.assertNotIn("Trivial Q&A", mod.CLASSIFIER)

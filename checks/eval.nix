@@ -439,6 +439,8 @@ in
     test "${builtins.head optionsEval.config.services.hermesPnP.models.high.best_for}" = "${builtins.head pluginRouterDefaults.high.best_for}"
     test "${toString (lib.elem "Small to medium-scoped research" optionsEval.config.services.hermesPnP.models.low.best_for)}" = "1"
     test "${toString (lib.elem "Broad-subject conceptual or deep research" optionsEval.config.services.hermesPnP.models.medium.best_for)}" = "1"
+    test "${toString (lib.elem "Published outbound voice (email, social media, etc)" optionsEval.config.services.hermesPnP.models.medium.best_for)}" = "1"
+    test "${toString (lib.elem "Monetary transactions or money-moving in excess of $20" optionsEval.config.services.hermesPnP.models.high.best_for)}" = "1"
     test "${toString (pluginRouterDefaults.low ? model)}" = ""
     test "${toString (pluginRouterDefaults.low ? provider)}" = ""
     test "${toString (lib.hasInfix "classify_high" (builtins.readFile ../plugins/model-router/settings.py))}" = ""

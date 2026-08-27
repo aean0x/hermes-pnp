@@ -20,14 +20,15 @@
         "Broad-subject conceptual or deep research",
         "Root-cause debugging with no clear error",
         "Synthesizing new analysis or writing from scratch",
-        "Designing or planning before coding"
+        "Designing or planning before coding",
+        "Published outbound voice (email, social media, etc)"
       ]
     },
     "high": {
       "label": "Expert",
       "short": "Expert",
       "best_for": [
-        "Monetary transactions or money-moving",
+        "Monetary transactions or money-moving in excess of $20",
         "Irreversible, destructive, or publish actions",
         "Security-sensitive decisions"
       ]
