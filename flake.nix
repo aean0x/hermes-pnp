@@ -90,12 +90,18 @@
         in
         {
           default = pkgs.mkShell {
-            packages = [ pkgs.python3 ];
+            packages = [
+              pkgs.python3
+              pkgs.ruff
+              pkgs.oxlint
+              pkgs.statix
+            ];
             shellHook = ''
               export PYTHONPATH=${toString ./pkgs/mcp-proxy/src}:''${PYTHONPATH:-}
               echo "Hermes PnP"
               echo "  mcp-proxy:  python3 -m mcp_proxy --config …"
               echo "  tests:      nix flake check"
+              echo "  lint:       ruff check && oxlint && statix check ."
             '';
           };
         }

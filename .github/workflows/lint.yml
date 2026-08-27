@@ -1,0 +1,54 @@
+# Per-language linters on a mixed Nix/Python/JS repo. Each job is a
+# required insight; `lint` is the single branch-protection check.
+name: lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.15.14"
+          args: check
+
+  javascript:
+    name: javascript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx --yes oxlint@1.65.0
+
+  nix:
+    name: nix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - run: nix run nixpkgs#statix -- check .
+
+  lint:
+    name: lint
+    if: always()
+    needs: [python, javascript, nix]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All language gates passed
+        run: |
+          set -euo pipefail
+          test "${{ needs.python.result }}" = success
+          test "${{ needs.javascript.result }}" = success
+          test "${{ needs.nix.result }}" = success
