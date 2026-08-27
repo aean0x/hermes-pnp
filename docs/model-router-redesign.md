@@ -1,8 +1,9 @@
 # Model-Router Redesign — cache-aware escalation
 
-Status: implemented in model-router v0.7.0. Public split is
-`low` / `medium` / `high` (`low` = deepseek-v4-flash). Official
-`settings.auxiliary` stays Nix-only (`models.auxiliary`).
+Status: implemented in model-router v0.7.0; classifier prior and
+slash-at-start pins in v0.8.0. Public split is `low` / `medium` /
+`high` (`low` = deepseek-v4-flash). Official `settings.auxiliary`
+stays Nix-only (`models.auxiliary`).
 
 ## Why
 

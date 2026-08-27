@@ -58,19 +58,20 @@ class Defaults(unittest.TestCase):
         self.assertEqual(mod.ESCALATION_ERRORS["low"], 4)
         self.assertEqual(mod.ESCALATION_ERRORS["medium"], 3)
         self.assertNotIn("rocknas", mod.CLASSIFIER.lower())
-        self.assertIn("low or medium", mod.CLASSIFIER)
-        self.assertNotIn("or high", mod.CLASSIFIER)
+        self.assertIn("low or medium or high", mod.CLASSIFIER)
         self.assertNotIn("ONLY a digit", mod.CLASSIFIER)
         self.assertNotIn("T1", mod.CLASSIFIER)
-        # Turn-start classifier is binary — high descriptors stay off the prompt.
+        self.assertTrue(mod.CLASSIFY_HIGH)
+        self.assertIn("prefer low", mod.CLASSIFIER)
+        self.assertIn("Short single-file edits", mod.CLASSIFIER)
+        self.assertIn("Monetary transactions", mod.CLASSIFIER)
         self.assertNotIn("Architecture", mod.CLASSIFIER)
-        self.assertIn("Trivial Q&A", mod.CLASSIFIER)
+        self.assertNotIn("Trivial Q&A", mod.CLASSIFIER)
         self.assertNotIn("Rules:", mod.CLASSIFIER)
-        self.assertNotIn("high-stakes", mod.CLASSIFIER.lower())
         cmds = [row["cmd"] for row in mod.webui_models()]
         self.assertEqual(cmds, ["/low", "/medium", "/high", "/auto"])
         labels = [row["label"] for row in mod.webui_models()[:3]]
-        self.assertEqual(labels, ["Low", "Medium", "High"])
+        self.assertEqual(labels, ["Quick", "Standard", "Expert"])
 
     def test_defaults_match_config_json(self) -> None:
         with _clean_env():
@@ -146,9 +147,9 @@ class BestFor(unittest.TestCase):
                 mod = _load("mr_best_for_file")
         self.assertEqual(mod.MODELS["low"]["best_for"], ["Only pings"])
         self.assertIn("Only pings", mod.CLASSIFIER)
-        self.assertNotIn("Only architecture", mod.CLASSIFIER)
+        self.assertIn("Only architecture", mod.CLASSIFIER)
         self.assertNotIn("Trivial Q&A", mod.CLASSIFIER)
-        self.assertIn("Research and discovery", mod.CLASSIFIER)
+        self.assertIn("Multi-step reasoning", mod.CLASSIFIER)
 
     def test_env_json_overlay(self) -> None:
         payload = json.dumps(["Status only"])

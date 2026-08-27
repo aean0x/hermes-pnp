@@ -41,28 +41,40 @@ class TargetTier(unittest.TestCase):
         self.assertEqual(name, "high")
         self.assertEqual(reason, "explicit")
 
-    def test_classify_high_is_clamped(self) -> None:
+    def test_classify_high_is_accepted(self) -> None:
         with patch.object(self.mod, "_classify", return_value="high"):
             name, reason = self.mod._target_tier(
-                "s2", "please think hard about this architecture problem", []
+                "s2", "please execute this monetary transfer now", []
             )
-        self.assertEqual(name, "medium")
-        self.assertIn("clamp", reason)
+        self.assertEqual(name, "high")
+        self.assertEqual(reason, "classify")
 
-    def test_floor_promotes_low(self) -> None:
+    def test_no_floor_on_multi_sentence_low(self) -> None:
         with patch.object(self.mod, "_classify", return_value="low"):
             long = (
                 "First sentence is long enough to count. "
                 "Second sentence makes this multi-sentence work."
             )
             name, reason = self.mod._target_tier("s3", long, [])
-        self.assertEqual(name, "medium")
-        self.assertEqual(reason, "classify+floor")
+        self.assertEqual(name, "low")
+        self.assertEqual(reason, "classify")
 
     def test_ack_stays_low(self) -> None:
         name, reason = self.mod._target_tier("s4", "ok", [])
         self.assertEqual(name, "low")
         self.assertEqual(reason, "ack")
+
+    def test_classify_high_off_clamps(self) -> None:
+        self.mod._CLASSIFY_HIGH = False
+        try:
+            with patch.object(self.mod, "_classify", return_value="high"):
+                name, reason = self.mod._target_tier(
+                    "s2b", "please think hard about this architecture problem", []
+                )
+            self.assertEqual(name, "medium")
+            self.assertIn("clamp", reason)
+        finally:
+            self.mod._CLASSIFY_HIGH = True
 
     def test_cached_message_reuses_tier(self) -> None:
         with self.mod._lock:
@@ -70,6 +82,35 @@ class TargetTier(unittest.TestCase):
         name, reason = self.mod._target_tier("s5", "same", [])
         self.assertEqual(name, "medium")
         self.assertEqual(reason, "cached")
+
+    def test_explicit_slash_pins_session(self) -> None:
+        with patch.object(self.mod, "_get_agent", return_value=None):
+            self.mod.on_pre_llm_call(
+                user_message="/high",
+                conversation_history=[],
+                session_id="pin1",
+            )
+        with self.mod._lock:
+            self.assertTrue(self.mod._pinned.get("pin1"))
+            self.assertEqual(self.mod._last_tier.get("pin1"), "high")
+
+    def test_mid_paragraph_high_does_not_pin(self) -> None:
+        msg = (
+            "Agree with your assessment. Execute in a PR please.\n\n"
+            "check the session where I did an explicit /high and it finished as pro."
+        )
+        with (
+            patch.object(self.mod, "_classify", return_value="medium"),
+            patch.object(self.mod, "_get_agent", return_value=None),
+        ):
+            self.mod.on_pre_llm_call(
+                user_message=msg,
+                conversation_history=[],
+                session_id="pin2",
+            )
+        with self.mod._lock:
+            self.assertFalse(self.mod._pinned.get("pin2", False))
+            self.assertEqual(self.mod._last_tier.get("pin2"), "medium")
 
 
 class Escalate(unittest.TestCase):
@@ -159,12 +200,12 @@ class Escalate(unittest.TestCase):
             self.assertFalse("s" in self.mod._last_tier)
             self.assertFalse("s" in self.mod._last_msg)
             self.assertFalse("s" in self.mod._tool_errors)
-        with patch.object(self.mod, "_classify", return_value="high"):
+        with patch.object(self.mod, "_classify", return_value="low"):
             name, reason = self.mod._target_tier(
                 "s", "please review this architecture decision carefully", []
             )
-        self.assertEqual(name, "medium")
-        self.assertIn("clamp", reason)
+        self.assertEqual(name, "low")
+        self.assertEqual(reason, "classify")
 
 
 @unittest.skipUnless(HERMES_SRC.is_dir(), "hermes-agent source not present")
