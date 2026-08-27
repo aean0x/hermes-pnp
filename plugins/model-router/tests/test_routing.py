@@ -181,7 +181,7 @@ class Escalate(unittest.TestCase):
         self.assertEqual(engine.handoff["summary"], "we decided X")
         self.assertEqual(engine.handoff["from_tier"], "medium")
         self.assertEqual(engine.handoff["to_tier"], "high")
-        self.assertEqual(engine.handoff["to_model"], "grok-4.6")
+        self.assertEqual(engine.handoff["to_model"], self.mod.MODELS["high"]["model"])
 
     def test_auto_after_high_pin_bumps_down(self) -> None:
         # Live 0.5.0 bug: /auto after /high left the router on grok because the

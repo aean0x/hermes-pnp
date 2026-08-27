@@ -64,6 +64,8 @@ class Defaults(unittest.TestCase):
         self.assertTrue(mod.CLASSIFY_HIGH)
         self.assertIn("prefer low", mod.CLASSIFIER)
         self.assertIn("Short single-file edits", mod.CLASSIFIER)
+        self.assertIn("Small to medium-scoped research", mod.CLASSIFIER)
+        self.assertIn("Broad-subject conceptual or deep research", mod.CLASSIFIER)
         self.assertIn("Monetary transactions", mod.CLASSIFIER)
         self.assertNotIn("Architecture", mod.CLASSIFIER)
         self.assertNotIn("Trivial Q&A", mod.CLASSIFIER)
@@ -78,10 +80,40 @@ class Defaults(unittest.TestCase):
             mod = _load("mr_defaults_json")
         cfg = json.loads((ROOT / "config.default.json").read_text(encoding="utf-8"))
         for name in ("low", "medium", "high"):
-            self.assertEqual(
-                mod.MODELS[name]["best_for"],
-                cfg["models"][name]["best_for"],
+            for key in ("model", "provider", "label", "best_for"):
+                self.assertEqual(mod.MODELS[name][key], cfg["models"][name][key])
+
+    def test_settings_source_has_no_model_ids(self) -> None:
+        src = (ROOT / "settings.py").read_text(encoding="utf-8")
+        self.assertNotIn("deepseek-v4", src)
+        self.assertNotIn("grok-4", src)
+
+    def test_declared_models_replace_catalog_ids(self) -> None:
+        catalog = json.loads((ROOT / "config.default.json").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / "cfg.json"
+            cfg.write_text(
+                json.dumps(
+                    {
+                        "models": {
+                            "low": {"model": "cheap", "provider": "p-low"},
+                            "medium": {"model": "work", "provider": "p-med"},
+                            "high": {"model": "voice", "provider": "p-high"},
+                        }
+                    }
+                ),
+                encoding="utf-8",
             )
+            with _clean_env(MODEL_ROUTER_CONFIG=str(cfg)):
+                mod = _load("mr_declared_overlay")
+        self.assertEqual(mod.MODELS["low"]["model"], "cheap")
+        self.assertEqual(mod.MODELS["medium"]["model"], "work")
+        self.assertEqual(mod.MODELS["high"]["model"], "voice")
+        self.assertEqual(mod.MODELS["high"]["provider"], "p-high")
+        self.assertNotEqual(mod.MODELS["low"]["model"], catalog["models"]["low"]["model"])
+        self.assertEqual(
+            mod.MODELS["low"]["best_for"], catalog["models"]["low"]["best_for"]
+        )
 
 
 class EnvOverlay(unittest.TestCase):

@@ -8,6 +8,7 @@
       "best_for": [
         "Short single-file edits",
         "Answering a direct question from provided context",
+        "Small to medium-scoped research",
         "Reformatting, renaming, or mechanical refactors",
         "Reading and quoting an existing doc or codebase",
         "Status checks and look-ups"
@@ -20,6 +21,7 @@
       "provider": "deepseek",
       "best_for": [
         "Multi-step reasoning or multi-file changes",
+        "Broad-subject conceptual or deep research",
         "Root-cause debugging with no clear error",
         "Synthesizing new analysis or writing from scratch",
         "Designing or planning before coding"
