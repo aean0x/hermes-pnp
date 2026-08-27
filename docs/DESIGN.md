@@ -257,15 +257,17 @@ wins via `recursiveUpdate`. Consumers assign official
 
 When `model-router` is in `plugins`, the installer writes `config.json`
 + `webui/config.js` from the same `models` block, including each
-tier's `best_for` list (the classifier prompt's only source).
+tier's `best_for` list (classifier matrix; a short prefer-low steer
+block is generated with it).
 
 Each router name also has `compression_ratio` (fraction of that
 model's own window) and optional `context_length` (writes
 `model_overrides`, never a global `model.context_length`).
 
-Classifier: Auto turn-start is low vs medium; `high` is
-`escalate_model` or `/high`. 4 consecutive tool errors on low, 3 on medium, cap
-`escalate_max` (high). High is reached by classification or `/high`.
+Classifier: Auto turn-start is low / medium / high. `high` is only
+money, irreversible/destructive/publish, or security. Prefer low on
+doubt. 4 consecutive tool errors on low, 3 on medium, cap
+`escalate_max` (high). `/high` pins. `escalate_model` still climbs.
 Client rebuilds that pair the live provider with the previous API host
 (WebUI `credential_refresh`) are refused at the agent client rebuild;
 `pre_api_request` still re-heals if a stomp lands between rebuilds.

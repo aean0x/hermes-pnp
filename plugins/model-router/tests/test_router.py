@@ -41,6 +41,14 @@ class Pins(unittest.TestCase):
     def test_short_bare_name_is_a_pin(self) -> None:
         self.assertEqual(self.mod._detect_explicit_tier("medium"), "medium")
 
+    def test_mid_paragraph_slash_high_is_not_a_pin(self) -> None:
+        msg = (
+            "Agree with your assessment. Execute in a PR please. "
+            "Double check the session where I did an explicit /high "
+            "and it finished as deepseek pro."
+        )
+        self.assertIsNone(self.mod._detect_explicit_tier(msg))
+
 
 class Names(unittest.TestCase):
     @classmethod

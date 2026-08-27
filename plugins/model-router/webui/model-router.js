@@ -3,9 +3,9 @@
   window.__modelRouterExtLoaded = true;
 
   const DEFAULT_MODELS = [
-    { cmd: "/low", label: "Low", short: "Low", model: "deepseek-v4-flash", title: "Pin Low" },
-    { cmd: "/medium", label: "Medium", short: "Medium", model: "deepseek-v4-pro", title: "Pin Medium" },
-    { cmd: "/high", label: "High", short: "High", model: "grok-4.6", title: "Pin High" },
+    { cmd: "/low", label: "Quick", short: "Quick", model: "deepseek-v4-flash", title: "Pin Quick" },
+    { cmd: "/medium", label: "Standard", short: "Standard", model: "deepseek-v4-pro", title: "Pin Standard" },
+    { cmd: "/high", label: "Expert", short: "Expert", model: "grok-4.6", title: "Pin Expert" },
   ];
   const cfg = window.__MODEL_ROUTER_CONFIG;
   const fromCfg = (cfg && cfg.models) || [];

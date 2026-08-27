@@ -1,45 +1,45 @@
 {
   "models": {
     "low": {
-      "label": "Low",
-      "short": "Low",
+      "label": "Quick",
+      "short": "Quick",
       "model": "deepseek-v4-flash",
       "provider": "deepseek",
       "best_for": [
-        "Default day-to-day work",
-        "Short acknowledgements",
-        "Status checks",
-        "Code editing",
-        "Trivial Q&A / look-ups"
+        "Short single-file edits",
+        "Answering a direct question from provided context",
+        "Reformatting, renaming, or mechanical refactors",
+        "Reading and quoting an existing doc or codebase",
+        "Status checks and look-ups"
       ]
     },
     "medium": {
-      "label": "Medium",
-      "short": "Medium",
+      "label": "Standard",
+      "short": "Standard",
       "model": "deepseek-v4-pro",
       "provider": "deepseek",
       "best_for": [
-        "Research and discovery",
-        "Code review, debugging",
-        "Large-document synthesis",
-        "Migration planning"
+        "Multi-step reasoning or multi-file changes",
+        "Root-cause debugging with no clear error",
+        "Synthesizing new analysis or writing from scratch",
+        "Designing or planning before coding"
       ]
     },
     "high": {
-      "label": "High",
-      "short": "High",
+      "label": "Expert",
+      "short": "Expert",
       "model": "grok-4.6",
       "provider": "xai-oauth",
       "best_for": [
-        "Architecture",
-        "Complex multi-step design",
-        "Security-sensitive analysis",
-        "Monetary transactions"
+        "Monetary transactions or money-moving",
+        "Irreversible, destructive, or publish actions",
+        "Security-sensitive decisions"
       ]
     }
   },
   "escalate_max": "high",
   "escalation_errors": { "low": 4, "medium": 3 },
   "handoff_tail_chars": 64000,
-  "classifier_context_chars": 12000
+  "classifier_context_chars": 12000,
+  "classify_high": true
 }

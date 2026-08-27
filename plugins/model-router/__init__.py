@@ -8,9 +8,11 @@ env vars.
 Policy:
   • Each real user turn is classified once; the work loop stays on that tier
     for the whole multi-tool turn.
-  • Multi-sentence / long messages floor at medium (never the cheapest model).
+  • Classifier is 3-way (low/medium/high) when classify_high is on. High is
+    rare (money / irreversible / security). Prefer low on doubt.
   • Consecutive tool errors climb one tier, capped at escalate_max.
   • Manual /low /medium /high pins pause auto-routing until /auto.
+  • Slash pins must start the message; a mid-paragraph /high is not a pin.
   • Classifier matrices (`best_for`) are config — Nix / config.json / env.
   • Client rebuilds that pair the live provider with the previous API host
     (WebUI credential_refresh) are refused at `_replace_primary_openai_client`.
@@ -63,6 +65,7 @@ _PROVIDER_HOSTS = _s.PROVIDER_HOSTS
 _CLASSIFIER = _s.CLASSIFIER
 _HANDOFF_TAIL_CHARS = _s.HANDOFF_TAIL_CHARS
 _CLASSIFIER_CONTEXT_CHARS = _s.CLASSIFIER_CONTEXT_CHARS
+_CLASSIFY_HIGH = bool(getattr(_s, "CLASSIFY_HIGH", True))
 _MIN = "low"
 _MID = "medium"
 _TOP = NAMES[-1]  # "high"
@@ -124,12 +127,16 @@ _WEBUI_WORKSPACE_RE = re.compile(
     r"^\[Workspace::v1:\s*[^\]]+\]\s*",
     re.IGNORECASE,
 )
-# Explicit pin-style requests only — bare "low" inside a long critique is NOT a pin.
-_EXPLICIT_REQ_RE = re.compile(
-    r"(?:^|\s)(?:/"
-    r"(low|medium|high)\b"
-    r"|(?:use|pin|switch\s+to|run\s+(?:on|at)|please\s+use)\s+"
-    r"(low|medium|high)\b)",
+# Slash pin only at the start of the message (after the WebUI workspace prefix).
+# Mid-paragraph "/high" in a bug report must not route to grok.
+_SLASH_PIN_RE = re.compile(
+    r"^/(low|medium|high)\b",
+    re.IGNORECASE,
+)
+# Phrase pins ("pin high", "please use medium") — only honoured on short messages.
+_PIN_PHRASE_RE = re.compile(
+    r"(?:^|\s)(?:use|pin|switch\s+to|run\s+(?:on|at)|please\s+use)\s+/?"
+    r"(low|medium|high)\b",
     re.IGNORECASE,
 )
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?]+\s+|\n+")
@@ -553,25 +560,30 @@ def _token_to_name(*parts: str | None) -> str | None:
 
 
 def _detect_explicit_tier(msg: str) -> str | None:
-    """Only honor pin-style or short single-model requests — not meta discussion."""
+    """Honor slash-at-start and short pin phrases — not mid-paragraph /high."""
     text = _strip_platform_prefix(msg)
-    reqs: set[str] = set()
-    for m in _EXPLICIT_REQ_RE.finditer(text):
-        name = _token_to_name(*m.groups())
-        if name:
-            reqs.add(name)
-    if reqs:
-        return max(reqs, key=_rank)
+    m = _SLASH_PIN_RE.match(text)
+    if m:
+        return as_name(m.group(1))
+
+    words = text.split()
+    if len(words) <= 8:
+        reqs: set[str] = set()
+        for hit in _PIN_PHRASE_RE.finditer(text):
+            name = as_name(hit.group(1))
+            if name:
+                reqs.add(name)
+        if reqs:
+            return max(reqs, key=_rank)
 
     mentions: set[str] = set()
-    for m in _NAME_RE.finditer(text):
-        name = _token_to_name(*m.groups())
+    for hit in _NAME_RE.finditer(text):
+        name = _token_to_name(*hit.groups())
         if name:
             mentions.add(name)
     if len(mentions) != 1:
         return None
     # Short messages like "medium please" / "high" only.
-    words = text.split()
     if len(words) <= 6:
         return next(iter(mentions))
     return None
@@ -632,7 +644,7 @@ def _resolve_tier_runtime(name: str, agent: Any) -> dict[str, str] | None:
 
 
 def _classify(user_message: str, history: list, session_id: str = "") -> str:
-    """Return low|medium. Fail-open to medium — never silent low on errors.
+    """Return low|medium|high. Fail-open to low — escalation corrects a miss.
 
     Runs on the previous turn's tier (never ``high``/grok) with real history so
     the classifier sees the same conversation the previous model already read.
@@ -692,23 +704,24 @@ def _classify(user_message: str, history: list, session_id: str = "") -> str:
 
         raw = (response.choices[0].message.content or "").strip()
         raw_l = raw.lower()
-        found = [n for n in (_MIN, _MID) if re.search(rf"\b{n}\b", raw_l)]
+        allowed = (_MIN, _MID, _TOP) if _CLASSIFY_HIGH else (_MIN, _MID)
+        found = [n for n in allowed if re.search(rf"\b{n}\b", raw_l)]
         if len(found) == 1:
             return found[0]
         named = as_name(raw)
-        if named in (_MIN, _MID):
+        if named in allowed:
             return named
-        logger.warning("model-router: classifier non-name %r — default medium", raw[:40])
+        logger.warning("model-router: classifier non-name %r — default low", raw[:40])
     except Exception as exc:
-        logger.warning("model-router: classifier failed (%s) — default medium", exc)
-    return _MID
+        logger.warning("model-router: classifier failed (%s) — default low", exc)
+    return _MIN
 
 
 def _target_tier(session_id: str, msg: str, history: list) -> tuple[str, str]:
     """Compute (tier, reason) for a real user turn.
 
     Repeats of the last classified message reuse its tier without a second
-    triage call. Multi-sentence or long messages floor at medium.
+    triage call. No sentence/word floor — weighting is the classifier prior.
     """
     with _lock:
         cached = _last_msg.get(session_id)
@@ -726,14 +739,14 @@ def _target_tier(session_id: str, msg: str, history: list) -> tuple[str, str]:
     else:
         name = _classify(msg, history, session_id)
         reason = "classify"
-        # Deterministic floor: multi-sentence work is never the cheapest model.
-        if _rank(name) < _rank(_MID) and (n_sent > 1 or len(words) > 12):
-            name, reason = _MID, "classify+floor"
 
-    # ``high`` is escalation-only in Auto mode — never a *classified*
-    # turn-start outcome. Explicit ``/high`` (or ``pin high``) still lands;
-    # slash-command pins already skip this function via ``_pinned``.
-    if reason != "explicit" and _rank(name) > _rank(_MID):
+    # When classify_high is off, high is escalation-only — never a classified
+    # turn-start outcome. Explicit ``/high`` still lands.
+    if (
+        not _CLASSIFY_HIGH
+        and reason != "explicit"
+        and _rank(name) > _rank(_MID)
+    ):
         name, reason = _MID, reason + "+clamp(high escalation-only)"
 
     logger.info(
@@ -841,6 +854,10 @@ def on_pre_llm_call(
         with _lock:
             _tool_errors[sid] = 0
             _checkpoint[sid] = False
+            # Slash/phrase pins arriving as a user message (WebUI buttons send
+            # "/high" through the composer) must stick, not one-shot.
+            if reason == "explicit":
+                _pinned[sid] = True
         _set_tier(sid, name, reason)
         return None
     except Exception as exc:
@@ -878,7 +895,7 @@ def _heal_uncategorized(agent: Any) -> None:
     if not prov or _base_url_matches_provider(base, prov):
         return
     m = _norm(getattr(agent, "model", "") or "")
-    heal = _TOP
+    heal = _MID
     for n, meta in MODELS.items():
         want = _norm(str(meta.get("model") or ""))
         if want and (m == want or want in m):

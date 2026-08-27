@@ -4,8 +4,9 @@ Models, providers, and routing behaviour live here as defaults, overridable
 via a plugin-adjacent config.json, a MODEL_ROUTER_CONFIG path, or
 MODEL_ROUTER_* env vars. No Hermes/WebUI core files are edited.
 
-The `best_for` list on each tier is the single source of truth for the
-classifier prompt — nothing else steers it.
+The `best_for` list on each tier is the source of truth for the
+classifier prompt. A short steer block (prefer-low on doubt; high is
+rare) is generated with it — not a second matrix.
 """
 
 from __future__ import annotations
@@ -23,40 +24,39 @@ RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
 
 DEFAULT_MODELS: dict[str, dict[str, Any]] = {
     "low": {
-        "label": "Low",
-        "short": "Low",
+        "label": "Quick",
+        "short": "Quick",
         "model": "deepseek-v4-flash",
         "provider": "deepseek",
         "best_for": [
-            "Default day-to-day work",
-            "Short acknowledgements",
-            "Status checks",
-            "Code editing",
-            "Trivial Q&A / look-ups",
+            "Short single-file edits",
+            "Answering a direct question from provided context",
+            "Reformatting, renaming, or mechanical refactors",
+            "Reading and quoting an existing doc or codebase",
+            "Status checks and look-ups",
         ],
     },
     "medium": {
-        "label": "Medium",
-        "short": "Medium",
+        "label": "Standard",
+        "short": "Standard",
         "model": "deepseek-v4-pro",
         "provider": "deepseek",
         "best_for": [
-            "Research and discovery",
-            "Code review, debugging",
-            "Large-document synthesis",
-            "Migration planning",
+            "Multi-step reasoning or multi-file changes",
+            "Root-cause debugging with no clear error",
+            "Synthesizing new analysis or writing from scratch",
+            "Designing or planning before coding",
         ],
     },
     "high": {
-        "label": "High",
-        "short": "High",
+        "label": "Expert",
+        "short": "Expert",
         "model": "grok-4.6",
         "provider": "xai-oauth",
         "best_for": [
-            "Architecture",
-            "Complex multi-step design",
-            "Security-sensitive analysis",
-            "Monetary transactions",
+            "Monetary transactions or money-moving",
+            "Irreversible, destructive, or publish actions",
+            "Security-sensitive decisions",
         ],
     },
 }
@@ -147,14 +147,17 @@ def _load_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
-    """Build the turn-start triage prompt — low vs medium only.
+def _generated_classifier(
+    models: dict[str, dict[str, Any]], *, classify_high: bool
+) -> str:
+    """Build the turn-start triage prompt from `best_for` plus a steer block.
 
-    ``high`` is escalation-only in Auto mode, so it is deliberately absent from
-    turn-start classification (reachable only via escalate_model or /high).
+    Keys stay low/medium/high. Labels (Quick/Standard/Expert) are display.
+    ``classify_high=False`` keeps the 0.7 binary prompt (high escalation-only).
     """
-    lines = ["Pick the model for this turn.", ""]
-    for name in ("low", "medium"):
+    names = ("low", "medium", "high") if classify_high else ("low", "medium")
+    lines = ["Route this turn to the cheapest model that will do it well.", ""]
+    for name in names:
         if name not in models:
             continue
         meta = models[name]
@@ -162,7 +165,17 @@ def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
         best = meta.get("best_for") or []
         extra = "; ".join(str(x) for x in best) if best else label
         lines.append(f"{name} = {label} — {extra}")
-    lines.extend(["", "Respond with ONLY one word: low or medium."])
+    lines.append("")
+    if classify_high:
+        lines.append(
+            "high is ONLY for monetary transactions, irreversible/destructive/"
+            "publish actions, or security-sensitive decisions."
+        )
+    lines.append(
+        "When uncertain between low and medium, prefer low — a wrong low "
+        "route is cheaply corrected by escalation."
+    )
+    lines.append("Respond with ONLY one word: " + " or ".join(names) + ".")
     return "\n".join(lines)
 
 
@@ -205,6 +218,8 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         state["handoff_tail_chars"] = max(1000, int(data["handoff_tail_chars"]))
     if "classifier_context_chars" in data:
         state["classifier_context_chars"] = max(1000, int(data["classifier_context_chars"]))
+    if "classify_high" in data:
+        state["classify_high"] = bool(data["classify_high"])
 
 
 def load_settings() -> dict[str, Any]:
@@ -217,6 +232,7 @@ def load_settings() -> dict[str, Any]:
         "classifier_system": None,
         "handoff_tail_chars": 64000,
         "classifier_context_chars": 12000,
+        "classify_high": True,
     }
 
     for candidate, origin in (
@@ -269,7 +285,9 @@ def load_settings() -> dict[str, Any]:
         meta["best_for"] = as_best_for(meta.get("best_for"))
 
     if not state["classifier_system"]:
-        state["classifier_system"] = _generated_classifier(models)
+        state["classifier_system"] = _generated_classifier(
+            models, classify_high=bool(state["classify_high"])
+        )
 
     return state
 
@@ -284,6 +302,7 @@ PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = _SETTINGS["provider_hosts"]
 CLASSIFIER: str = _SETTINGS["classifier_system"]
 HANDOFF_TAIL_CHARS: int = _SETTINGS["handoff_tail_chars"]
 CLASSIFIER_CONTEXT_CHARS: int = _SETTINGS["classifier_context_chars"]
+CLASSIFY_HIGH: bool = bool(_SETTINGS["classify_high"])
 
 
 def webui_models() -> list[dict[str, str]]:
