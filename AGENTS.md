@@ -76,8 +76,9 @@ skills/                   # first-party skill trees
 Adding a plugin: drop `plugins/<name>/` and add one catalog line.
 
 Router tiers: `models.low` / `models.medium` / `models.high` (plugin
-v0.7.0). Auto classifies low vs medium; `high` is `escalate_model` or
-`/high`. Nix also has `models.auxiliary` (official aux slots; not a
+v0.8.0). Auto classifies all three (labels Quick / Standard / Expert);
+`high` is money / irreversible / security. Pins `/low` `/medium`
+`/high` `/auto`. Nix also has `models.auxiliary` (official aux slots; not a
 slash command). `reasoning_effort` is unset except auxiliary
 (`"none"`). Router tiers have `best_for` and `compression_ratio`.
 Model-router never writes reasoning. No T1/T2/T3, no `/auxiliary`.
