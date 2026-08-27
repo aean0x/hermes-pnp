@@ -44,6 +44,26 @@ class ClassifyReply(unittest.TestCase):
         self.assertEqual(h.classify_reply("/new"), "ignore")
 
 
+class FindClarifyCallback(unittest.TestCase):
+    def test_falls_back_when_no_session_key_match(self) -> None:
+        # WebUI worker: resolve_session_key_for_tool() yields "default" and no
+        # heap object carries a matching session key. Must still find the agent's
+        # clarify_callback so the prompt actually surfaces.
+        holder = types.SimpleNamespace(clarify_callback=lambda *_a, **_k: "pw")
+        with patch("gc.get_objects", return_value=[holder]):
+            found = h._find_clarify_callback("default")
+        self.assertIs(found, holder.clarify_callback)
+
+    def test_exact_session_key_match_wins(self) -> None:
+        holder = types.SimpleNamespace(
+            clarify_callback=lambda *_a, **_k: "pw",
+            _gateway_session_key="real-session",
+        )
+        with patch("gc.get_objects", return_value=[holder]):
+            found = h._find_clarify_callback("real-session")
+        self.assertIs(found, holder.clarify_callback)
+
+
 class PickTargetAndCdpUrl(unittest.TestCase):
     def test_pick_explicit_target(self) -> None:
         targets = [
