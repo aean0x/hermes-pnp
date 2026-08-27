@@ -47,12 +47,19 @@ let
         - write_file
         - patch
 
+    # Dedup + error purge rewrite OLD tool messages in place every turn,
+    # busting the prompt-cache prefix. On DeepSeek (cache-hit input ~30x
+    # cheaper than miss) each rewrite re-bills the whole suffix at miss
+    # rate, costing more than the removed bytes save. Keep both off;
+    # native Hermes compaction covers the over-budget case and
+    # short_circuits/truncation/code_filter still trim new tool output.
+    # See tools/cache-bust/ for the prefix-stability harness.
     strategies:
       deduplication:
-        enabled: true
+        enabled: false
         protected_tools: []
       purge_errors:
-        enabled: true
+        enabled: false
         turns: 4
         protected_tools: []
 
