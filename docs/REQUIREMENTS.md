@@ -36,11 +36,13 @@
 - model-router keys are `low` / `medium` / `high`. Commands `/low`
   `/medium` `/high` `/auto`. Auto turn-start classifier replies
   `low`, `medium`, or `high` (`high` is money / irreversible / security).
-  Escalation 4 on low, 3 on medium, cap high. Plugin v0.8.1.
-  Model IDs are not Python literals — catalog JSON plus Nix/config/env overlay.
-  Each router tier has `best_for` (`listOf str`); defaults come from
-  `plugins/model-router/config.default.json`. Overlay via Nix, plugin
-  `config.json`, or `MODEL_ROUTER_{LOW,MEDIUM,HIGH}_BEST_FOR`.
+  Escalation 4 on low, 3 on medium, cap high. Plugin v0.8.2.
+  Auto always classifies low/medium/high (no classify_high flag).
+  Model id and provider are Nix options (`hermesPnP.models.*`), written
+  to plugin `config.json`. Catalog JSON has labels / `best_for` /
+  escalate_* only — no model IDs. Overlay via Nix, plugin `config.json`,
+  or `MODEL_ROUTER_{LOW,MEDIUM,HIGH}_*`.
+  Each router tier has `best_for` (`listOf str`), `label`, and `short`.
 - Official `settings` is `deepConfigType`: `mkDefault` on a leaf is
   stored as a literal. Seeds are plain attrsets; last writer wins via
   `recursiveUpdate`. Consumer settings come after the PnP import.

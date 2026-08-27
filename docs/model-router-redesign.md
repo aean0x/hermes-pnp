@@ -1,9 +1,10 @@
 # Model-Router Redesign — cache-aware escalation
 
 Status: implemented in model-router v0.7.0; classifier prior and
-slash-at-start pins in v0.8.0. Public split is `low` / `medium` /
-`high` (`low` = deepseek-v4-flash). Official `settings.auxiliary`
-stays Nix-only (`models.auxiliary`).
+slash-at-start pins in v0.8.0; 3-way Auto is always-on as of v0.8.2
+(`classify_high` removed). Public split is `low` / `medium` / `high`.
+Model id / provider are Nix `hermesPnP.models` options. Official
+`settings.auxiliary` stays Nix-only (`models.auxiliary`).
 
 ## Why
 
@@ -15,18 +16,15 @@ cost spike when the router climbs to `high`. This redesign makes the climb to
 
 ## Design
 
-### 1. Turn-start classification is binary (`low` / `medium`)
+### 1. Turn-start classification is 3-way (`low` / `medium` / `high`)
 
-- `high` is removed from Auto turn-start classification. It is reachable only via
-  the `escalate_model` tool mid-turn, or an explicit `/high` pin.
-- `_generated_classifier` offers only `low`/`medium`.
-- `_classify` runs on the **previous turn's tier** (never grok) with real
-  history (not the old 300-char/800-char truncation). Routing is via
-  `_resolve_tier_runtime`, which reuses the same `resolve_switch` path as
-  `_apply_tier`; falls back to the official `triage_specifier` slot if the
-  runtime cannot be resolved.
-- `_target_tier` clamps any Auto `high` outcome to `medium` at turn start
-  (`+clamp(high escalation-only)`). Explicit `/high` is not clamped.
+- Auto classifies all three. `high` is only money / irreversible / security
+  (the `best_for` prior). There is no `classify_high` off-ramp.
+- `_classify` runs on the **previous turn's tier** with real history.
+  Routing is via `_resolve_tier_runtime`, which reuses the same
+  `resolve_switch` path as `_apply_tier`; falls back to the official
+  `triage_specifier` slot if the runtime cannot be resolved.
+- Explicit `/high` still pins. Mid-paragraph `/high` is not a pin.
 
 ### 2. Escalation is a checkpoint + tool, not an auto-climb
 
@@ -78,10 +76,10 @@ Drop the consumer `model.context_length` and the old
 ## Files
 
 - `plugins/model-router/engine.py` — `ModelRouterContextEngine` (`select_context`).
-- `plugins/model-router/__init__.py` — binary classifier, checkpoint,
+- `plugins/model-router/__init__.py` — 3-way classifier, checkpoint,
   `escalate_model` tool, `_resolve_tier_runtime`, engine registration.
-- `plugins/model-router/settings.py` — binary classifier prompt, handoff config.
-- `plugins/model-router/config.default.json` — `handoff_tail_chars`,
-  `classifier_context_chars`.
-- `plugins/model-router/plugin.yaml` — `provides_tools: [escalate_model]`, v0.7.0.
+- `plugins/model-router/settings.py` — classifier prompt from `best_for`, handoff config.
+- `plugins/model-router/config.default.json` — labels, `best_for`, `handoff_tail_chars`,
+  `classifier_context_chars`, escalate_*. No model IDs.
+- `plugins/model-router/plugin.yaml` — `provides_tools: [escalate_model]`.
 - `modules/models.nix` — `compression_ratio` / `context_length` on each named model; seeds `model_thresholds` + optional `model_overrides`.

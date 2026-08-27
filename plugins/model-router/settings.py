@@ -1,14 +1,15 @@
 """model-router settings — three named tiers (low < medium < high).
 
-This module does not own model IDs. Slot ids (low/medium/high), labels,
-and `best_for` live in config.default.json. User-declared models overlay
-via a plugin-adjacent config.json (Nix composer writes this from
-hermesPnP.models), a MODEL_ROUTER_CONFIG path, or MODEL_ROUTER_* env.
-No Hermes/WebUI core files are edited.
+This module does not own model IDs. Slot names are low/medium/high.
+Labels and `best_for` default from config.default.json. Model id and
+provider come from config.json (Nix `hermesPnP.models`), a
+MODEL_ROUTER_CONFIG path, or MODEL_ROUTER_* env. No Hermes/WebUI core
+files are edited.
 
 The `best_for` list on each tier is the source of truth for the
 classifier prompt. A short steer block (prefer-low on doubt; high is
-rare) is generated with it — not a second matrix.
+rare) is generated with it — not a second matrix. Auto always
+classifies all three tiers.
 """
 
 from __future__ import annotations
@@ -51,7 +52,7 @@ def _require_model_ids(models: dict[str, dict[str, Any]]) -> None:
         raise SettingsError(
             "model-router: no model id for "
             + ", ".join(blank)
-            + "; set config.default.json, config.json, or MODEL_ROUTER_*_MODEL"
+            + "; set hermesPnP.models, config.json, or MODEL_ROUTER_*_MODEL"
         )
 
 # provider -> host heuristics for half-switch repair (model set, old API host).
@@ -140,15 +141,12 @@ def _load_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _generated_classifier(
-    models: dict[str, dict[str, Any]], *, classify_high: bool
-) -> str:
+def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
     """Build the turn-start triage prompt from `best_for` plus a steer block.
 
     Keys stay low/medium/high. Labels (Quick/Standard/Expert) are display.
-    ``classify_high=False`` keeps the 0.7 binary prompt (high escalation-only).
     """
-    names = ("low", "medium", "high") if classify_high else ("low", "medium")
+    names = NAMES
     lines = ["Route this turn to the cheapest model that will do it well.", ""]
     for name in names:
         if name not in models:
@@ -159,11 +157,7 @@ def _generated_classifier(
         extra = "; ".join(str(x) for x in best) if best else label
         lines.append(f"{name} = {label} — {extra}")
     lines.append("")
-    if classify_high:
-        lines.append(
-            "high is ONLY for monetary transactions, irreversible/destructive/"
-            "publish actions, or security-sensitive decisions."
-        )
+    lines.append("high is ONLY the cases listed above — it is rare.")
     lines.append(
         "When uncertain between low and medium, prefer low — a wrong low "
         "route is cheaply corrected by escalation."
@@ -211,8 +205,6 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         state["handoff_tail_chars"] = max(1000, int(data["handoff_tail_chars"]))
     if "classifier_context_chars" in data:
         state["classifier_context_chars"] = max(1000, int(data["classifier_context_chars"]))
-    if "classify_high" in data:
-        state["classify_high"] = bool(data["classify_high"])
 
 
 def load_settings() -> dict[str, Any]:
@@ -225,7 +217,6 @@ def load_settings() -> dict[str, Any]:
         "classifier_system": None,
         "handoff_tail_chars": 64000,
         "classifier_context_chars": 12000,
-        "classify_high": True,
     }
 
     for candidate, origin in (
@@ -281,9 +272,7 @@ def load_settings() -> dict[str, Any]:
         meta["best_for"] = as_best_for(meta.get("best_for"))
 
     if not state["classifier_system"]:
-        state["classifier_system"] = _generated_classifier(
-            models, classify_high=bool(state["classify_high"])
-        )
+        state["classifier_system"] = _generated_classifier(models)
 
     return state
 
@@ -298,7 +287,6 @@ PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = _SETTINGS["provider_hosts"]
 CLASSIFIER: str = _SETTINGS["classifier_system"]
 HANDOFF_TAIL_CHARS: int = _SETTINGS["handoff_tail_chars"]
 CLASSIFIER_CONTEXT_CHARS: int = _SETTINGS["classifier_context_chars"]
-CLASSIFY_HIGH: bool = bool(_SETTINGS["classify_high"])
 
 
 def webui_models() -> list[dict[str, str]]:
