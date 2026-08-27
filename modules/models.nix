@@ -13,10 +13,12 @@
 
 let
   inherit (lib)
+    foldl'
     genAttrs
     mkIf
     mkOption
     optionalAttrs
+    recursiveUpdate
     types
     ;
 
@@ -53,6 +55,28 @@ let
           Auxiliary defaults to "none".
         '';
       };
+      compression_ratio = mkOption {
+        type = types.addCheck types.float (x: x > 0 && x <= 1);
+        default = defaults.compression_ratio;
+        description = ''
+          Fraction of this model's own context window at which Hermes
+          auto-compaction fires. Seeded into
+          settings.compression.model_thresholds.<model>. Hermes
+          resolves the window (built-in table + models.dev + live
+          probe) unless context_length is set. 0.95 ≈ overflow-only.
+        '';
+      };
+      context_length = mkOption {
+        type = types.nullOr types.ints.positive;
+        default = defaults.context_length;
+        description = ''
+          Optional hard window for this model, in tokens. null lets
+          Hermes resolve it. When set, PnP writes
+          model_overrides.<provider>.<model>.context_window. Do not
+          set settings.model.context_length in the consumer — that
+          one value stamps every model until the first switch.
+        '';
+      };
     }
     // optionalAttrs (defaults.best_for != null) {
       best_for = mkOption {
@@ -73,6 +97,8 @@ let
       description,
       reasoning_effort ? null,
       best_for ? null,
+      compression_ratio ? 0.95,
+      context_length ? null,
     }:
     mkOption {
       type = types.submodule {
@@ -82,6 +108,8 @@ let
             model
             reasoning_effort
             best_for
+            compression_ratio
+            context_length
             ;
         };
       };
@@ -118,12 +146,39 @@ let
     "curator"
     "kanban_decomposer"
   ];
+
+  # Router names only. Auxiliary shares low's model id — do not fold it
+  # in or it would just rewrite the same threshold.
+  namedModels = [
+    models.low
+    models.medium
+    models.high
+  ];
+
+  modelThresholds = foldl' (
+    acc: m: acc // { "${m.model}" = m.compression_ratio; }
+  ) { } namedModels;
+
+  modelOverrides = foldl' (
+    acc: m:
+    if m.context_length == null then
+      acc
+    else
+      recursiveUpdate acc {
+        ${m.provider} = {
+          ${m.model} = {
+            context_window = m.context_length;
+          };
+        };
+      }
+  ) { } namedModels;
 in
 {
   options.services.hermesPnP.models = {
     low = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-flash";
+      compression_ratio = 0.95;
       best_for = pluginModels.low.best_for;
       description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
     };
@@ -131,6 +186,7 @@ in
     medium = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-pro";
+      compression_ratio = 0.26;
       best_for = pluginModels.medium.best_for;
       description = "Workhorse. OOBE seed for delegation and model-router medium.";
     };
@@ -138,6 +194,7 @@ in
     high = mkNamedModel {
       provider = "xai-oauth";
       model = "grok-4.6";
+      compression_ratio = 0.28;
       best_for = pluginModels.high.best_for;
       description = ''
         Session identity + voice. OOBE seed for settings.model.default
@@ -150,11 +207,13 @@ in
     auxiliary = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-flash";
+      compression_ratio = 0.95;
       reasoning_effort = "none";
       description = ''
         Official auxiliary tasks (title generation, compression, …).
-        Nix-only — not a model-router tier. reasoning_effort defaults
-        to "none" (overridable). Provider/model default like low.
+        Nix-only — not a model-router tier, no slash command.
+        reasoning_effort defaults to "none" (overridable).
+        Provider/model default like low.
       '';
     };
   };
@@ -164,6 +223,14 @@ in
       model = {
         provider = models.high.provider;
         default = models.high.model;
+        # No global context_length. Hermes resolves each model's window.
+        # Override per name via models.<name>.context_length → model_overrides.
+      };
+      context = {
+        engine = "model-router";
+      };
+      compression = {
+        model_thresholds = modelThresholds;
       };
       fallback_model = {
         provider = models.high.provider;
@@ -184,6 +251,9 @@ in
         reasoning_effort = models.low.reasoning_effort;
       };
       auxiliary = genAttrs auxiliarySlots (_: auxiliarySlot);
+    }
+    // optionalAttrs (modelOverrides != { }) {
+      model_overrides = modelOverrides;
     }
     // optionalAttrs (models.high.reasoning_effort != null) {
       agent.reasoning_effort = models.high.reasoning_effort;

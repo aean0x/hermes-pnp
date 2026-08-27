@@ -58,11 +58,12 @@ class Defaults(unittest.TestCase):
         self.assertEqual(mod.ESCALATION_ERRORS["low"], 4)
         self.assertEqual(mod.ESCALATION_ERRORS["medium"], 3)
         self.assertNotIn("rocknas", mod.CLASSIFIER.lower())
-        self.assertIn("low, medium, or high", mod.CLASSIFIER)
+        self.assertIn("low or medium", mod.CLASSIFIER)
+        self.assertNotIn("or high", mod.CLASSIFIER)
         self.assertNotIn("ONLY a digit", mod.CLASSIFIER)
         self.assertNotIn("T1", mod.CLASSIFIER)
-        # best_for is the sole prompt source — descriptors appear, no steering block.
-        self.assertIn("Architecture", mod.CLASSIFIER)
+        # Turn-start classifier is binary — high descriptors stay off the prompt.
+        self.assertNotIn("Architecture", mod.CLASSIFIER)
         self.assertIn("Trivial Q&A", mod.CLASSIFIER)
         self.assertNotIn("Rules:", mod.CLASSIFIER)
         self.assertNotIn("high-stakes", mod.CLASSIFIER.lower())
@@ -145,7 +146,7 @@ class BestFor(unittest.TestCase):
                 mod = _load("mr_best_for_file")
         self.assertEqual(mod.MODELS["low"]["best_for"], ["Only pings"])
         self.assertIn("Only pings", mod.CLASSIFIER)
-        self.assertIn("Only architecture", mod.CLASSIFIER)
+        self.assertNotIn("Only architecture", mod.CLASSIFIER)
         self.assertNotIn("Trivial Q&A", mod.CLASSIFIER)
         self.assertIn("Research and discovery", mod.CLASSIFIER)
 
