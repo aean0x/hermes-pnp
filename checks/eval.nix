@@ -199,6 +199,13 @@ in
       toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_EXTENSION_DIR)
     }" = "1"
     test "${toString (builtins.elem "model-router" modulesConfig.services.hermesPnP.plugins)}" = "1"
+    test "${toString (lib.hasInfix ''label = "Low"'' (builtins.readFile ../modules/plugins.nix))}" = ""
+    test "$(${pkgs.jq}/bin/jq -r '.models.low.label' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "Quick"
+    test "$(${pkgs.jq}/bin/jq -r '.models.medium.label' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "Standard"
+    test "$(${pkgs.jq}/bin/jq -r '.models.high.label' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "Expert"
+    test "$(${pkgs.jq}/bin/jq -r '.classify_high' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "true"
+    grep -q 'Pin Quick' ${modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.js
+    grep -q 'Pin Expert' ${modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.js
     test "${toString (builtins.elem "model-router" gbrainConfig.services.hermesPnP.plugins)}" = "1"
     test "${toString (builtins.elem "gbrain-retrieval-reflex" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${toString (builtins.elem "gbrain-memory-flush" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
