@@ -99,9 +99,24 @@ class Defaults(unittest.TestCase):
         self.assertNotIn("CLASSIFY_HIGH", src)
 
     def test_missing_model_ids_raise(self) -> None:
-        with _clean_env():
-            with self.assertRaises(Exception) as ctx:
-                _load("mr_no_ids", ids=False)
+        # Overlay empty ids after any adjacent config.json (Nix materialize).
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / "cfg.json"
+            cfg.write_text(
+                json.dumps(
+                    {
+                        "models": {
+                            "low": {"model": ""},
+                            "medium": {"model": ""},
+                            "high": {"model": ""},
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with _clean_env(MODEL_ROUTER_CONFIG=str(cfg)):
+                with self.assertRaises(Exception) as ctx:
+                    _load("mr_no_ids", ids=False)
         self.assertIn("no model id", str(ctx.exception))
 
     def test_declared_models_replace_catalog_ids(self) -> None:
