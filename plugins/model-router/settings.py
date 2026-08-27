@@ -1,8 +1,10 @@
 """model-router settings — three named tiers (low < medium < high).
 
-Models, providers, and routing behaviour live here as defaults, overridable
-via a plugin-adjacent config.json, a MODEL_ROUTER_CONFIG path, or
-MODEL_ROUTER_* env vars. No Hermes/WebUI core files are edited.
+This module does not own model IDs. Slot ids (low/medium/high), labels,
+and `best_for` live in config.default.json. User-declared models overlay
+via a plugin-adjacent config.json (Nix composer writes this from
+hermesPnP.models), a MODEL_ROUTER_CONFIG path, or MODEL_ROUTER_* env.
+No Hermes/WebUI core files are edited.
 
 The `best_for` list on each tier is the source of truth for the
 classifier prompt. A short steer block (prefer-low on doubt; high is
@@ -22,44 +24,35 @@ _PLUGIN_DIR = Path(__file__).resolve().parent
 NAMES: tuple[str, ...] = ("low", "medium", "high")
 RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
 
-DEFAULT_MODELS: dict[str, dict[str, Any]] = {
-    "low": {
-        "label": "Quick",
-        "short": "Quick",
-        "model": "deepseek-v4-flash",
-        "provider": "deepseek",
-        "best_for": [
-            "Short single-file edits",
-            "Answering a direct question from provided context",
-            "Reformatting, renaming, or mechanical refactors",
-            "Reading and quoting an existing doc or codebase",
-            "Status checks and look-ups",
-        ],
-    },
-    "medium": {
-        "label": "Standard",
-        "short": "Standard",
-        "model": "deepseek-v4-pro",
-        "provider": "deepseek",
-        "best_for": [
-            "Multi-step reasoning or multi-file changes",
-            "Root-cause debugging with no clear error",
-            "Synthesizing new analysis or writing from scratch",
-            "Designing or planning before coding",
-        ],
-    },
-    "high": {
-        "label": "Expert",
-        "short": "Expert",
-        "model": "grok-4.6",
-        "provider": "xai-oauth",
-        "best_for": [
-            "Monetary transactions or money-moving",
-            "Irreversible, destructive, or publish actions",
-            "Security-sensitive decisions",
-        ],
-    },
-}
+_CATALOG_PATH = _PLUGIN_DIR / "config.default.json"
+
+
+def _slot_shells() -> dict[str, dict[str, Any]]:
+    """Three named slots with no model IDs. Catalog / config / env fill them."""
+    return {
+        name: {
+            "label": name.capitalize(),
+            "short": name.capitalize(),
+            "model": "",
+            "provider": "",
+            "best_for": [],
+        }
+        for name in NAMES
+    }
+
+
+def _require_model_ids(models: dict[str, dict[str, Any]]) -> None:
+    blank = [
+        name
+        for name in NAMES
+        if not str(models.get(name, {}).get("model") or "").strip()
+    ]
+    if blank:
+        raise SettingsError(
+            "model-router: no model id for "
+            + ", ".join(blank)
+            + "; set config.default.json, config.json, or MODEL_ROUTER_*_MODEL"
+        )
 
 # provider -> host heuristics for half-switch repair (model set, old API host).
 DEFAULT_PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = {
@@ -224,7 +217,7 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
 
 def load_settings() -> dict[str, Any]:
     state: dict[str, Any] = {
-        "models": deepcopy(DEFAULT_MODELS),
+        "models": _slot_shells(),
         "provider_hosts": deepcopy(DEFAULT_PROVIDER_HOSTS),
         "escalate_max": "high",
         "escalation_errors": {"low": 4, "medium": 3},
@@ -236,6 +229,7 @@ def load_settings() -> dict[str, Any]:
     }
 
     for candidate, origin in (
+        (_CATALOG_PATH, "config.default.json"),
         (_PLUGIN_DIR / "config.json", "config.json"),
         (
             Path(os.environ["MODEL_ROUTER_CONFIG"]) if os.environ.get("MODEL_ROUTER_CONFIG") else None,
@@ -275,6 +269,8 @@ def load_settings() -> dict[str, Any]:
         raw_best = os.environ.get(prefix + "BEST_FOR")
         if raw_best and raw_best.strip():
             models[name]["best_for"] = as_best_for(raw_best)
+
+    _require_model_ids(models)
 
     if state["escalate_max"] not in models:
         state["escalate_max"] = "high" if "high" in models else next(iter(models))

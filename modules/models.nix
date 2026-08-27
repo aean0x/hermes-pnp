@@ -176,26 +176,20 @@ in
 {
   options.services.hermesPnP.models = {
     low = mkNamedModel {
-      provider = "deepseek";
-      model = "deepseek-v4-flash";
+      inherit (pluginModels.low) provider model best_for;
       compression_ratio = 0.95;
-      best_for = pluginModels.low.best_for;
       description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
     };
 
     medium = mkNamedModel {
-      provider = "deepseek";
-      model = "deepseek-v4-pro";
+      inherit (pluginModels.medium) provider model best_for;
       compression_ratio = 0.26;
-      best_for = pluginModels.medium.best_for;
       description = "Workhorse. OOBE seed for delegation and model-router medium.";
     };
 
     high = mkNamedModel {
-      provider = "xai-oauth";
-      model = "grok-4.6";
+      inherit (pluginModels.high) provider model best_for;
       compression_ratio = 0.28;
-      best_for = pluginModels.high.best_for;
       description = ''
         Session identity + voice. OOBE seed for settings.model.default
         and fallback. Override here — not settings.model.default —
@@ -205,8 +199,7 @@ in
     };
 
     auxiliary = mkNamedModel {
-      provider = "deepseek";
-      model = "deepseek-v4-flash";
+      inherit (pluginModels.low) provider model;
       compression_ratio = 0.95;
       reasoning_effort = "none";
       description = ''
