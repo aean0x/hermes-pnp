@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load():
-    os.environ.pop("MODEL_ROUTER_CONFIG", None)
+    os.environ["MODEL_ROUTER_CONFIG"] = str(ROOT / "tests" / "oobe-ids.json")
     spec = importlib.util.spec_from_file_location("model_router_mod", ROOT / "__init__.py")
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)

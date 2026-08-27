@@ -15,7 +15,7 @@ HERMES_SRC = Path("/data/src/hermes-agent")
 
 
 def _load():
-    os.environ.pop("MODEL_ROUTER_CONFIG", None)
+    os.environ["MODEL_ROUTER_CONFIG"] = str(ROOT / "tests" / "oobe-ids.json")
     spec = importlib.util.spec_from_file_location("model_router_routing", ROOT / "__init__.py")
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
@@ -63,18 +63,6 @@ class TargetTier(unittest.TestCase):
         name, reason = self.mod._target_tier("s4", "ok", [])
         self.assertEqual(name, "low")
         self.assertEqual(reason, "ack")
-
-    def test_classify_high_off_clamps(self) -> None:
-        self.mod._CLASSIFY_HIGH = False
-        try:
-            with patch.object(self.mod, "_classify", return_value="high"):
-                name, reason = self.mod._target_tier(
-                    "s2b", "please think hard about this architecture problem", []
-                )
-            self.assertEqual(name, "medium")
-            self.assertIn("clamp", reason)
-        finally:
-            self.mod._CLASSIFY_HIGH = True
 
     def test_cached_message_reuses_tier(self) -> None:
         with self.mod._lock:

@@ -8,8 +8,8 @@ env vars.
 Policy:
   • Each real user turn is classified once; the work loop stays on that tier
     for the whole multi-tool turn.
-  • Classifier is 3-way (low/medium/high) when classify_high is on. High is
-    rare (money / irreversible / security). Prefer low on doubt.
+  • Classifier is 3-way (low/medium/high). High is rare (money /
+    irreversible / security). Prefer low on doubt.
   • Consecutive tool errors climb one tier, capped at escalate_max.
   • Manual /low /medium /high pins pause auto-routing until /auto.
   • Slash pins must start the message; a mid-paragraph /high is not a pin.
@@ -65,7 +65,6 @@ _PROVIDER_HOSTS = _s.PROVIDER_HOSTS
 _CLASSIFIER = _s.CLASSIFIER
 _HANDOFF_TAIL_CHARS = _s.HANDOFF_TAIL_CHARS
 _CLASSIFIER_CONTEXT_CHARS = _s.CLASSIFIER_CONTEXT_CHARS
-_CLASSIFY_HIGH = bool(getattr(_s, "CLASSIFY_HIGH", True))
 _MIN = "low"
 _MID = "medium"
 _TOP = NAMES[-1]  # "high"
@@ -704,7 +703,7 @@ def _classify(user_message: str, history: list, session_id: str = "") -> str:
 
         raw = (response.choices[0].message.content or "").strip()
         raw_l = raw.lower()
-        allowed = (_MIN, _MID, _TOP) if _CLASSIFY_HIGH else (_MIN, _MID)
+        allowed = (_MIN, _MID, _TOP)
         found = [n for n in allowed if re.search(rf"\b{n}\b", raw_l)]
         if len(found) == 1:
             return found[0]
@@ -739,15 +738,6 @@ def _target_tier(session_id: str, msg: str, history: list) -> tuple[str, str]:
     else:
         name = _classify(msg, history, session_id)
         reason = "classify"
-
-    # When classify_high is off, high is escalation-only — never a classified
-    # turn-start outcome. Explicit ``/high`` still lands.
-    if (
-        not _CLASSIFY_HIGH
-        and reason != "explicit"
-        and _rank(name) > _rank(_MID)
-    ):
-        name, reason = _MID, reason + "+clamp(high escalation-only)"
 
     logger.info(
         "model-router: route %s (%s) words=%d sentences=%d preview=%r",

@@ -25,9 +25,8 @@ let
   pnp = config.services.hermesPnP;
   inherit (pnp) models;
 
-  # Classifier matrices live in the plugin JSON. Nix option defaults
-  # follow that file so composer config.json and standalone defaults
-  # cannot drift.
+  # Labels and best_for default from the plugin JSON. Model id and
+  # provider are Nix options (composer OOBE below) — not catalog IDs.
   pluginModels =
     (builtins.fromJSON (
       builtins.readFile ../plugins/model-router/config.default.json
@@ -88,6 +87,16 @@ let
           override here to steer routing without editing Python.
         '';
       };
+      label = mkOption {
+        type = types.str;
+        default = defaults.label;
+        description = "Display name (WebUI pin). Router tiers only.";
+      };
+      short = mkOption {
+        type = types.str;
+        default = defaults.short;
+        description = "Short display name. Router tiers only.";
+      };
     };
 
   mkNamedModel =
@@ -97,6 +106,8 @@ let
       description,
       reasoning_effort ? null,
       best_for ? null,
+      label ? null,
+      short ? null,
       compression_ratio ? 0.95,
       context_length ? null,
     }:
@@ -108,6 +119,8 @@ let
             model
             reasoning_effort
             best_for
+            label
+            short
             compression_ratio
             context_length
             ;
@@ -176,19 +189,25 @@ in
 {
   options.services.hermesPnP.models = {
     low = mkNamedModel {
-      inherit (pluginModels.low) provider model best_for;
+      provider = "deepseek";
+      model = "deepseek-v4-flash";
+      inherit (pluginModels.low) best_for label short;
       compression_ratio = 0.95;
       description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
     };
 
     medium = mkNamedModel {
-      inherit (pluginModels.medium) provider model best_for;
+      provider = "deepseek";
+      model = "deepseek-v4-pro";
+      inherit (pluginModels.medium) best_for label short;
       compression_ratio = 0.26;
       description = "Workhorse. OOBE seed for delegation and model-router medium.";
     };
 
     high = mkNamedModel {
-      inherit (pluginModels.high) provider model best_for;
+      provider = "xai-oauth";
+      model = "grok-4.6";
+      inherit (pluginModels.high) best_for label short;
       compression_ratio = 0.28;
       description = ''
         Session identity + voice. OOBE seed for settings.model.default
@@ -199,7 +218,8 @@ in
     };
 
     auxiliary = mkNamedModel {
-      inherit (pluginModels.low) provider model;
+      provider = "deepseek";
+      model = "deepseek-v4-flash";
       compression_ratio = 0.95;
       reasoning_effort = "none";
       description = ''

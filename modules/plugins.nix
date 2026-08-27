@@ -55,9 +55,8 @@ let
     "high"
   ];
 
-  # Display labels and plugin-only keys (classify_high, escalate_*) live
-  # in the plugin JSON. Composer overlay copies them and overlays Nix
-  # model/provider/best_for so config.json cannot drift.
+  # Plugin-only keys (escalate_*, tails) live in the JSON catalog.
+  # Slot identity (model, provider, label, short, best_for) is Nix.
   pluginDefaults = builtins.fromJSON (
     builtins.readFile ../plugins/model-router/config.default.json
   );
@@ -67,7 +66,13 @@ let
       name:
       pluginDefaults.models.${name}
       // {
-        inherit (pnp.models.${name}) model provider best_for;
+        inherit (pnp.models.${name})
+          model
+          provider
+          best_for
+          label
+          short
+          ;
       }
     );
   };
@@ -76,10 +81,10 @@ let
     models =
       (map (name: {
         cmd = "/${name}";
-        label = pluginDefaults.models.${name}.label;
-        short = pluginDefaults.models.${name}.short;
+        label = pnp.models.${name}.label;
+        short = pnp.models.${name}.short;
         model = pnp.models.${name}.model;
-        title = "Pin ${pluginDefaults.models.${name}.label}";
+        title = "Pin ${pnp.models.${name}.label}";
       }) routerOrder)
       ++ [
         {

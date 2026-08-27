@@ -3,8 +3,6 @@
     "low": {
       "label": "Quick",
       "short": "Quick",
-      "model": "deepseek-v4-flash",
-      "provider": "deepseek",
       "best_for": [
         "Short single-file edits",
         "Answering a direct question from provided context",
@@ -17,8 +15,6 @@
     "medium": {
       "label": "Standard",
       "short": "Standard",
-      "model": "deepseek-v4-pro",
-      "provider": "deepseek",
       "best_for": [
         "Multi-step reasoning or multi-file changes",
         "Broad-subject conceptual or deep research",
@@ -30,8 +26,6 @@
     "high": {
       "label": "Expert",
       "short": "Expert",
-      "model": "grok-4.6",
-      "provider": "xai-oauth",
       "best_for": [
         "Monetary transactions or money-moving",
         "Irreversible, destructive, or publish actions",
@@ -42,6 +36,5 @@
   "escalate_max": "high",
   "escalation_errors": { "low": 4, "medium": 3 },
   "handoff_tail_chars": 64000,
-  "classifier_context_chars": 12000,
-  "classify_high": true
+  "classifier_context_chars": 12000
 }

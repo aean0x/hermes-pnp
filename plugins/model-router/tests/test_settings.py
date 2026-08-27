@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+_OOBE_IDS = ROOT / "tests" / "oobe-ids.json"
 
 _ENV_KEYS = (
     "MODEL_ROUTER_CONFIG",
@@ -38,7 +39,9 @@ def _clean_env(**overlay: str):
                 os.environ[k] = v
 
 
-def _load(name: str = "mr_settings"):
+def _load(name: str = "mr_settings", *, ids: bool = True):
+    if ids and not os.environ.get("MODEL_ROUTER_CONFIG"):
+        os.environ["MODEL_ROUTER_CONFIG"] = str(_OOBE_IDS)
     spec = importlib.util.spec_from_file_location(name, ROOT / "settings.py")
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
@@ -61,7 +64,7 @@ class Defaults(unittest.TestCase):
         self.assertIn("low or medium or high", mod.CLASSIFIER)
         self.assertNotIn("ONLY a digit", mod.CLASSIFIER)
         self.assertNotIn("T1", mod.CLASSIFIER)
-        self.assertTrue(mod.CLASSIFY_HIGH)
+        self.assertFalse(hasattr(mod, "CLASSIFY_HIGH"))
         self.assertIn("prefer low", mod.CLASSIFIER)
         self.assertIn("Short single-file edits", mod.CLASSIFIER)
         self.assertIn("Small to medium-scoped research", mod.CLASSIFIER)
@@ -80,13 +83,24 @@ class Defaults(unittest.TestCase):
             mod = _load("mr_defaults_json")
         cfg = json.loads((ROOT / "config.default.json").read_text(encoding="utf-8"))
         for name in ("low", "medium", "high"):
-            for key in ("model", "provider", "label", "best_for"):
+            for key in ("label", "short", "best_for"):
                 self.assertEqual(mod.MODELS[name][key], cfg["models"][name][key])
+            self.assertNotIn("model", cfg["models"][name])
+            self.assertNotIn("provider", cfg["models"][name])
+        self.assertNotIn("classify_high", cfg)
 
     def test_settings_source_has_no_model_ids(self) -> None:
         src = (ROOT / "settings.py").read_text(encoding="utf-8")
         self.assertNotIn("deepseek-v4", src)
         self.assertNotIn("grok-4", src)
+        self.assertNotIn("classify_high", src)
+        self.assertNotIn("CLASSIFY_HIGH", src)
+
+    def test_missing_model_ids_raise(self) -> None:
+        with _clean_env():
+            with self.assertRaises(Exception) as ctx:
+                _load("mr_no_ids", ids=False)
+        self.assertIn("no model id", str(ctx.exception))
 
     def test_declared_models_replace_catalog_ids(self) -> None:
         catalog = json.loads((ROOT / "config.default.json").read_text(encoding="utf-8"))
@@ -110,7 +124,6 @@ class Defaults(unittest.TestCase):
         self.assertEqual(mod.MODELS["medium"]["model"], "work")
         self.assertEqual(mod.MODELS["high"]["model"], "voice")
         self.assertEqual(mod.MODELS["high"]["provider"], "p-high")
-        self.assertNotEqual(mod.MODELS["low"]["model"], catalog["models"]["low"]["model"])
         self.assertEqual(
             mod.MODELS["low"]["best_for"], catalog["models"]["low"]["best_for"]
         )
@@ -122,7 +135,13 @@ class EnvOverlay(unittest.TestCase):
             cfg = Path(tmp) / "cfg.json"
             cfg.write_text(
                 json.dumps(
-                    {"models": {"high": {"model": "some-voice", "provider": "other"}}}
+                    {
+                        "models": {
+                            "low": {"model": "test-low", "provider": "test"},
+                            "medium": {"model": "test-medium", "provider": "test"},
+                            "high": {"model": "some-voice", "provider": "other"},
+                        }
+                    }
                 ),
                 encoding="utf-8",
             )
@@ -168,8 +187,17 @@ class BestFor(unittest.TestCase):
                 json.dumps(
                     {
                         "models": {
-                            "low": {"best_for": ["Only pings"]},
-                            "high": {"best_for": ["Only architecture"]},
+                            "low": {
+                                "model": "test-low",
+                                "provider": "test",
+                                "best_for": ["Only pings"],
+                            },
+                            "medium": {"model": "test-medium", "provider": "test"},
+                            "high": {
+                                "model": "test-high",
+                                "provider": "test",
+                                "best_for": ["Only architecture"],
+                            },
                         }
                     }
                 ),
