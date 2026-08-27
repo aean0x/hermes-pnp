@@ -148,12 +148,12 @@ Materialize to `$stateDir/plugins/<name>`, discovered via
 installed through official `extraPlugins`. `extraPluginDirs` is
 `attrsOf path` for your own trees (`extraPlugins` is a renamed alias).
 
-**model-router** — per-turn low / medium / high. Classifies the user
-turn, switches the live model, climbs on tool errors. Pins:
-`/low` `/medium` `/high` `/auto`. Writes `config.json` + WebUI
+**model-router** (v0.7.0) — per-turn low / medium / high. Auto
+classifies low vs medium; `high` is `escalate_model` or `/high`.
+Pins: `/low` `/medium` `/high` `/auto`. Writes `config.json` + WebUI
 extension from `hermesPnP.models`. `models.<tier>.best_for` is the
-classifier matrix (plugin defaults; override in Nix). Auxiliary
-tasks use `models.auxiliary`, not low.
+classifier matrix (plugin defaults; override in Nix). Official aux
+tasks use `models.auxiliary`, not a router tier.
 
 **tool-call-coherency** — unwrap double-nested `tool_call`, rewrite
 bare skill names, stop Grok/OpenRouter thrash on MCP and deferred

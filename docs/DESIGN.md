@@ -233,7 +233,10 @@ models.auxiliary = { provider = "deepseek";  model = "deepseek-v4-flash"; }; # r
 
 When `hermesPnP.enable` (`modules/models.nix`):
 
-- `settings.model.{provider,default}` ← high
+- `settings.model.{provider,default}` ← high. No global `context_length`.
+- `settings.context.engine` ← `model-router` (handoff compaction on escalate)
+- `settings.compression.model_thresholds.<model>` ← each name's `compression_ratio`
+- `settings.model_overrides` ← only when `models.<name>.context_length` is set
 - `settings.fallback_model.{provider,model}` ← high
 - `settings.delegation.{provider,model}` ← medium
 - `settings.cron.{model,model_provider}` ← low
@@ -256,7 +259,12 @@ When `model-router` is in `plugins`, the installer writes `config.json`
 + `webui/config.js` from the same `models` block, including each
 tier's `best_for` list (the classifier prompt's only source).
 
-Classifier: 4 consecutive tool errors on low, 3 on medium, cap
+Each router name also has `compression_ratio` (fraction of that
+model's own window) and optional `context_length` (writes
+`model_overrides`, never a global `model.context_length`).
+
+Classifier: Auto turn-start is low vs medium; `high` is
+`escalate_model` or `/high`. 4 consecutive tool errors on low, 3 on medium, cap
 `escalate_max` (high). High is reached by classification or `/high`.
 Client rebuilds that pair the live provider with the previous API host
 (WebUI `credential_refresh`) are refused at the agent client rebuild;

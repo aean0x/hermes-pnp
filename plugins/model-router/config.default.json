@@ -39,5 +39,7 @@
     }
   },
   "escalate_max": "high",
-  "escalation_errors": { "low": 4, "medium": 3 }
+  "escalation_errors": { "low": 4, "medium": 3 },
+  "handoff_tail_chars": 64000,
+  "classifier_context_chars": 12000
 }

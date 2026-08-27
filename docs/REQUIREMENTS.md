@@ -34,8 +34,9 @@
 - WebUI/browser jails follow official `container.enable` (and
   `container.network` when that option exists).
 - model-router keys are `low` / `medium` / `high`. Commands `/low`
-  `/medium` `/high` `/auto`. Classifier replies with exactly one of
-  those three words. Escalation 4 on low, 3 on medium, cap high.
+  `/medium` `/high` `/auto`. Auto turn-start classifier replies
+  `low` or `medium`; `high` is `escalate_model` or `/high`. Escalation
+  4 on low, 3 on medium, cap high. Plugin v0.7.0.
   Each router tier has `best_for` (`listOf str`); defaults come from
   `plugins/model-router/config.default.json`. Overlay via Nix, plugin
   `config.json`, or `MODEL_ROUTER_{LOW,MEDIUM,HIGH}_BEST_FOR`.
