@@ -28,6 +28,43 @@ let
   agent = config.services.hermes-agent;
   cfg = pnp.browser;
   bctr = cfg.container;
+  profileImport = cfg.profileImport;
+
+  # Whitelist filter for the auth-state copy: only Local State plus
+  # <profile>/{Cookies,Network/Cookies,Login Data,Preferences}. Cache,
+  # GPUCache, Singleton* locks and sqlite -wal/-shm sidecars are never
+  # traversed, so the store path stays a few hundred KB and a running
+  # source browser cannot smuggle a stale WAL into the seed.
+  authStateFilter = src: profileName: path: type:
+    let
+      rel =
+        let r = lib.removePrefix (toString src) (toString path);
+        in if r == "" then "" else lib.removePrefix "/" r;
+      dirs = [ profileName "${profileName}/Network" ];
+      files = [
+        "Local State"
+        "${profileName}/Cookies"
+        "${profileName}/Network/Cookies"
+        "${profileName}/Login Data"
+        "${profileName}/Preferences"
+      ];
+    in
+    rel == ""
+    || (type == "directory" && lib.elem rel dirs)
+    || (type == "regular" && lib.elem rel files);
+
+  # The filtered store copy. `source` is read from the local filesystem
+  # at eval time, which is impure — `nixos-rebuild switch --impure`
+  # (or pass a flake-input store path as source for a pure build).
+  importedAuth =
+    if profileImport.enable && profileImport.source != null then
+      builtins.path {
+        path = profileImport.source;
+        name = "hermes-browser-auth";
+        filter = authStateFilter profileImport.source profileImport.profileName;
+      }
+    else
+      null;
 
   shared = import ./shared.nix { inherit config lib pkgs; };
   inherit (shared)
@@ -145,6 +182,58 @@ in
       description = "Browser / gate log dir.";
     };
 
+    profileImport = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Seed the browser profile with auth state (cookies, saved
+          logins, preferences) copied from a Chromium-family user-data
+          dir on the build machine. One-shot: the seed is applied only
+          when the profile is empty (or overwrite=true), so gate logins
+          you do later stay sticky.
+        '';
+      };
+
+      source = mkOption {
+        type = types.nullOr types.path;
+        default = null;
+        description = ''
+          Absolute path to the browser user-data dir to import, e.g.
+          ~/.config/BraveSoftware/Brave-Browser (the dir that contains
+          Local State and Default/). Must exist on the machine that
+          evaluates the configuration (usually the build machine).
+
+          Reading an absolute path is an impure operation: build with
+          `nixos-rebuild switch --impure`, or pass a store path (e.g.
+          from a flake input) for a pure build. Only the auth files are
+          copied — Cache, GPUCache, Singleton* locks and sqlite WAL/SHM
+          sidecars are filtered out — so the store copy is a few
+          hundred KB, not the whole profile.
+
+          The copied cookies/logins are Nix store content: readable by
+          local users on the build and target machines.
+        '';
+        example = "/home/alice/.config/BraveSoftware/Brave-Browser";
+      };
+
+      profileName = mkOption {
+        type = types.str;
+        default = "Default";
+        description = "Profile dir inside source (Default, Profile 1, ...).";
+      };
+
+      overwrite = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Replace an existing profile with the imported auth state.
+          Default keeps the sticky profile (gate logins, session state)
+          and only seeds when the profile is empty.
+        '';
+      };
+    };
+
     gate = {
       enable = mkOption {
         type = types.bool;
@@ -205,6 +294,15 @@ in
     };
   };
 
+  options.services.hermesPnP = {
+    internal.browser.importedAuth = mkOption {
+      type = types.nullOr types.path;
+      internal = true;
+      default = null;
+      description = "Filtered store copy of the imported auth state (profileImport).";
+    };
+  };
+
   config = mkMerge [
     (mkIf pnp.enable {
       services.hermesPnP.browser.container = oci.followAgentContainer agent;
@@ -222,6 +320,10 @@ in
           assertion = cfg.engine != "";
           message = "services.hermesPnP.browser.engine is empty; set browser.package (engine follows mainProgram) or browser.engine.";
         }
+        {
+          assertion = !profileImport.enable || profileImport.source != null;
+          message = "services.hermesPnP.browser.profileImport.enable = true requires profileImport.source (a Chromium user-data dir on the build machine).";
+        }
       ];
 
       environment.systemPackages = [
@@ -236,6 +338,19 @@ in
           echo "engine:   ${cfg.engine}"
           echo "mode:     ${if bctr.enable then "container" else "host-native"}"
           echo "profile:  ${profileDir}"
+          ${
+            if importedAuth != null then
+              ''
+                echo "import:   ${toString profileImport.source} (${if profileImport.overwrite then "overwrite" else "seed-only"})"
+                if [ -e "${profileDir}/.hermes-profile-imported" ]; then
+                  echo "import:   applied -> $(cat "${profileDir}/.hermes-profile-imported")"
+                else
+                  echo "import:   not applied yet"
+                fi
+              ''
+            else
+              ""
+          }
           echo "workspace:${workspaceDir}"
           echo "cookies:  ${cookiesDir}  (drop Netscape/JSON; import with hermes-browser-import-cookies)"
           echo "cdp:      ${cdpUrl}"
@@ -277,6 +392,45 @@ in
         "d ${gateHome} 0750 ${agent.user} ${agent.group} - -"
         "d ${home} 0750 ${agent.user} ${agent.group} - -"
       ];
+
+      # Seed the sticky profile from the filtered store copy, once.
+      # Marker + empty-profile checks keep gate-added logins sticky;
+      # overwrite=true replaces the whole profile dir.
+      services.hermesPnP.internal.browser.importedAuth = importedAuth;
+      systemd.services.hermes-browser-profile-import = mkIf (importedAuth != null) {
+        description = "Seed Hermes browser profile with imported auth state";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "hermes-browser.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        script = ''
+          set -euo pipefail
+          src="${importedAuth}"
+          marker="${profileDir}/.hermes-profile-imported"
+          overwrite=${if profileImport.overwrite then "1" else "0"}
+          if [ -e "$marker" ]; then
+            echo "profile import: already applied ($(cat "$marker"))"
+            exit 0
+          fi
+          existing="$(${pkgs.findutils}/bin/find "${profileDir}" -mindepth 1 -maxdepth 1 ! -name '.hermes-profile-imported' -print -quit 2>/dev/null || true)"
+          if [ -n "$existing" ] && [ "$overwrite" != "1" ]; then
+            echo "profile import: ${profileDir} already has state; skipping (overwrite=false)"
+            exit 0
+          fi
+          if [ "$overwrite" = "1" ]; then
+            rm -rf "${profileDir}"
+          fi
+          mkdir -p "${profileDir}"
+          ${pkgs.coreutils}/bin/cp -a --no-preserve=ownership,mode "''${src}/." "${profileDir}/"
+          chown -R ${agent.user}:${agent.group} "${profileDir}"
+          chmod -R u+rwX,go-rwx "${profileDir}"
+          printf '%s\n' "${importedAuth}" > "$marker"
+          chown ${agent.user}:${agent.group} "$marker"
+          echo "profile import: seeded ${profileDir} from ${importedAuth}"
+        '';
+      };
 
       services.hermes-agent = {
         environment = {

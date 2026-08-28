@@ -23,6 +23,18 @@
         publicUrl = "https://browser.example.com/";
       };
       extraArgs = [ ];
+      # Build-time auth import: seed the sticky profile with cookies /
+      # saved logins / preferences from a Chromium user-data dir on the
+      # BUILD machine. Reads an absolute path at eval, so switch with
+      # `nixos-rebuild switch --impure` (or pass a store path from a
+      # flake input for a pure build). One-shot: applied only when the
+      # profile is empty (overwrite=true replaces the whole profile).
+      # profileImport = {
+      #   enable = true;
+      #   source = "/home/alice/.config/BraveSoftware/Brave-Browser";
+      #   # profileName = "Default"; # profile dir inside source
+      #   # overwrite = false;
+      # };
     };
   };
 

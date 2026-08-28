@@ -103,6 +103,14 @@ is `browser.package` (Brave above). Profile, cookies, and logs live
 under the agent stateDir; the jail does not mount hermes home or
 `/etc`.
 
+`browser.profileImport` seeds the sticky profile from a Chromium
+user-data dir on the build machine — cookies, saved logins,
+preferences — so the browser comes up already logged in. The copy is
+filtered (auth files only, no Cache / WAL sidecars) and one-shot
+(empty profile or `overwrite = true`), so gate logins stay sticky.
+Reading the source path at eval is impure: `nixos-rebuild switch
+--impure`. Example in `examples/browser.nix`.
+
 ## GBrain
 
 Optional. GBrain is a bun-global CLI + PGLite + a minted HTTP Bearer
