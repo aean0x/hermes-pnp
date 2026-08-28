@@ -312,7 +312,9 @@ def _repair_host_stomp(agent: Any) -> bool:
         want,
     )
     _set_agent_base_url(agent, want)
-    _set_agent_api_key(agent, snap.get("api_key") or "")
+    key = snap.get("api_key") or ""
+    if key:
+        _set_agent_api_key(agent, key)
     return True
 
 

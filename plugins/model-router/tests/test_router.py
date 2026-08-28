@@ -101,6 +101,26 @@ class HostStomp(unittest.TestCase):
         self.assertEqual(agent.api_key, "k1")
         self.assertEqual(agent._client_kwargs["api_key"], "k1")
 
+    def test_repair_keeps_key_when_snapshot_empty(self) -> None:
+        agent = SimpleNamespace(
+            model="deepseek-v4-pro",
+            provider="deepseek",
+            api_key="",
+            base_url="https://api.deepseek.com",
+            _client_kwargs={"base_url": "https://api.deepseek.com", "api_key": ""},
+        )
+        self.mod._remember_route(agent)
+        agent.base_url = "https://api.x.ai/v1"
+        agent.api_key = "k2"
+        agent._client_kwargs = {
+            "base_url": "https://api.x.ai/v1",
+            "api_key": "k2",
+        }
+        self.assertTrue(self.mod._repair_host_stomp(agent))
+        self.assertEqual(agent.base_url, "https://api.deepseek.com")
+        self.assertEqual(agent.api_key, "k2")
+        self.assertEqual(agent._client_kwargs["api_key"], "k2")
+
     def test_repair_ignores_matching_host(self) -> None:
         agent = SimpleNamespace(
             model="deepseek-v4-pro",

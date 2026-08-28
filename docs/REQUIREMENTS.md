@@ -36,7 +36,7 @@
 - model-router keys are `low` / `medium` / `high`. Commands `/low`
   `/medium` `/high` `/auto`. Auto turn-start classifier replies
   `low`, `medium`, or `high` (`high` is money / irreversible / security).
-  Escalation 4 on low, 3 on medium, cap high. Plugin v0.8.2.
+  Escalation 4 on low, 3 on medium, cap high. Plugin v0.8.3.
   Auto always classifies low/medium/high (no classify_high flag).
   Model id and provider are Nix options (`hermesPnP.models.*`), written
   to plugin `config.json`. Catalog JSON has labels / `best_for` /
