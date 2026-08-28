@@ -186,6 +186,17 @@ the official option PnP set via `mkDefault`.
   / `cdpAllowOrigins` / `gate.*` — persistent CDP browser + dashboard.
   Seeds `BROWSER_CDP_URL` and `settings.browser.{cdp_url,engine}`. Extra
   host mounts use official `container.extraVolumes`.
+- `services.hermesPnP.browser.profileImport` — build-time auth seed.
+  Copies cookies / saved logins / preferences from a Chromium
+  user-data dir on the build machine into the sticky profile. Filtered
+  copy (`Local State`, `<profile>/{Cookies,Network/Cookies,Login
+  Data,Preferences}` only; no Cache, WAL/SHM sidecars, Singleton*
+  locks) so the store path stays small. Reading an absolute path at
+  eval is impure — `nixos-rebuild switch --impure`; a store path
+  (e.g. a flake input) keeps the build pure. One-shot seeding
+  (empty profile or `overwrite = true`) preserves gate-added logins.
+  The seeded cookies/logins are Nix store content, readable by local
+  users on build and target machines.
 - `services.hermesPnP.packageFixes.silenceMarkers` — default `true`.
   Autonomous silence match via PYTHONPATH.
 - `services.hermesPnP.pluginInstall.*` — installer internals. Not

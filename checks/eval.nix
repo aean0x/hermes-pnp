@@ -100,6 +100,24 @@ let
 
   browserConfig = eval [ ../examples/browser.nix ];
 
+  # profileImport copies the fixture with builtins.path (flake-relative,
+  # so this stays pure for `nix flake check`). The decoy Cache subtree
+  # must be filtered out of the store copy.
+  profileImportConfig = eval [
+    ../examples/browser.nix
+    {
+      services.hermesPnP.browser.profileImport = {
+        enable = true;
+        source = ./browser-profile-fixture;
+      };
+    }
+  ];
+
+  profileImportScript =
+    profileImportConfig.systemd.services.hermes-browser-profile-import.script;
+  profileImportStorePath =
+    profileImportConfig.services.hermesPnP.internal.browser.importedAuth;
+
   toolboxConfig = eval [ ../examples/toolbox.nix ];
 
   ghUnwrappedConfig = eval [
@@ -233,6 +251,12 @@ in
     test "${modulesConfig.services.hermes-agent.settings.browser.engine}" = "${modulesConfig.services.hermesPnP.browser.engine}"
     test "${toString (modulesConfig.systemd.services ? hermes-browser)}" = "1"
     test "${toString (modulesConfig.systemd.services ? hermes-browser-gate)}" = "1"
+    test "${toString (profileImportConfig.systemd.services ? hermes-browser-profile-import)}" = "1"
+    test "${toString (lib.hasInfix "hermes-browser-auth" profileImportScript)}" = "1"
+    test "${toString (lib.hasInfix ".hermes-profile-imported" profileImportScript)}" = "1"
+    test "${toString (lib.hasInfix "overwrite=false" profileImportScript)}" = "1"
+    test "${lib.concatStringsSep " " (builtins.attrNames (builtins.readDir profileImportStorePath))}" = "Default Local State"
+    test "${lib.concatStringsSep " " (builtins.attrNames (builtins.readDir "${profileImportStorePath}/Default"))}" = "Cookies Login Data Network Preferences"
     test "${toString (modulesConfig.systemd.services ? hermes-browser-vnc)}" = ""
     test "${toString (modulesConfig.systemd.services ? hermes-browser-novnc)}" = ""
     test "${toString (modulesConfig.systemd.services ? hermes-browser-env)}" = ""
@@ -454,6 +478,12 @@ in
     test "${toString (optionsEval.options.services.hermesPnP.browser.container ? shmSize)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? gate)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? cdpAllowOrigins)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser ? profileImport)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser.profileImport ? source)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser.profileImport ? profileName)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser.profileImport ? overwrite)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.browser.profileImport.enable.default or false)}" = ""
+    test "${optionsEval.options.services.hermesPnP.browser.profileImport.profileName.default or "x"}" = "Default"
     test "${toString (optionsEval.options.services.hermesPnP.browser ? noVNC)}" = ""
     test "${toString (optionsEval.options.services.hermesPnP.toolbox.enable.isDefined or true)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP.browser.enable.default or true)}" = "1"
