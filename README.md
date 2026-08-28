@@ -156,7 +156,7 @@ Materialize to `$stateDir/plugins/<name>`, discovered via
 installed through official `extraPlugins`. `extraPluginDirs` is
 `attrsOf path` for your own trees (`extraPlugins` is a renamed alias).
 
-**model-router** (v0.8.2) — per-turn low / medium / high, labelled
+**model-router** (v0.8.3) — per-turn low / medium / high, labelled
 Quick / Standard / Expert. Auto classifies all three; `high` is only
 money / irreversible / security. Pins: `/low` `/medium` `/high`
 `/auto`. Writes `config.json` + WebUI extension from
