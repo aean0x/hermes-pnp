@@ -237,8 +237,26 @@ def _set_agent_base_url(agent: Any, base: str) -> None:
         agent._client_kwargs = kw
 
 
+def _agent_api_key(agent: Any) -> str:
+    kw = getattr(agent, "_client_kwargs", None)
+    if isinstance(kw, dict):
+        key = kw.get("api_key")
+        if key:
+            return str(key)
+    return str(getattr(agent, "api_key", "") or "")
+
+
+def _set_agent_api_key(agent: Any, key: str) -> None:
+    agent.api_key = key
+    kw = getattr(agent, "_client_kwargs", None)
+    if isinstance(kw, dict):
+        kw = dict(kw)
+        kw["api_key"] = key
+        agent._client_kwargs = kw
+
+
 def _remember_route(agent: Any) -> None:
-    """Snapshot a coherent model/provider/host triple for host-stomp repair."""
+    """Snapshot a coherent model/provider/host/key for host-stomp repair."""
     if agent is None:
         return
     model = getattr(agent, "model", "") or ""
@@ -253,16 +271,17 @@ def _remember_route(agent: Any) -> None:
             "model": _norm(model),
             "provider": _norm(provider),
             "base_url": base,
+            "api_key": _agent_api_key(agent),
         }
 
 
 def _repair_host_stomp(agent: Any) -> bool:
     """Undo a credential-refresh write that put the live provider on the old host.
 
-    WebUI `_refresh_cached_agent_runtime` copies base_url from the request's
-    original kwargs while leaving model/provider. Restore the last coherent
-    host for this (model, provider) instead of rebuilding the client on x.ai
-    with a DeepSeek model name.
+    WebUI `_refresh_cached_agent_runtime` copies base_url *and* api_key from
+    the request's original kwargs while leaving model/provider. Restore the
+    last coherent host+key for this (model, provider) instead of rebuilding
+    the client on DeepSeek's URL with the session's xAI key (HTTP 401).
     """
     if agent is None:
         return False
@@ -293,6 +312,7 @@ def _repair_host_stomp(agent: Any) -> bool:
         want,
     )
     _set_agent_base_url(agent, want)
+    _set_agent_api_key(agent, snap.get("api_key") or "")
     return True
 
 
