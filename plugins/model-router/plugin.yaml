@@ -1,5 +1,5 @@
 name: model-router
-version: 0.8.3
+version: 0.8.4
 description: >-
   Per-turn cost router across three named tiers (low / medium / high),
   labelled Quick / Standard / Expert. Classifies each user turn from

@@ -26,7 +26,9 @@ import run_agent. Does not write SOUL.md.
 
 from __future__ import annotations
 
+import functools
 import importlib.util
+import inspect
 import logging
 import os
 import re
@@ -366,13 +368,40 @@ def _get_agent(session_id: str = "") -> Any | None:
     return None
 
 
+def _kwargs_accepted_by(orig: Any, kwargs: dict) -> dict:
+    """Drop kwargs the original callable cannot take.
+
+    WebUI inspects AIAgent.run_conversation and treats a ``**kwargs`` wrapper
+    as supporting conversation_history_revision. The agent at our pin does
+    not; forwarding that kwarg TypeErrors every session.
+    """
+    try:
+        sig = inspect.signature(orig)
+    except (TypeError, ValueError):
+        return kwargs
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return kwargs
+    allowed = {
+        name
+        for name, param in sig.parameters.items()
+        if param.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    return {key: value for key, value in kwargs.items() if key in allowed}
+
+
 def _wrap_cls_method(cls: Any, name: str, factory: Any) -> bool:
     orig = getattr(cls, name, None)
     if orig is None:
         return False
     if getattr(orig, "_model_router_wrapped", False):
         return True
-    wrapped = factory(orig)
+    inner = factory(orig)
+
+    @functools.wraps(orig)
+    def wrapped(self, *args, **kwargs):
+        return inner(self, *args, **_kwargs_accepted_by(orig, kwargs))
+
     wrapped._model_router_wrapped = True  # type: ignore[attr-defined]
     setattr(cls, name, wrapped)
     return True

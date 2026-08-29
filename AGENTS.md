@@ -76,7 +76,7 @@ skills/                   # first-party skill trees
 Adding a plugin: drop `plugins/<name>/` and add one catalog line.
 
 Router tiers: `models.low` / `models.medium` / `models.high` (plugin
-v0.8.3). Auto classifies all three (labels Quick / Standard / Expert);
+v0.8.4). Auto classifies all three (labels Quick / Standard / Expert);
 `high` is money / irreversible / security. Pins `/low` `/medium`
 `/high` `/auto`. Slot `model` / `provider` / `label` / `short` /
 `best_for` are Nix options. Nix also has `models.auxiliary` (official
