@@ -145,5 +145,71 @@ class HostStomp(unittest.TestCase):
         self.assertFalse(self.mod._repair_host_stomp(agent))
 
 
+class CaptureWrap(unittest.TestCase):
+    """WebUI inspect.signature follows the wrap; **kwargs looked like support."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.mod = _load()
+
+    @staticmethod
+    def _supports_kwarg(func, kwarg_name: str) -> bool:
+        # Mirror hermes-webui api.streaming._supports_kwarg.
+        import inspect as inspect_mod
+
+        sig = inspect_mod.signature(func)
+        return any(
+            param.kind == param.VAR_KEYWORD or param.name == kwarg_name
+            for param in sig.parameters.values()
+        )
+
+    def test_wrap_does_not_advertise_revision_kwarg(self) -> None:
+        class Agent:
+            def run_conversation(
+                self,
+                user_message,
+                conversation_history=None,
+            ):
+                return user_message
+
+        def factory(orig):
+            def wrapped_run(self, *args, **kwargs):
+                return orig(self, *args, **kwargs)
+
+            return wrapped_run
+
+        self.assertTrue(self.mod._wrap_cls_method(Agent, "run_conversation", factory))
+        self.assertFalse(
+            self._supports_kwarg(
+                Agent().run_conversation,
+                "conversation_history_revision",
+            )
+        )
+
+    def test_wrap_drops_unknown_kwargs(self) -> None:
+        seen: dict = {}
+
+        class Agent:
+            def run_conversation(self, user_message, conversation_history=None):
+                seen["user_message"] = user_message
+                seen["conversation_history"] = conversation_history
+                return "ok"
+
+        def factory(orig):
+            def wrapped_run(self, *args, **kwargs):
+                return orig(self, *args, **kwargs)
+
+            return wrapped_run
+
+        self.mod._wrap_cls_method(Agent, "run_conversation", factory)
+        result = Agent().run_conversation(
+            user_message="hi",
+            conversation_history=[],
+            conversation_history_revision={"session_id": "s1"},
+        )
+        self.assertEqual(result, "ok")
+        self.assertEqual(seen, {"user_message": "hi", "conversation_history": []})
+
+
 if __name__ == "__main__":
     unittest.main()
