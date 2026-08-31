@@ -360,6 +360,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
             fwd.append((key, value))
         for key, value in inject.items():
             fwd.append((key, value))
+        # Upstream User-Agent override. Cloudflare-fronted upstreams (e.g.
+        # mcp.banksync.io) return HTTP 403 Error 1010 for Python-client
+        # signatures (python-httpx / Python-urllib); the MCP SDK sends
+        # python-httpx by default. When the backend declares a userAgent,
+        # replace the forwarded client UA with it (never both).
+        user_agent = backend.get("userAgent")
+        if user_agent:
+            fwd = [(k, v) for k, v in fwd if k.lower() != "user-agent"]
+            fwd.append(("User-Agent", user_agent))
         if body:
             fwd.append(("Content-Length", str(len(body))))
 

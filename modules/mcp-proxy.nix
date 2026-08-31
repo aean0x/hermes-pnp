@@ -210,6 +210,17 @@ let
           default = { };
           description = "Static headers forwarded to upstream.";
         };
+        userAgent = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            Upstream User-Agent sent to this backend, replacing the client's
+            UA. Cloudflare-fronted upstreams (mcp.banksync.io) return 403
+            Error 1010 for Python-client signatures (python-httpx / 
+            Python-urllib), and the Hermes MCP SDK sends python-httpx by
+            default — set e.g. "mcp-proxy/1" here to pass their WAF.
+          '';
+        };
         secrets = mkOption {
           type = types.attrsOf (
             types.submodule {
@@ -409,6 +420,7 @@ let
         }
       ) b.toolkits;
     }
+    // lib.optionalAttrs (b.userAgent != null) { userAgent = b.userAgent; }
   ) enabledBackends;
 
   proxyConfig = {

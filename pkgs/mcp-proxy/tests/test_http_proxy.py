@@ -184,6 +184,7 @@ class EchoUpstream(BaseHTTPRequestHandler):
                     "echo": msg,
                     "auth": self.headers.get("Authorization"),
                     "proxy_token": self.headers.get("X-MCP-Proxy-Token"),
+                    "user_agent": self.headers.get("User-Agent"),
                 },
             }
         body = json.dumps(result).encode("utf-8")
@@ -337,6 +338,43 @@ class EndToEnd(unittest.TestCase):
                 out = json.loads(resp.read().decode("utf-8"))
             self.assertEqual(out["result"]["auth"], "Bearer client-token")
             self.assertIsNone(out["result"]["proxy_token"])
+        finally:
+            proxy.shutdown()
+            upstream.shutdown()
+
+    def test_upstream_user_agent_override(self):
+        upstream = HTTPServer(("127.0.0.1", 0), EchoUpstream)
+        threading.Thread(target=upstream.serve_forever, daemon=True).start()
+        backend = {
+            "path": "/banksync",
+            "upstream": f"http://127.0.0.1:{upstream.server_address[1]}/mcp",
+            "userAgent": "mcp-proxy/1",
+            "auth": {"mode": "passthrough"},
+        }
+        proxy = serve(
+            "127.0.0.1:0",
+            {"banksync": backend},
+            None,
+            {"mode": "token", "value": "proxy-secret"},
+        )
+        threading.Thread(target=proxy.serve_forever, daemon=True).start()
+        ping = {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}
+        try:
+            req = Request(
+                f"http://127.0.0.1:{proxy.server_address[1]}/banksync",
+                data=json.dumps(ping).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-MCP-Proxy-Token": "proxy-secret",
+                    "User-Agent": "python-httpx/0.27",
+                },
+                method="POST",
+            )
+            with urlopen(req, timeout=5) as resp:
+                out = json.loads(resp.read().decode("utf-8"))
+            # The configured UA replaces the client's Python signature, which
+            # Cloudflare-fronted upstreams (mcp.banksync.io Error 1010) block.
+            self.assertEqual(out["result"]["user_agent"], "mcp-proxy/1")
         finally:
             proxy.shutdown()
             upstream.shutdown()
