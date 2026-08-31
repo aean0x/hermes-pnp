@@ -1,0 +1,49 @@
+diff --git a/tools/mcp_tool.py b/tools/mcp_tool.py
+index ffcdff532..292fbcdaa 100644
+--- a/tools/mcp_tool.py
++++ b/tools/mcp_tool.py
+@@ -3585,6 +3585,24 @@ class MCPServerTask:
+         )
+         return "reconnect"
+ 
++    def _refresh_runtime_config(self) -> Optional[dict]:
++        """Re-resolve this server's config from disk before a revival attempt.
++
++        A parked task otherwise keeps probing with the config captured at
++        task creation. A token or header rotation on disk (e.g. the
++        mcp-proxy client token) would then keep failing every self-probe
++        until a gateway restart — the same "stuck until restart" class as
++        FA-024. Returns the fresh config, or None when the server has
++        vanished from config (caller keeps the previous config).
++        """
++        try:
++            fresh = _load_mcp_config().get(self.name)
++        except Exception:
++            fresh = None
++        if fresh:
++            self._config = fresh
++        return fresh
++
+     async def _run_http(self, config: dict):
+         """Run the server using HTTP/StreamableHTTP transport."""
+         _ensure_mcp_sdk()
+@@ -4203,6 +4221,9 @@ class MCPServerTask:
+                             "reconnect request); rebuilding transport.",
+                             self.name,
+                         )
++                        _fresh = self._refresh_runtime_config()
++                        if _fresh is not None:
++                            config = _fresh
+                         initial_retries = 0
+                         self._reconnect_retries = 0
+                         backoff = 1.0
+@@ -4235,6 +4256,9 @@ class MCPServerTask:
+                             "reconnect request); rebuilding transport.",
+                             self.name,
+                         )
++                        _fresh = self._refresh_runtime_config()
++                        if _fresh is not None:
++                            config = _fresh
+                         initial_retries = 0
+                         self._reconnect_retries = 0
+                         backoff = 1.0

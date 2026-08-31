@@ -69,6 +69,39 @@ let
       fi
     '';
 
+  statePromptOverlay =
+    hermesVenv:
+    pkgs.runCommand "hermes-agent-state-prompt-fix" { } ''
+      found=""
+      for cand in ${hermesVenv}/lib/python*/site-packages; do
+        if [ -f "$cand/hermes_state.py" ] && [ -d "$cand/tools" ]; then
+          found="$cand"; break
+        fi
+      done
+      if [ -z "$found" ]; then
+        echo "state-prompt fix: hermes_state.py not found in hermesVenv" >&2
+        exit 1
+      fi
+      mkdir -p "$out/site-packages/tools"
+      cp -a "$found/hermes_state.py" "$out/site-packages/hermes_state.py"
+      cp -a "$found/tools/mcp_tool.py" "$out/site-packages/tools/mcp_tool.py"
+      chmod u+w "$out/site-packages/hermes_state.py" "$out/site-packages/tools/mcp_tool.py"
+      ${pkgs.patch}/bin/patch -p1 -d "$out/site-packages" \
+        < ${../patches/hermes-agent/fa024-system-prompt-persist.patch}
+      ${pkgs.patch}/bin/patch -p1 -d "$out/site-packages" \
+        < ${../patches/hermes-agent/mcp-parked-revival-refresh.patch}
+      if ! grep -q 'SET system_prompt_hash = ?, system_prompt = ?' \
+          "$out/site-packages/hermes_state.py"; then
+        echo "state-prompt fix: expected update_system_prompt change missing" >&2
+        exit 1
+      fi
+      if ! grep -q '_refresh_runtime_config' \
+          "$out/site-packages/tools/mcp_tool.py"; then
+        echo "state-prompt fix: expected MCP revival refresh missing" >&2
+        exit 1
+      fi
+    '';
+
   wrapPackage =
     extraPythonPackages: extraDependencyGroups:
     let
@@ -125,6 +158,16 @@ let
     else
       null;
 
+  statePromptPythonpath =
+    if pnp.packageFixes.statePromptPersist && (pkg ? hermesVenv) then
+      "${statePromptOverlay pkg.hermesVenv}/site-packages"
+    else
+      null;
+
+  combinedPythonpath = lib.concatStringsSep ":" (
+    lib.filter (p: p != null) [ silencePythonpath statePromptPythonpath ]
+  );
+
   hermesRuntimeEnv = {
     HERMES_BUNDLED_PLUGINS = "${share}/plugins";
     HERMES_BUNDLED_SKILLS = "${share}/skills";
@@ -134,8 +177,8 @@ let
     HERMES_WEB_DIST = "${share}/web_dist";
     HERMES_TUI_DIR = "${pkg}/ui-tui";
   }
-  // optionalAttrs (silencePythonpath != null) {
-    PYTHONPATH = silencePythonpath;
+  // optionalAttrs (combinedPythonpath != "") {
+    PYTHONPATH = combinedPythonpath;
   };
 in
 {
@@ -145,6 +188,17 @@ in
       default = true;
       description = ''
         Patch autonomous gateway silence matching via PYTHONPATH.
+      '';
+    };
+
+    packageFixes.statePromptPersist = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Patch hermes_state.py / tools/mcp_tool.py via PYTHONPATH overlay:
+        persist the system prompt text in the sessions row (FA-024 prefix-
+        cache misses) and refresh a parked MCP server's config from disk
+        before each revival probe (token rotations heal without restart).
       '';
     };
 
@@ -165,7 +219,7 @@ in
         lib.mapAttrs (_: mkDefault) hermesRuntimeEnv
       );
     }
-    (mkIf (pnp.packageFixes.silenceMarkers || extrasNonEmpty) {
+    (mkIf (pnp.packageFixes.silenceMarkers || pnp.packageFixes.statePromptPersist || extrasNonEmpty) {
       # mkDefault so a consumer package assignment wins.
       services.hermes-agent.package = mkDefault wrapped;
     })

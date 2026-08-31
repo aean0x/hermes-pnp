@@ -1,0 +1,113 @@
+commit 45afc1c0b71a5ad1df99d7600b3075e6a4775df2
+Author: aean0x <3682177+aean0x@users.noreply.github.com>
+Date:   Mon Aug 31 19:46:25 2026 +0000
+
+    fix(state): persist system prompt text in sessions row; stop deleting just-stored prompts
+    
+    FA-024: 'Stored system prompt for session X is null; rebuilding from
+    scratch this turn. Prefix cache will miss until the rebuild persists'
+    fired 296x across sessions since 08-12.
+    
+    Root causes:
+    1. _insert_session_row hard-coded NULL for the system_prompt column even
+       when a prompt was passed — the restore path depends entirely on the
+       separate system_prompts hash table + JOIN.
+    2. update_system_prompt stored only the hash and NULLed the column.
+    3. _delete_unreferenced_system_prompts deleted a just-stored prompt row
+       when the referencing UPDATE affected 0 rows (first turn: the session
+       row does not exist yet), so the hash existed but the text was gone.
+    
+    Fix: store the prompt TEXT in the sessions.system_prompt column on
+    insert and update (hash dedup table kept), backfill the column on
+    ON CONFLICT for bare gateway rows, and keep the just-stored hash out of
+    the same-transaction orphan sweep. The restore JOIN falls back to the
+    column text, so a deleted hash row can no longer cause a rebuild.
+
+diff --git a/hermes_state.py b/hermes_state.py
+index 8fed65b94..f52850a83 100644
+--- a/hermes_state.py
++++ b/hermes_state.py
+@@ -4483,13 +4483,24 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+         return prompt_hash
+ 
+     @staticmethod
+-    def _delete_unreferenced_system_prompts(conn) -> None:
++    def _delete_unreferenced_system_prompts(conn, keep_hash: Optional[str] = None) -> None:
++        # ``keep_hash``: the prompt row this transaction just stored. On the
++        # first turn of a session the UPDATE that references it affects zero
++        # rows (the session row does not exist yet — _ensure_db_session runs
++        # later), so a naive "not referenced by any session" DELETE would
++        # immediately remove the very prompt that was just written, and the
++        # next turn's restore finds system_prompt NULL and rebuilds (FA-024
++        # prefix-cache miss). Exclude the just-stored hash so the row survives
++        # until the session references it; the periodic cleanup removes it
++        # once it is genuinely orphaned.
+         conn.execute(
+             "DELETE FROM system_prompts "
+             "WHERE NOT EXISTS ("
+             "SELECT 1 FROM sessions "
+             "WHERE sessions.system_prompt_hash = system_prompts.hash"
+             ")"
++            + (" AND hash != ?" if keep_hash else ""),
++            (keep_hash,) if keep_hash else (),
+         )
+ 
+     @staticmethod
+@@ -5973,12 +5984,12 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+             system_prompt_hash = self._store_system_prompt(conn, system_prompt)
+             conn.execute(
+                 """INSERT INTO sessions (
+-                   id, source, user_id, session_key, chat_id, chat_type, thread_id,
+-                   model, model_config, system_prompt, system_prompt_hash,
+-                   parent_session_id, cwd, profile_name, git_repo_root,
+-                   origin_json, display_name, started_at
++                  id, source, user_id, session_key, chat_id, chat_type, thread_id,
++                  model, model_config, system_prompt, system_prompt_hash,
++                  parent_session_id, cwd, profile_name, git_repo_root,
++                  origin_json, display_name, started_at
+                 )
+-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
++                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        model = COALESCE(sessions.model, excluded.model),
+                        model_config = CASE
+@@ -6007,7 +6018,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+                        system_prompt = CASE
+                            WHEN sessions.system_prompt_hash IS NULL
+                                 AND excluded.system_prompt_hash IS NOT NULL
+-                           THEN NULL
++                           THEN COALESCE(sessions.system_prompt, excluded.system_prompt)
+                            ELSE sessions.system_prompt
+                        END,
+                        session_key = COALESCE(sessions.session_key, excluded.session_key),
+@@ -6030,6 +6041,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+                     thread_id,
+                     model,
+                     json.dumps(model_config) if model_config else None,
++                    system_prompt,
+                     system_prompt_hash,
+                     parent_session_id,
+                     cwd,
+@@ -6041,7 +6053,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+                 ),
+             )
+             if system_prompt_hash is not None:
+-                self._delete_unreferenced_system_prompts(conn)
++                self._delete_unreferenced_system_prompts(conn, system_prompt_hash)
+             if parent_session_id:
+                 conn.execute(
+                     """UPDATE sessions
+@@ -8267,10 +8279,10 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+             system_prompt_hash = self._store_system_prompt(conn, system_prompt)
+             conn.execute(
+                 "UPDATE sessions "
+-                "SET system_prompt_hash = ?, system_prompt = NULL WHERE id = ?",
+-                (system_prompt_hash, session_id),
++                "SET system_prompt_hash = ?, system_prompt = ? WHERE id = ?",
++                (system_prompt_hash, system_prompt, session_id),
+             )
+-            self._delete_unreferenced_system_prompts(conn)
++            self._delete_unreferenced_system_prompts(conn, system_prompt_hash)
+         self._execute_write(_do)
+ 
+     def update_session_model(
