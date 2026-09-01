@@ -21,6 +21,7 @@
       provider = "xai-oauth";
       model = "grok-4.6";
     };
+    # model.default = "medium"; # tier seeding settings.model.default: low | medium | high
     # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; };
     # models.high.reasoning_effort = "high"; # else Hermes session default
     # models.low.best_for = [ "Short acknowledgements" ];

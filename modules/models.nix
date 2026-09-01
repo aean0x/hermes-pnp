@@ -1,6 +1,11 @@
 # Seed services.hermes-agent.settings from hermesPnP.models.
-# settings is deepConfigType: do not wrap leaves in mkDefault.
-# Last writer wins; assign consumer settings after the PnP import.
+# services.hermesPnP.model.default ("low" | "medium" | "high"; default
+# "medium") picks which tier seeds settings.model.default. fallback_model
+# stays on models.high.
+#
+# settings is deepConfigType: do not wrap leaves in mkDefault (the merge
+# stores the wrapper as a literal). Last writer wins; assign consumer
+# settings after the PnP import.
 #
 # Model-router only switches model/provider. reasoning_effort is Hermes
 # session state except for official auxiliary slots, which seed from
@@ -187,6 +192,29 @@ let
   ) { } namedModels;
 in
 {
+  options.services.hermesPnP.model = {
+    default = mkOption {
+      type = types.enum [
+        "low"
+        "medium"
+        "high"
+      ];
+      default = "medium";
+      description = ''
+        Which router tier seeds settings.model.default. The chosen
+        tier's model + provider are written to
+        services.hermes-agent.settings.model.{default,provider}.
+        fallback_model stays on models.high.
+
+        Consumers can still override directly: assign
+        services.hermes-agent.settings.model.default in a module after
+        the PnP import (deepConfigType last-writer-wins). Do not wrap
+        that leaf in mkDefault — the merge stores it as a literal.
+      '';
+      example = "high";
+    };
+  };
+
   options.services.hermesPnP.models = {
     low = mkNamedModel {
       provider = "deepseek";
@@ -210,10 +238,11 @@ in
       inherit (pluginModels.high) best_for label short;
       compression_ratio = 0.28;
       description = ''
-        Session identity + voice. OOBE seed for settings.model.default
-        and fallback. Override here — not settings.model.default —
-        unless you assign settings after the PnP import (deepConfigType
-        last writer wins; mkDefault on a leaf is stored as a literal).
+        Session identity + voice. OOBE seed for settings.fallback_model.
+        Pick it as the session default via services.hermesPnP.model.default
+        = "high". Override settings.model.default directly only in a
+        module after the PnP import (deepConfigType last writer wins;
+        mkDefault on a leaf is stored as a literal).
       '';
     };
 
@@ -234,8 +263,8 @@ in
   config = mkIf pnp.enable {
     services.hermes-agent.settings = {
       model = {
-        provider = models.high.provider;
-        default = models.high.model;
+        provider = models.${pnp.model.default}.provider;
+        default = models.${pnp.model.default}.model;
         # No global context_length. Hermes resolves each model's window.
         # Override per name via models.<name>.context_length → model_overrides.
       };
