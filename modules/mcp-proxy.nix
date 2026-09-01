@@ -22,7 +22,10 @@ let
   agentEnabled = options.services ? hermes-agent && config.services.hermes-agent.enable;
   tokenAuth = cfg.clientAuth == "token";
   clientTokenFile = cfg.clientTokenFile;
-  clientEnvFile = "/run/mcp-proxy/client.env";
+  # Persist next to the token. /run is empty at boot, and official
+  # hermes-agent-setup rewrites $HERMES_HOME/.env from environmentFiles
+  # before a /run file would exist.
+  clientEnvFile = "/var/lib/mcp-proxy/client.env";
   clientHeader = "X-MCP-Proxy-Token";
 
   credName =
@@ -561,11 +564,14 @@ in
     (mkIf (cfg.enable && tokenAuth) {
       systemd.tmpfiles.rules = [
         "d /var/lib/mcp-proxy 0750 root root - -"
-        "d /run/mcp-proxy 0750 root root - -"
       ];
 
-      system.activationScripts.mcp-proxy-client-token = lib.stringAfter [ "etc" ] ''
-        ${pkgs.coreutils}/bin/install -d -m 0750 /var/lib/mcp-proxy /run/mcp-proxy
+      # Before hermes-agent-setup: official activation concatenates
+      # environmentFiles into $HERMES_HOME/.env from scratch. A missing
+      # client.env at that point drops MCP_PROXY_TOKEN and parks every
+      # proxied MCP (401) until the next manual restore.
+      system.activationScripts.mcp-proxy-client-token = lib.stringAfter [ "etc" "users" "groups" ] ''
+        ${pkgs.coreutils}/bin/install -d -m 0750 /var/lib/mcp-proxy
         if [ ! -s ${lib.escapeShellArg clientTokenFile} ]; then
           umask 077
           ${pkgs.openssl}/bin/openssl rand -hex 24 > ${lib.escapeShellArg clientTokenFile}
@@ -582,6 +588,19 @@ in
     })
 
     (mkIf (cfg.enable && tokenAuth && agentEnabled) {
+      system.activationScripts.hermes-agent-setup.deps = [ "mcp-proxy-client-token" ];
+      system.activationScripts.hermes-agent-setup.text =
+        let
+          hermesDotenv = "${config.services.hermes-agent.stateDir}/.hermes/.env";
+        in
+        lib.mkAfter ''
+          if [ -s ${lib.escapeShellArg clientEnvFile} ] && [ -f ${lib.escapeShellArg hermesDotenv} ]; then
+            if ! ${pkgs.gnugrep}/bin/grep -q '^MCP_PROXY_TOKEN=' ${lib.escapeShellArg hermesDotenv}; then
+              ${pkgs.coreutils}/bin/cat ${lib.escapeShellArg clientEnvFile} >> ${lib.escapeShellArg hermesDotenv}
+              ${pkgs.coreutils}/bin/chown ${config.services.hermes-agent.user}:${config.services.hermes-agent.group} ${lib.escapeShellArg hermesDotenv} || true
+            fi
+          fi
+        '';
       services.hermes-agent.environmentFiles = lib.mkAfter [ clientEnvFile ];
       services.hermes-agent.mcpServers = lib.mapAttrs (_: _: {
         headers.${clientHeader} = mkDefault "\${MCP_PROXY_TOKEN}";

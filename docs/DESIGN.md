@@ -499,9 +499,11 @@ Point official `mcpServers` at `http://127.0.0.1:<port>/…`.
 `clientAuth` is `none` on the library path so the proxy can run
 without Hermes. Composer sets `mkDefault "token"`: a host token file,
 `X-MCP-Proxy-Token: ${MCP_PROXY_TOKEN}` on mcpServers named like a
-backend, and `/run/mcp-proxy/client.env` on official
-`environmentFiles`. `/healthz` stays open. Set `clientAuth = "none"`
-to turn that off.
+backend, and `/var/lib/mcp-proxy/client.env` on official
+`environmentFiles`. That env file is minted in activation *before*
+`hermes-agent-setup` rewrites `$HERMES_HOME/.env` (a `/run` file is
+empty at boot and parks every proxied MCP with 401). `/healthz` stays
+open. Set `clientAuth = "none"` to turn that off.
 
 Site-specific `tools.deny` / account filters stay in the consumer.
 When the proxy is on, hermes-agent and hermes-webui wait for it
