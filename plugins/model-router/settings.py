@@ -162,6 +162,12 @@ def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
         "When uncertain between low and medium, prefer low — a wrong low "
         "route is cheaply corrected by escalation."
     )
+    lines.append(
+        "The previous turn's tier is given in the request. If it was low or "
+        "medium, prefer to keep it unless the scope or topic of the work has "
+        "significantly changed. If it was high, do not carry it over — "
+        "classify at-will."
+    )
     lines.append("Respond with ONLY one word: " + " or ".join(names) + ".")
     return "\n".join(lines)
 
