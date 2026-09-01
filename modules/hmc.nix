@@ -100,6 +100,16 @@ let
     cp -a ${hmcSrc}/. "$out/"
     chmod -R u+w "$out"
     rm -rf "$out/.github" "$out/tests" "$out/.gitignore"
+    # Local perf patch: memoize the short-circuit decision and the
+    # per-message token estimate so the per-turn materialize pass does
+    # not re-run a battery of multiline regexes over every historical
+    # tool output.  Steady-state pre_llm_call cost drops ~1.4s -> ~70ms
+    # on a 12.8k-message session; behavior (visible view, backups,
+    # token totals, savings accounting) is byte-identical, verified
+    # against the upstream test suite (254 pass) plus a real-session
+    # behavioral diff.  Consumer patch against upstream plugin code —
+    # upstream-worthy; revisit when the pin moves.
+    patch -p1 -d "$out" < ${../pkgs/hermes-context-manager-incremental.patch}
     cp ${hmcConfig} "$out/config.yaml"
   '';
 in

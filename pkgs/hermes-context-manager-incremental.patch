@@ -1,0 +1,153 @@
+diff --git a/hermes_context_manager/engine.py b/hermes_context_manager/engine.py
+index 10a6107..932e9b0 100644
+--- a/hermes_context_manager/engine.py
++++ b/hermes_context_manager/engine.py
+@@ -323,7 +323,9 @@ def _apply_tool_output_pruning(
+         _credit_savings(state, tool_call_id, strategy, saved)
+ 
+ 
+-def _inject_message_ids(messages: list[dict[str, Any]]) -> dict[str, float]:
++def _inject_message_ids(
++    messages: list[dict[str, Any]], state: SessionState
++) -> dict[str, float]:
+     """Build a message-id timestamp snapshot WITHOUT polluting content.
+ 
+     Until 0.3.2 this function appended ``\\n<hmc-message-id>m0NN</hmc-message-id>``
+@@ -355,9 +357,42 @@ def _inject_message_ids(messages: list[dict[str, Any]]) -> dict[str, float]:
+             continue
+         snapshot[f"m{counter:03d}"] = float(message.get("timestamp", 0))
+         counter += 1
++    state.message_id_snapshot.clear()
++    state.message_id_snapshot.update(snapshot)
+     return snapshot
+ 
+ 
++def _estimate_total_tokens(
++    messages: list[dict[str, Any]], state: SessionState
++) -> int:
++    """Sum per-message token estimates, memoized by message identity.
++
++    ``estimate_message_tokens`` is a pure function of a message's API-visible
++    fields, and the strategy passes above already ran, so the estimate
++    reflects the same post-mutation content the model sees.  Messages are
++    immutable between turns except for HMC's own restore->re-mutate cycle
++    (which reproduces identical content) and external rewrites (Hermes
++    compaction), both of which change ``len(content)`` for every practical
++    case; the length guard invalidates the cache entry when they don't.
++    Cache keys are process-local ``id()`` values, so the cache is
++    runtime-only (never persisted) and self-heals on state reload.
++    """
++    cache = state.message_token_cache
++    total = 0
++    for message in messages:
++        key = id(message)
++        content = message.get("content")
++        content_len = len(content) if isinstance(content, str) else -1
++        entry = cache.get(key)
++        if entry is not None and entry[0] == content_len:
++            total += entry[1]
++        else:
++            tokens = estimate_message_tokens(message)
++            cache[key] = (content_len, tokens)
++            total += tokens
++    return total
++
++
+ def _apply_head_tail_truncation(
+     messages: list[dict[str, Any]],
+     state: SessionState,
+@@ -502,10 +537,21 @@ def _apply_short_circuit_replacement(
+     config: HmcConfig,
+     content_backup: dict[int, Any] | None = None,
+ ) -> None:
+-    """Replace tool outputs that match known success patterns with one-liners."""
++    """Replace tool outputs that match known success patterns with one-liners.
++
++    The per-message decision is memoized on ``state.short_circuit_memo``:
++    ``apply_short_circuits`` is a pure function of content and the rules are
++    stable for the process, while the restore cycle rewinds content to the
++    same raw original every turn.  A content-length match therefore means
++    the cached (replacement, original_tokens) still holds, so re-scanning
++    already-seen tool outputs costs one dict lookup instead of a battery of
++    multiline regexes.  Length mismatch (external rewrite, pruning) falls
++    back to a full recompute.
++    """
+     if not config.short_circuits.enabled:
+         return
+ 
++    memo = state.short_circuit_memo
+     for idx, message in enumerate(messages):
+         if message.get("role") != "tool":
+             continue
+@@ -519,14 +565,20 @@ def _apply_short_circuit_replacement(
+         content = message.get("content")
+         if not isinstance(content, str) or len(content) < 20:
+             continue
+-        replacement = apply_short_circuits(content)
+-        if replacement is not None:
++        cached = memo.get(tool_call_id)
++        if cached is not None and cached[0] == len(content):
++            replacement, original_tokens = cached[1], cached[2]
++        else:
++            replacement = apply_short_circuits(content)
+             original_tokens = estimate_tokens(content)
+-            _capture_content_backup(content_backup, idx, message)
+-            message["content"] = replacement
+-            new_tokens = estimate_tokens(replacement)
+-            saved = original_tokens - new_tokens
+-            _credit_savings(state, tool_call_id, "short_circuit", saved)
++            memo[tool_call_id] = (len(content), replacement, original_tokens)
++        if replacement is None:
++            continue
++        _capture_content_backup(content_backup, idx, message)
++        message["content"] = replacement
++        new_tokens = estimate_tokens(replacement)
++        saved = original_tokens - new_tokens
++        _credit_savings(state, tool_call_id, "short_circuit", saved)
+ 
+ 
+ def apply_strategies_to_tool_output(
+@@ -594,10 +646,8 @@ def materialize_view(
+     _apply_deduplication(messages, state, config)
+     _apply_error_purging(messages, state, config)
+     _apply_tool_output_pruning(messages, state, content_backup)
+-    message_id_snapshot = _inject_message_ids(messages)
+-    state.message_id_snapshot.clear()
+-    state.message_id_snapshot.update(message_id_snapshot)
+-    total_tokens = sum(estimate_message_tokens(message) for message in messages)
++    message_id_snapshot = _inject_message_ids(messages, state)
++    total_tokens = _estimate_total_tokens(messages, state)
+     return MaterializedView(
+         messages=messages,
+         message_id_snapshot=message_id_snapshot,
+diff --git a/hermes_context_manager/state.py b/hermes_context_manager/state.py
+index e977f0a..d91ea85 100644
+--- a/hermes_context_manager/state.py
++++ b/hermes_context_manager/state.py
+@@ -64,6 +64,17 @@ class SessionState:
+     turn_history: deque = field(
+         default_factory=lambda: deque(maxlen=TURN_HISTORY_MAX_LEN)
+     )
++    # Runtime-only memo caches.  Never persisted (session_state_to_dict is
++    # explicit) and cleared on reset: the short-circuit decision and the
++    # token estimate are pure functions of content, and the restore cycle
++    # rewinds content to the same raw original every turn, so a
++    # content-length match means the cached value still holds.
++    #   tool_call_id -> (content_len, replacement|None, original_tokens)
++    short_circuit_memo: dict[str, tuple[int, str | None, int]] = field(
++        default_factory=dict
++    )
++    #   id(message) -> (content_len, tokens)
++    message_token_cache: dict[int, tuple[int, int]] = field(default_factory=dict)
+ 
+ 
+ def create_state() -> SessionState:
+@@ -89,6 +100,8 @@ def reset_state(state: SessionState) -> None:
+     state.dedup_group_sizes.clear()
+     state.counted_savings_ids.clear()
+     state.project_path = ""
++    state.short_circuit_memo.clear()
++    state.message_token_cache.clear()
+ 
+ 
+ def sort_object_keys(value: Any) -> Any:
