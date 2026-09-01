@@ -176,6 +176,23 @@ let
     }
   ];
 
+  defaultTierLowConfig = eval [
+    ../examples/composer.nix
+    { services.hermesPnP.model.default = "low"; }
+  ];
+
+  defaultTierHighConfig = eval [
+    ../examples/composer.nix
+    { services.hermesPnP.model.default = "high"; }
+  ];
+
+  # Consumer assignment after the PnP import wins over the seeded tier
+  # (deepConfigType last-writer-wins).
+  defaultOverrideConfig = eval [
+    ../examples/composer.nix
+    { services.hermes-agent.settings.model.default = "consumer/custom"; }
+  ];
+
   dropAux = (dropInConfig.services.hermes-agent.settings.auxiliary or { }).triage_specifier or { };
 
   # plugins is listOf, not a submodule.
@@ -229,8 +246,12 @@ in
     test "${toString (builtins.elem "gbrain-retrieval-reflex" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${toString (builtins.elem "gbrain-memory-flush" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${toString (builtins.elem "model-router" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
-    test "${modulesConfig.services.hermes-agent.settings.model.default}" = "${modulesConfig.services.hermesPnP.models.high.model}"
-    test "${modulesConfig.services.hermes-agent.settings.model.provider}" = "${modulesConfig.services.hermesPnP.models.high.provider}"
+    test "${modulesConfig.services.hermes-agent.settings.model.default}" = "${modulesConfig.services.hermesPnP.models.medium.model}"
+    test "${modulesConfig.services.hermes-agent.settings.model.provider}" = "${modulesConfig.services.hermesPnP.models.medium.provider}"
+    test "${defaultTierLowConfig.services.hermes-agent.settings.model.default}" = "${defaultTierLowConfig.services.hermesPnP.models.low.model}"
+    test "${defaultTierHighConfig.services.hermes-agent.settings.model.default}" = "${defaultTierHighConfig.services.hermesPnP.models.high.model}"
+    test "${defaultTierHighConfig.services.hermes-agent.settings.model.provider}" = "${defaultTierHighConfig.services.hermesPnP.models.high.provider}"
+    test "${defaultOverrideConfig.services.hermes-agent.settings.model.default}" = "consumer/custom"
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.triage_specifier.model}" = "${modulesConfig.services.hermesPnP.models.auxiliary.model}"
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.background_review.model}" = "${modulesConfig.services.hermesPnP.models.auxiliary.model}"
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.curator.model}" = "${modulesConfig.services.hermesPnP.models.auxiliary.model}"
@@ -449,6 +470,8 @@ in
     test "${toString (pluginsOpt ? enable)}" = ""
     test "${toString (pluginsOpt ? modelRouter)}" = ""
     test "${toString (optionsEval.options.services.hermesPnP ? models)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP ? model)}" = "1"
+    test "${optionsEval.config.services.hermesPnP.model.default}" = "medium"
     test "${optionsEval.config.services.hermesPnP.models.low.model}" = "deepseek-v4-flash"
     test "${optionsEval.config.services.hermesPnP.models.medium.model}" = "deepseek-v4-pro"
     test "${optionsEval.config.services.hermesPnP.models.high.model}" = "grok-4.6"

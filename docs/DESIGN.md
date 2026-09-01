@@ -231,8 +231,8 @@ unset (Hermes session defaults) except auxiliary, which defaults to
 | name       | role                     | seeds                                         |
 | ---------- | ------------------------ | --------------------------------------------- |
 | low        | cheap helper             | `settings.cron`                               |
-| medium     | workhorse                | `settings.delegation`                         |
-| high       | session identity + voice | `model.default`, `fallback_model`             |
+| medium     | workhorse                | `settings.delegation`, `settings.model.default` (default tier) |
+| high       | session identity + voice | `fallback_model`                              |
 | auxiliary  | official aux tasks       | every seeded `settings.auxiliary.<slot>`      |
 
 ```nix
@@ -242,9 +242,15 @@ models.high      = { provider = "xai-oauth"; model = "grok-4.6"; };
 models.auxiliary = { provider = "deepseek";  model = "deepseek-v4-flash"; }; # reasoning_effort = "none"
 ```
 
+`services.hermesPnP.model.default` (enum `low` / `medium` / `high`,
+default `"medium"`) picks which tier seeds
+`settings.model.{provider,default}`. A consumer assignment of
+`settings.model.default` after the PnP import overrides the seed
+(`deepConfigType` last-writer-wins).
+
 When `hermesPnP.enable` (`modules/models.nix`):
 
-- `settings.model.{provider,default}` ← high. No global `context_length`.
+- `settings.model.{provider,default}` ← `models.${model.default}` (default tier `medium`). No global `context_length`.
 - `settings.context.engine` ← `model-router` (handoff compaction on escalate)
 - `settings.compression.model_thresholds.<model>` ← each name's `compression_ratio`
 - `settings.model_overrides` ← only when `models.<name>.context_length` is set
@@ -528,7 +534,7 @@ this host). Jail entrypoint `umask 0077`; host unit `UMask=0077`.
 - `checks.${system}.options` — user-facing option paths; no
   `plugins.enable` / `plugins.modelRouter`; composer seeds
   `settings.auxiliary.triage_specifier.model` from `models.auxiliary` and
-  `settings.model.default` from `models.high`
+  `settings.model.default` from `models.${model.default}` (default `medium`)
 - `checks.${system}.examples` — every file in `examples/`
 
 ## Out of scope
