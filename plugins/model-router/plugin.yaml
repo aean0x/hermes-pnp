@@ -1,13 +1,15 @@
 name: model-router
-version: 0.8.4
+version: 0.8.5
 description: >-
   Per-turn cost router across three named tiers (low / medium / high),
   labelled Quick / Standard / Expert. Classifies each user turn from
-  best_for (high only for money / irreversible / security). Escalates
-  on tool failures via escalate_model. Pins with /low /medium /high
-  /auto. Model id and provider from Nix hermesPnP.models / config.json
-  / MODEL_ROUTER_* env. Uses AIAgent.switch_model — no Hermes/WebUI core
-  edits. Blocks credential-refresh host stomps.
+  best_for (high only for money / irreversible / security), biased to keep
+  the previous tier unless scope/topic changes (high never sticks). A
+  classifier-driven tier change compacts the transcript before the switch.
+  Escalates on tool failures via escalate_model. Pins with /low /medium
+  /high /auto. Model id and provider from Nix hermesPnP.models /
+  config.json / MODEL_ROUTER_* env. Uses AIAgent.switch_model — no
+  Hermes/WebUI core edits. Blocks credential-refresh host stomps.
 author: aean0x
 kind: standalone
 provides_hooks:

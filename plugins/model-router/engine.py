@@ -1,15 +1,20 @@
 """model-router — handoff context engine.
 
-A transparent subclass of Hermes's built-in ``ContextCompressor`` that adds a
-single capability: request-scoped context replacement for mid-turn escalation.
+A transparent subclass of Hermes's built-in ``ContextCompressor`` that adds two
+capabilities:
 
-When the ``escalate_model`` tool fires, it stashes a structured handoff on the
-live agent's ``context_compressor`` (this engine, deep-copied per agent). On the
-next provider request — including the very next call in the same tool loop —
-``select_context`` swaps the outgoing message list for a compact handoff
-(system prompt + handoff summary + recent verbatim tail) so the higher model
-does not cold-read the full conversation. Persisted history is never mutated;
-the swap is request-only, so prompt cache and the conversation DB stay coherent.
+1. Request-scoped context replacement for mid-turn escalation. When the
+   ``escalate_model`` tool fires, it stashes a structured handoff on the live
+   agent's ``context_compressor``; ``select_context`` then swaps the outgoing
+   request for a compact handoff (system prompt + summary + verbatim tail).
+2. One-shot forced compaction on a classifier-driven tier change. The router
+   sets ``force_compress_once``; ``should_compress_info`` returns True once so
+   the built-in ``compress()`` runs at the next turn boundary before the
+   incoming model cold-reads the transcript.
+
+Persisted history is mutated only by the built-in compaction path; the
+escalation handoff is request-only, so prompt cache and the conversation DB
+stay coherent.
 
 Every other method is inherited unchanged from ``ContextCompressor``, so normal
 compaction (``should_compress`` / ``compress`` / ``update_model`` /
@@ -79,6 +84,26 @@ class ModelRouterContextEngine(ContextCompressor):
         super().__init__(*args, model=model, **kwargs)
         self.handoff: dict[str, Any] | None = None
         self._handoff_tail_chars: int = _load_tail_chars()
+        # One-shot: set by the router on a classifier-driven tier change to
+        # force compaction at the next turn boundary before the new model
+        # cold-reads the conversation. Cleared on first read below.
+        self.force_compress_once: bool = False
+
+    def should_compress_info(
+        self, prompt_tokens: int | None = None
+    ) -> tuple[bool, str | None]:
+        """Honor a one-shot router compaction request, else defer to base.
+
+        A classifier-driven model switch invalidates the incoming model's prompt
+        cache anyway, so this is the safe moment to compact the transcript into
+        a summary before the new model reads it. Returning ``(True, None)``
+        bypasses the base cooldown/anti-thrash guards exactly once; every later
+        call falls through to the inherited threshold logic.
+        """
+        if self.force_compress_once:
+            self.force_compress_once = False
+            return True, None
+        return super().should_compress_info(prompt_tokens)
 
     def select_context(
         self,
