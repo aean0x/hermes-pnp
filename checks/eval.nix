@@ -421,8 +421,13 @@ in
     test "${
       toString (
         lib.any (
-          p: toString p == "/run/mcp-proxy/client.env"
+          p: toString p == "/var/lib/mcp-proxy/client.env"
         ) containerMcpConfig.services.hermes-agent.environmentFiles
+      )
+    }" = "1"
+    test "${
+      toString (
+        lib.elem "mcp-proxy-client-token" containerMcpConfig.system.activationScripts.hermes-agent-setup.deps
       )
     }" = "1"
     touch "$out"
