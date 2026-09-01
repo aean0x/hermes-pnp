@@ -101,15 +101,6 @@ let
     chmod -R u+w "$out"
     rm -rf "$out/.github" "$out/tests" "$out/.gitignore"
     cp ${hmcConfig} "$out/config.yaml"
-    # Bound the short-circuit shape scan to a head+tail window: full-string
-    # regex passes over multi-MB tool results ate the pre_llm_call 30s hook
-    # budget on 1M+ token sessions ("HMC pre_llm_call timed out after 30s").
-    ${pkgs.patch}/bin/patch -p1 -d "$out" \
-      < ${../patches/hermes-agent/hmc-short-circuit-scan-limit.patch}
-    if ! grep -q '_shape_scan_window' "$out/hermes_context_manager/short_circuits.py"; then
-      echo "hmc patch: expected _shape_scan_window missing" >&2
-      exit 1
-    fi
   '';
 in
 {
