@@ -7,8 +7,8 @@ corrupted PGLite — that path is retired.
 
 This plugin:
 1. pre_llm_call — when MEMORY.md is near the injection budget, inject a short
-   instruction to put durable notes via MCP put_page and prune MEMORY to
-   pointers only (main agent already has MCP tools).
+   instruction to put durable notes via MCP put_page and prune stale notes
+   (keep MEMORY to thin working notes; main agent already has MCP tools).
 2. Does not stop hermes or touch exclusive CLI.
 
 Day-to-day SoT remains MCP. Host timers may still run brain md import + dream
@@ -66,8 +66,8 @@ def on_pre_llm_call(*, user_message: Any = None, **kwargs: Any) -> Optional[Dict
             "when this is the subject of the turn (or MEMORY is blocking adds):\n"
             "1. Use the GBrain MCP put_page tool on a stable slug "
             "with full markdown + frontmatter — merge, do not dump raw MEMORY.\n"
-            "2. memory tool: remove or shorten those notes; leave one-line "
-            "pointers only (slug → one-line reminder).\n"
+            "2. memory tool: remove or shorten stale notes; keep MEMORY to "
+            "thin working notes (no pointer index).\n"
             "3. Never run a second gbrain CLI process while serve is up.\n"
             "Skip this if the user message is logistics-only (ok/thanks/ping)."
         )
