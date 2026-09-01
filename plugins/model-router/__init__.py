@@ -10,6 +10,10 @@ Policy:
     for the whole multi-tool turn.
   • Classifier is 3-way (low/medium/high). High is rare (money /
     irreversible / security). Prefer low on doubt.
+  • The classifier is told the previous tier and biased to keep it when the
+    scope/topic is unchanged (low/medium only; high is never sticky).
+  • A classifier-driven tier change compacts the transcript before the switch
+    so the new model cold-reads a summary (explicit pins/escalation skip this).
   • Consecutive tool errors climb one tier, capped at escalate_max.
   • Manual /low /medium /high pins pause auto-routing until /auto.
   • Slash pins must start the message; a mid-paragraph /high is not a pin.
@@ -698,17 +702,22 @@ def _classify(user_message: str, history: list, session_id: str = "") -> str:
 
     Runs on the previous turn's tier (never ``high``/grok) with real history so
     the classifier sees the same conversation the previous model already read.
+    The actual previous tier is surfaced in the request so the classifier can
+    prefer to stay put (low/medium only; high is never sticky).
     """
     try:
         from agent.auxiliary_client import call_llm
 
         with _lock:
-            prev = _last_tier.get(session_id, _MID)
-        if prev not in (_MIN, _MID):
-            prev = _MID
+            prev_tier = _last_tier.get(session_id)
+        # Classifier runs on the previous tier's model, never high/grok.
+        prev = prev_tier if prev_tier in (_MIN, _MID) else _MID
 
         body = _strip_platform_prefix(user_message)
-        messages: list[dict[str, Any]] = [{"role": "system", "content": _CLASSIFIER}]
+        system = _CLASSIFIER
+        if prev_tier is not None:
+            system = f"Previous turn tier: {prev_tier}.\n\n" + _CLASSIFIER
+        messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
         ctx_parts: list[str] = []
         budget = _CLASSIFIER_CONTEXT_CHARS
         for msg in reversed(history or []):
@@ -831,6 +840,26 @@ def _set_tier(session_id: str, name: str, reason: str) -> None:
         )
 
 
+def _request_compaction(agent: Any) -> None:
+    """Ask the context engine to compact at the next turn boundary.
+
+    Set when a classifier-driven tier change swaps models, so the incoming
+    model cold-reads a compact summary instead of the full transcript. One-shot:
+    the engine clears the flag inside ``should_compress_info``. Mid-turn
+    escalation must NOT use this (compaction is unsafe mid-turn) — it keeps the
+    request-scoped handoff instead.
+    """
+    if agent is None:
+        return
+    engine = getattr(agent, "context_compressor", None)
+    if engine is None or not hasattr(engine, "force_compress_once"):
+        return
+    try:
+        engine.force_compress_once = True
+    except Exception as exc:
+        logger.warning("model-router: force-compact flag failed: %s", exc)
+
+
 def _should_skip(platform: str, kwargs: dict) -> bool:
     plat = (platform or "").strip().lower()
     if plat in _SKIP_PLATFORMS:
@@ -892,6 +921,11 @@ def on_pre_llm_call(
             return None
 
         name, reason = _target_tier(sid, msg, conversation_history or [])
+        # A classifier-driven tier change swaps models; compact the transcript
+        # at the turn boundary so the incoming model cold-reads a summary, not
+        # the full history. Explicit pins and escalation take other paths.
+        if reason == "classify" and current is not None and current != name:
+            _request_compaction(agent)
         with _lock:
             _tool_errors[sid] = 0
             _checkpoint[sid] = False
