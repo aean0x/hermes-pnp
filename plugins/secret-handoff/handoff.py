@@ -110,35 +110,61 @@ def resolve_session_key_for_tool(**kwargs: Any) -> str:
     return "default"
 
 
-def _find_clarify_callback(session_key: str) -> Optional[Callable]:
-    """Best-effort: same-process agent.clarify_callback (gateway worker).
+def _callback_from_agent(obj: Any) -> Optional[Callable]:
+    cb = getattr(obj, "clarify_callback", None)
+    return cb if callable(cb) else None
 
-    Prefers an exact session-key match. When the WebUI worker cannot resolve a
-    real session key (``resolve_session_key_for_tool`` returns ``"default"``),
-    falls back to the first callable ``clarify_callback`` on the heap — there is
-    a single active agent per worker process, so the fallback is unambiguous.
-    """
-    fallback: Optional[Callable] = None
+
+def _find_clarify_callback_from_stack() -> Optional[Callable]:
+    """Live ``agent`` / ``self`` on the executor stack — not a stale heap object."""
+    frame = inspect.currentframe()
+    try:
+        while frame is not None:
+            loc = frame.f_locals
+            for name in ("agent", "self"):
+                cb = _callback_from_agent(loc.get(name))
+                if cb is not None:
+                    return cb
+            frame = frame.f_back
+    finally:
+        del frame
+    return None
+
+
+def _find_clarify_callback_on_heap(session_key: str) -> Optional[Callable]:
+    """Exact session-key match only. Never the first callable on the heap."""
+    if not session_key or session_key == "default":
+        return None
     try:
         import gc
 
         for obj in gc.get_objects():
-            cb = getattr(obj, "clarify_callback", None)
-            if not callable(cb):
+            cb = _callback_from_agent(obj)
+            if cb is None:
                 continue
-            if fallback is None:
-                fallback = cb
             gsk = getattr(obj, "_gateway_session_key", None) or getattr(
                 obj, "gateway_session_key", None
             )
-            if session_key and gsk and str(gsk) == session_key:
-                return cb
             sid = getattr(obj, "session_id", None)
-            if session_key and sid and str(sid) == session_key:
+            if str(gsk or "") == session_key or str(sid or "") == session_key:
                 return cb
     except Exception:
         return None
-    return fallback
+    return None
+
+
+def _find_clarify_callback(session_key: str) -> Optional[Callable]:
+    """Resolve the current turn's clarify callback.
+
+    Core ``clarify`` is special-cased in tool_executor.py with
+    ``callback=agent.clarify_callback``. Plugin tools are not, so recover the
+    same live agent from the call stack. A gc heap scan is last-resort and
+    only when it matches ``session_key`` exactly — never the first callable
+    on the heap (stale WebUI AIAgent objects return empty instantly).
+    """
+    return _find_clarify_callback_from_stack() or _find_clarify_callback_on_heap(
+        session_key
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 name: secret-handoff
-version: 0.2.0
+version: 0.3.0
 description: >-
   Ephemeral login paste: request_secret asks via stock clarify, injects the
   reply through a direct CDP websocket, and returns status only. The secret
