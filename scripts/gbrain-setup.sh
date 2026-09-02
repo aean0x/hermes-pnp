@@ -12,9 +12,9 @@
 #   2. this script (bun CLI, mint token, import/embed).
 #      GBRAIN_REF=vX.Y.Z pins bun install -g github:garrytan/gbrain#<ref>.
 #      Not a systemd one-shot — import/embed stops serve (PGLite single-writer).
-# Official hermes-agent-setup drops headers on merge; composer activation
-# re-applies a literal Bearer. This script wires immediately so the first
-# start after mint does not 401.
+# The composer sets mcpServers.gbrain Authorization to Bearer ${GBRAIN_TOKEN}
+# (an env ref Hermes expands from .env). This script mints the token and
+# writes GBRAIN_TOKEN into .env so the first start after mint does not 401.
 #
 # Catalogue (fresh machine after remote-switch):
 #   1. bun + gbrain CLI (bun global under hermes HOME)
@@ -40,21 +40,17 @@ GBRAIN_HOME="${HERMES_HOME_DIR}/.gbrain"
 BRAIN_REPO="${HERMES_HOME_DIR}/brain"
 TOKEN_FILE="${GBRAIN_HOME}/hermes-mcp.token"
 HERMES_ENV_FILE="${HERMES_STATE}/.env"
-HERMES_CFG="${HERMES_STATE}/config.yaml"
 BUN_BIN="${HERMES_HOME_DIR}/.bun/bin"
 GBRAIN_BIN="${BUN_BIN}/gbrain"
 MCP_URL="${GBRAIN_MCP_URL:-http://127.0.0.1:3131/mcp}"
 SEARCH_MODE="${GBRAIN_SEARCH_MODE:-balanced}"
-TOKEN_NAME="${GBRAIN_TOKEN_NAME:-hermes-agents}"
+TOKEN_NAME="${GBRAIN_TOKEN_NAME:-hermes}"
 
 log() { echo "[gbrain-setup] $*"; }
 warn() { echo "[gbrain-setup] WARN: $*" >&2; }
 die() { echo "[gbrain-setup] FAIL: $*" >&2; exit 1; }
 
 [[ "$(id -u)" -eq 0 ]] || die "run as root (sudo)"
-
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WIRE_PY="${GBRAIN_WIRE_PY:-${HERE}/gbrain-wire-config.py}"
 
 if ! systemctl cat gbrain-mcp-http.service >/dev/null 2>&1; then
   die "gbrain-mcp-http unit missing — set services.hermesPnP.gbrain.enable = true and switch first"
@@ -156,7 +152,7 @@ persist_token() {
   touch "${HERMES_ENV_FILE}"
   chown hermes:hermes "${HERMES_ENV_FILE}"
   chmod 600 "${HERMES_ENV_FILE}"
-  if grep -q '^GBRAIN_REMOTE_TOKEN=' "${HERMES_ENV_FILE}" 2>/dev/null; then
+  if grep -q '^GBRAIN_TOKEN=' "${HERMES_ENV_FILE}" 2>/dev/null; then
     # Avoid sed & in token; rewrite via python
     python3 - "${HERMES_ENV_FILE}" "${tok}" <<'PY'
 from pathlib import Path
@@ -165,20 +161,20 @@ path, tok = Path(sys.argv[1]), sys.argv[2]
 lines = path.read_text().splitlines() if path.exists() else []
 out, seen = [], False
 for line in lines:
-    if line.startswith("GBRAIN_REMOTE_TOKEN="):
-        out.append(f"GBRAIN_REMOTE_TOKEN={tok}")
+    if line.startswith("GBRAIN_TOKEN="):
+        out.append(f"GBRAIN_TOKEN={tok}")
         seen = True
     else:
         out.append(line)
 if not seen:
-    out.append(f"GBRAIN_REMOTE_TOKEN={tok}")
+    out.append(f"GBRAIN_TOKEN={tok}")
 path.write_text("\n".join(out) + "\n")
 PY
   else
-    printf '\nGBRAIN_REMOTE_TOKEN=%s\n' "${tok}" >>"${HERMES_ENV_FILE}"
+    printf '\nGBRAIN_TOKEN=%s\n' "${tok}" >>"${HERMES_ENV_FILE}"
   fi
   chown hermes:hermes "${HERMES_ENV_FILE}"
-  log "persisted token → ${TOKEN_FILE} + GBRAIN_REMOTE_TOKEN in ${HERMES_ENV_FILE} (do not print)"
+  log "persisted token → ${TOKEN_FILE} + GBRAIN_TOKEN in ${HERMES_ENV_FILE} (do not print)"
 }
 
 token_works() {
@@ -219,8 +215,8 @@ mint_token() {
     warn "could not parse token from auth create — Hermes/operator must mint:"
     warn "  systemctl start gbrain-mcp-http"
     warn "  sudo -u hermes env HOME=${HERMES_HOME_DIR} PATH=${BUN_BIN}:\$PATH gbrain auth create ${TOKEN_NAME}"
-    warn "  write plaintext token to ${TOKEN_FILE} (600) AND GBRAIN_REMOTE_TOKEN=… in ${HERMES_ENV_FILE}"
-    warn "  config.yaml headers.Authorization must be 'Bearer <literal token>' — NEVER 'Bearer \${GBRAIN_REMOTE_TOKEN}'"
+    warn "  write plaintext token to ${TOKEN_FILE} (600) AND GBRAIN_TOKEN=… in ${HERMES_ENV_FILE}"
+    warn "  config.yaml already carries 'Bearer \${GBRAIN_TOKEN}' (env-ref) — no manual edit needed"
     return 1
   fi
   persist_token "${tok}"
@@ -229,32 +225,6 @@ mint_token() {
   else
     warn "token saved but HTTP probe failed — check gbrain-mcp-http"
   fi
-}
-
-wire_hermes_mcp_config() {
-  [[ -f "${HERMES_CFG}" ]] || {
-    warn "no ${HERMES_CFG} yet — start hermes once, re-run setup"
-    return 0
-  }
-  local token=""
-  if [[ -s "${TOKEN_FILE}" ]]; then
-    token=$(tr -d '\r\n' <"${TOKEN_FILE}")
-  elif grep -q '^GBRAIN_REMOTE_TOKEN=' "${HERMES_ENV_FILE}" 2>/dev/null; then
-    token=$(grep '^GBRAIN_REMOTE_TOKEN=' "${HERMES_ENV_FILE}" | head -1 | cut -d= -f2- | tr -d '\r\n' | tr -d '"' | tr -d "'")
-  fi
-  # Reject unexpanded placeholders (common footgun)
-  if [[ "${token}" == *'${'* ]] || [[ "${token}" == 'GBRAIN_REMOTE_TOKEN' ]]; then
-    warn "refusing placeholder token in env — re-run mint"
-    token=""
-  fi
-  local py=python3
-  command -v python3 >/dev/null 2>&1 || py=/var/lib/hermes/toolbox/bin/python3
-  if [[ -f "${WIRE_PY}" ]]; then
-    "${py}" "${WIRE_PY}" "${HERMES_CFG}" "${MCP_URL}" "${token}" || warn "wire-config exited non-zero"
-  else
-    warn "gbrain-wire-config.py not next to this script — skip yaml patch (composer activation will apply)"
-  fi
-  [[ -f "${HERMES_CFG}" ]] && chown hermes:hermes "${HERMES_CFG}"
 }
 
 import_and_embed() {
@@ -342,12 +312,9 @@ main() {
   systemctl start gbrain-mcp-http 2>/dev/null || true
   sleep 2
   mint_token || true
-  wire_hermes_mcp_config
   import_and_embed
   harden_brain_durability
   start_stack
-  # Re-wire after start in case setup rewrote config
-  wire_hermes_mcp_config
   systemctl restart hermes-agent 2>/dev/null || true
   systemctl restart hermes-webui 2>/dev/null || true
   smoke

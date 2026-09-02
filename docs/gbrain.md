@@ -4,15 +4,16 @@ Off by default. Two steps:
 
 1. `services.hermesPnP.gbrain.enable = true` then switch — starts
    loopback `gbrain serve` (`gbrain-mcp-http`), sets
-   `mcpServers.gbrain.url`, installs `gbrain-retrieval-reflex` +
-   `gbrain-memory-flush`, and re-applies a literal Bearer on
-   `config.yaml` after official merge (Nix keys win; Hermes does not
-   expand `${GBRAIN_REMOTE_TOKEN}`).
+   `mcpServers.gbrain.url` + `headers.Authorization: Bearer ${GBRAIN_TOKEN}`
+   (env-ref, expanded by Hermes from `$HERMES_HOME/.env`), and installs
+   `gbrain-retrieval-reflex` + `gbrain-memory-flush`.
 2. `scripts/gbrain-setup.sh` (root; consumer `./deploy gbrain-setup`) —
-   bun CLI, PGLite init, mint token, import/embed. Optional
-   `GBRAIN_REF=vX.Y.Z` pins `bun install -g github:garrytan/gbrain#<ref>`.
-   Nix does **not** run this as a boot one-shot (PGLite single-writer;
-   import/embed takes the stack down).
+   bun CLI, PGLite init, mint token (`gbrain auth create hermes`) into
+   `~/.gbrain/hermes-mcp.token` + `GBRAIN_TOKEN` in `~/.hermes/.env`,
+   import/embed. Optional `GBRAIN_REF=vX.Y.Z` pins
+   `bun install -g github:garrytan/gbrain#<ref>`. Nix does **not** run
+   this as a boot one-shot (PGLite single-writer; import/embed takes
+   the stack down).
 
 Nix does not ship PGLite, sources, or a memory registry.
 
@@ -30,8 +31,8 @@ Nix does not ship PGLite, sources, or a memory registry.
 | Surface | Role |
 |---------|------|
 | systemd `gbrain-mcp-http` | Sole PGLite owner: `gbrain serve --http --bind 127.0.0.1 --port 3131` |
-| Hermes MCP `gbrain` | url + **literal** Bearer (gateway + WebUI + CLI) |
-| Auth token (not sops) | `gbrain auth create hermes-agents` → `~/.gbrain/hermes-mcp.token`, `GBRAIN_REMOTE_TOKEN` in `~/.hermes/.env`, `config.yaml` `Authorization: Bearer <token>`. Never `Bearer ${GBRAIN_REMOTE_TOKEN}`. |
+| Hermes MCP `gbrain` | `url` + `headers.Authorization: Bearer ${GBRAIN_TOKEN}` (env-ref, expanded by Hermes) |
+| Auth token (not sops) | `gbrain auth create hermes` → `~/.gbrain/hermes-mcp.token`, `GBRAIN_TOKEN` in `~/.hermes/.env` |
 | plugin `gbrain-retrieval-reflex` | resolve IPC if sock present; else nudge `volunteer_context` |
 
 ## Ops

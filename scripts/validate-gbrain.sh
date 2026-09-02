@@ -110,17 +110,18 @@ else
   warn "resolve IPC socket missing (serve not up, old gbrain, or non-PGLite path)"
 fi
 
-echo "=== 4. config.yaml HTTP + literal Bearer ==="
+echo "=== 4. config.yaml HTTP + Bearer env-ref ==="
 CFG="${HERMES_HOME}/config.yaml"
 if [ -f "$CFG" ]; then
-  if grep -A12 -E '^[[:space:]]*gbrain:' "$CFG" | grep -qE 'Authorization:.*\$\{'; then
-    bad "config.yaml Authorization is a \${placeholder} (Hermes will 401)"
-  elif grep -A12 -E '^[[:space:]]*gbrain:' "$CFG" | grep -qE 'Authorization:[[:space:]]*Bearer[[:space:]]+'; then
-    ok "config.yaml has literal Bearer (value not printed)"
+  block=$(grep -A12 -E '^[[:space:]]*gbrain:' "$CFG" || true)
+  if echo "$block" | grep -qF '${GBRAIN_TOKEN}'; then
+    ok "config.yaml gbrain Authorization is Bearer \${GBRAIN_TOKEN} (env-ref)"
+  elif echo "$block" | grep -qE 'Authorization:[[:space:]]*[Bb]earer[[:space:]]+gbrain_'; then
+    bad "config.yaml gbrain Authorization is a literal token (must be \${GBRAIN_TOKEN} env-ref)"
   else
     warn "config.yaml gbrain has no Authorization — run gbrain-setup"
   fi
-  if grep -A12 -E '^[[:space:]]*gbrain:' "$CFG" | grep -qE 'url:[[:space:]]*http://127.0.0.1:3131/mcp'; then
+  if echo "$block" | grep -qF 'url: http://127.0.0.1:3131/mcp'; then
     ok "config.yaml gbrain url is loopback HTTP"
   else
     warn "config.yaml gbrain url is not http://127.0.0.1:3131/mcp"
