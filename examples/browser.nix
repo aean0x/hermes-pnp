@@ -1,4 +1,4 @@
-# Persistent CDP browser + agent-browser dashboard gate.
+# Persistent CDP browser + browser-ui cast gate.
 # Agent talks to 127.0.0.1:9222. Humans use the Caddy URL, not :4848
 # on the LAN. Engine follows package.meta.mainProgram.
 #

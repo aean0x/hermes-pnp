@@ -386,27 +386,27 @@ in
     test "${toString (containerConfig.systemd.services ? hermes-browser-env)}" = ""
     test "${toString (containerConfig.systemd.services ? hermes-browser-gate)}" = ""
     test "${toString (lib.hasInfix "session info --json" (builtins.readFile ../modules/browser/shared.nix))}" = ""
-    test "${toString (lib.hasInfix "connect \${cdpUrl}" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
-    test "${toString (lib.hasInfix "connect \${toString cdpPort}" (builtins.readFile ../modules/browser/shared.nix))}" = ""
-    test "${toString (lib.hasInfix "default.pid" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
+    test "${toString (lib.hasInfix "agent-browser" (builtins.readFile ../modules/browser/shared.nix))}" = ""
+    test "${toString (lib.hasInfix "agent-infra-browser-ui" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
+    test "${toString (lib.hasInfix "browserWSEndpoint" (builtins.readFile ../modules/browser/ui/app.js))}" = "1"
     test "${toString (lib.hasInfix "FONTCONFIG_FILE" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
     test "${toString (lib.hasInfix "about:blank" (builtins.readFile ../modules/browser/shared.nix))}" = ""
-    test "${toString (lib.hasInfix "dashboard.pid" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
-    test "${toString (lib.hasInfix ''"$dash/"'' (builtins.readFile ../modules/browser/shared.nix))}" = ""
+    test "${toString (lib.hasInfix "/devtools/" (builtins.readFile ../modules/browser/browser-ui-gate.js))}" = "1"
+    test "${toString (lib.hasInfix "/json/" (builtins.readFile ../modules/browser/browser-ui-gate.js))}" = "1"
     test "${toString (lib.hasInfix "Current Session" (builtins.readFile ../modules/browser/container.nix))}" = ""
     test "${toString (lib.hasInfix "json/close" (builtins.readFile ../modules/browser/container.nix))}" = ""
     test "${toString (lib.hasInfix "setpriv" (builtins.readFile ../lib/oci-container.nix))}" = ""
     test "${toString (lib.hasInfix "hide-crash-restore-bubble" (builtins.readFile ../modules/browser/default.nix))}" = ""
-    test "${toString (lib.hasInfix "dashboard start --help" (builtins.readFile ../modules/browser/shared.nix))}" = ""
+    test "${toString (lib.hasInfix "gateHome" (builtins.readFile ../modules/browser/shared.nix))}" = ""
     test "${toString (lib.hasInfix "disable-dev-shm-usage" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
-    test "${toString (lib.hasInfix "pkgs.agent-browser or" (builtins.readFile ../modules/browser/shared.nix))}" = ""
+    test "${toString (lib.hasInfix "nodejs" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
     test "${
       toString (
         lib.hasInfix "agent-browser-0.34" (
           lib.concatMapStringsSep " " toString modulesConfig.environment.systemPackages
         )
       )
-    }" = "1"
+    }" = ""
     test "${
       toString (
         lib.hasInfix "agent-browser-0.27" (
@@ -416,7 +416,7 @@ in
     }" = ""
     test "${
       toString (
-        lib.hasInfix "agent-browser-0.34" (
+        lib.hasInfix "hermes-browser-gate" (
           lib.concatMapStringsSep " " toString containerConfig.environment.systemPackages
         )
       )

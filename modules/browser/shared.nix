@@ -19,13 +19,21 @@ let
   cdpUrl = "http://${cdpAddr}:${toString cdpPort}";
 
   home = "${agent.stateDir}/home";
-  gateHome = "${agent.stateDir}/browser-gate";
 
   browserBin = "${cfg.package}/bin/${cfg.engine}";
 
-  # Always the in-tree pin. nixpkgs agent-browser is 0.27.0; `or` would
-  # pick it and keep the old daemon (keyboard stream broken until 0.33.2).
-  agentBrowser = pkgs.callPackage ../../pkgs/agent-browser.nix { };
+  # Vendored @agent-infra/browser-ui UMD bundle. The gate serves it and
+  # proxies CDP HTTP/WS so a human can drive the persistent engine.
+  agentInfraBrowserUi = pkgs.callPackage ../../pkgs/agent-infra-browser-ui.nix { };
+
+  browserUiGateJs = ./browser-ui-gate.js;
+
+  browserUiStaticDir = pkgs.runCommand "hermes-browser-ui" { } ''
+    mkdir -p "$out"
+    cp ${./ui/index.html} "$out/index.html"
+    cp ${./ui/app.js} "$out/app.js"
+    cp ${agentInfraBrowserUi}/share/browser-ui/index.js "$out/browser-ui.js"
+  '';
 
   gateUrl =
     if cfg.gate.publicUrl != null
@@ -110,108 +118,24 @@ let
     '';
   };
 
-  # Foreground supervisor: dashboard start returns immediately.
-  # Wait for CDP before connect or agent-browser starts a second browser.
+  # Loopback static server + CDP HTTP/WS proxy. No connect step, so the
+  # gate can never spawn a second browser. Caddy fronts it with TLS + the
+  # LAN guard; the page discovers the browser WS via /json/version and
+  # rewrites it to same-origin.
   hermesBrowserGate = pkgs.writeShellApplication {
     name = "hermes-browser-gate";
     runtimeInputs = [
-      agentBrowser
-      pkgs.curl
+      pkgs.nodejs
       pkgs.coreutils
     ];
     text = ''
       set -euo pipefail
-
-      export AGENT_BROWSER_NAMESPACE=hermes
-      export AGENT_BROWSER_IDLE_TIMEOUT_MS=0
-      export HOME=${gateHome}
-      export XDG_CONFIG_HOME=${gateHome}/.config
-      export XDG_CACHE_HOME=${gateHome}/.cache
-      export XDG_STATE_HOME=${gateHome}/.local/state
-      mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" ${logDir}
-
-      cdp="${cdpUrl}"
-      dash="http://${
-        if listenAddr == "0.0.0.0" || listenAddr == "::" then "127.0.0.1" else listenAddr
-      }:${toString gatePort}"
-
-      cleanup() {
-        agent-browser dashboard stop >/dev/null 2>&1 || true
-        exit 0
-      }
-      trap cleanup TERM INT
-
-      # gateHome is bind-mounted. A leftover default.version (0.27.0)
-      # plus the full /nix/store bind lets connect exec an old daemon.
-      rm -f "$HOME/.agent-browser/"*.pid \
-            "$HOME/.agent-browser/"*.sock \
-            "$HOME/.agent-browser/"*.stream \
-            "$HOME/.agent-browser/"*.version
-      rm -rf "$HOME/.agent-browser/namespaces"
-      agent-browser dashboard stop >/dev/null 2>&1 || true
-
-      echo "waiting for CDP $cdp"
-      up=0
-      for _ in $(seq 1 90); do
-        if curl -sf --max-time 1 "$cdp/json/version" >/dev/null; then
-          up=1
-          break
-        fi
-        sleep 1
-      done
-      if [[ "$up" != "1" ]]; then
-        echo "cdp never came up; refusing to connect (would spawn a second browser)" >&2
-        exit 1
-      fi
-
-      echo "attaching to existing browser via CDP $cdp"
-      # Port-only connect uses localhost, which is ::1 in the jail.
-      # Brave binds 127.0.0.1 only, so that misses CDP and the daemon dies.
-      agent-browser connect ${cdpUrl}
-
-      start_dash() {
-        agent-browser dashboard start --port ${toString gatePort} --host '${listenAddr}'
-      }
-
-      # Dashboard GET / blocks while /api/exec is in flight. Treating
-      # that as "down" stops the dashboard (502) and a second connect
-      # steals Chrome from the supervisor (exit 0, tabs wiped).
-      run="$HOME/.agent-browser/namespaces/$AGENT_BROWSER_NAMESPACE/run"
-      pidfile="$run/default.pid"
-      dashpid="$run/dashboard.pid"
-      pid_alive() {
-        local f="$1"
-        [[ -f "$f" ]] || return 1
-        kill -0 "$(cat "$f")" 2>/dev/null
-      }
-      cdp_ok() { curl -sf --max-time 1 "$cdp/json/version" >/dev/null; }
-
-      echo "starting dashboard on $dash (host ${listenAddr})"
-      start_dash
-      for _ in $(seq 1 25); do
-        pid_alive "$dashpid" && break
-        sleep 0.2
-      done
-
-      while true; do
-        if cdp_ok && pid_alive "$pidfile" && pid_alive "$dashpid"; then
-          sleep 5
-          continue
-        fi
-        echo "session/dashboard down; reconnecting"
-        if ! cdp_ok; then
-          echo "CDP down; waiting for engine supervisor"
-          sleep 5
-          continue
-        fi
-        if ! pid_alive "$pidfile"; then
-          agent-browser connect ${cdpUrl} || true
-        fi
-        if ! pid_alive "$dashpid"; then
-          start_dash || true
-        fi
-        sleep 5
-      done
+      mkdir -p ${logDir}
+      exec ${pkgs.nodejs}/bin/node ${browserUiGateJs} \
+        --listen '${listenAddr}' \
+        --port ${toString gatePort} \
+        --cdp "${cdpUrl}" \
+        --static "${browserUiStaticDir}"
     '';
   };
 
@@ -260,9 +184,7 @@ in
     cdpAddr
     cdpUrl
     home
-    gateHome
     browserBin
-    agentBrowser
     gateUrl
     chromiumAliases
     hermesBrowserImportCookies

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes Browser</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #141414;
+        color: #ddd;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      #status {
+        padding: 7px 14px;
+        font-size: 13px;
+        background: #1e1e1e;
+        border-bottom: 1px solid #333;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #browserContainer {
+        height: calc(100vh - 35px);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="status">connecting…</div>
+    <div id="browserContainer"></div>
+    <script src="/browser-ui.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

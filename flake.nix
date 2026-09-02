@@ -28,7 +28,7 @@
 
       overlay = final: _prev: {
         mcp-proxy = final.callPackage ./pkgs/mcp-proxy { };
-        agent-browser = final.callPackage ./pkgs/agent-browser.nix { };
+        agent-infra-browser-ui = final.callPackage ./pkgs/agent-infra-browser-ui.nix { };
       };
 
       composer = {
@@ -69,7 +69,7 @@
         in
         {
           mcp-proxy = pkgs.callPackage ./pkgs/mcp-proxy { };
-          agent-browser = pkgs.callPackage ./pkgs/agent-browser.nix { };
+          agent-infra-browser-ui = pkgs.callPackage ./pkgs/agent-infra-browser-ui.nix { };
         }
       );
 

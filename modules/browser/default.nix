@@ -1,9 +1,9 @@
-# Persistent CDP browser + agent-browser dashboard.
+# Persistent CDP browser + browser-ui gate.
 # Host-native: separate engine and gate units as the hermes user.
 # Container: one jail (workspace, profile, cookies, logs, gate).
-# Agent attaches at 127.0.0.1:9222. Humans use the dashboard
+# Agent attaches at 127.0.0.1:9222. Humans use the cast gate
 # (listenAddress, default 127.0.0.1) via Caddy.
-# Gate waits for /json/version before `agent-browser connect`.
+# Gate serves the browser-ui page and proxies CDP /json + /devtools.
 # Chromium --remote-allow-origins takes HTTP origins, not CIDR.
 {
   config,
@@ -76,8 +76,6 @@ let
     listenAddr
     cdpUrl
     home
-    gateHome
-    agentBrowser
     gateUrl
     chromiumAliases
     hermesBrowserImportCookies
@@ -102,7 +100,7 @@ in
       default = true;
       description = ''
         Persistent CDP browser on loopback :9222 plus an optional
-        agent-browser dashboard. Hermes attaches via browser.cdp_url /
+        browser-ui cast gate. Hermes attaches via browser.cdp_url /
         BROWSER_CDP_URL.
       '';
     };
@@ -140,7 +138,7 @@ in
       description = ''
         Chromium --remote-allow-origins. Each entry is an HTTP origin
         (scheme://host[:port]), not a CIDR — Chromium has no LAN-range
-        form. null (default) is loopback CDP + dashboard, plus
+        form. null (default) is loopback CDP + browser-ui gate, plus
         gate.publicUrl and a non-loopback listenAddress when set.
         Set [ "*" ] to allow any Origin (weaker).
       '';
@@ -238,20 +236,20 @@ in
       enable = mkOption {
         type = types.bool;
         default = true;
-        description = "Phone / LAN human captcha handoff via the agent-browser dashboard.";
+        description = "Phone / LAN human captcha handoff via the browser-ui cast.";
       };
       port = mkOption {
         type = types.port;
         default = 4848;
-        description = "Dashboard port. Bound to listenAddress; not firewalled when loopback.";
+        description = "Gate port. Bound to listenAddress; not firewalled when loopback.";
       };
       listenAddress = mkOption {
         type = types.str;
         default = "127.0.0.1";
         description = ''
-          Dashboard bind. Passed as --host when the binary supports it.
+          Gate bind. Passed to the browser-ui proxy's --listen.
           Default loopback; expose LAN through Caddy (same auth as the
-          WebUI). 0.0.0.0 is a raw LAN bind with no dashboard auth.
+          WebUI). 0.0.0.0 is a raw LAN bind with no gate auth.
         '';
       };
       publicUrl = mkOption {
@@ -330,7 +328,6 @@ in
         cfg.package
         chromiumAliases
         pkgs.xvfb
-        agentBrowser
         hermesBrowserImportCookies
         hermesBrowserGate
         (pkgs.writeShellScriptBin "hermes-browser-status" ''
@@ -379,7 +376,7 @@ in
         '')
       ];
 
-      # Loopback dashboard. Open the firewall only for a non-loopback bind.
+      # Loopback gate. Open the firewall only for a non-loopback bind.
       networking.firewall.allowedTCPPorts = optionals (
         cfg.gate.enable && listenAddr != "127.0.0.1" && listenAddr != "localhost"
       ) [ gatePort ];
@@ -389,7 +386,6 @@ in
         "d ${cookiesDir} 0750 ${agent.user} ${agent.group} - -"
         "d ${logDir} 0750 ${agent.user} ${agent.group} - -"
         "d ${workspaceDir} 2770 ${agent.user} ${agent.group} - -"
-        "d ${gateHome} 0750 ${agent.user} ${agent.group} - -"
         "d ${home} 0750 ${agent.user} ${agent.group} - -"
       ];
 

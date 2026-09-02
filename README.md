@@ -92,10 +92,10 @@ ships a WebUI extension (`/low` `/medium` `/high` `/auto`). Caddy and
 the public hostname are consumer work. Set `webui.enable = false` for
 gateway-only.
 
-## Agent browser (CDP)
+## Browser (CDP + browser-ui gate)
 
-A sticky Chromium-family profile on loopback CDP `:9222` plus an
-agent-browser dashboard on `:4848` for human captcha / phone handoff.
+A sticky Chromium-family profile on loopback CDP `:9222` plus a
+browser-ui cast on `:4848` for human captcha / phone handoff.
 The agent attaches at `127.0.0.1:9222`; humans hit the gate (put
 `gate.publicUrl` on your Caddy, LAN/Tailscale, not a public tunnel).
 `--remote-allow-origins` is computed from loopback + that URL. Engine
