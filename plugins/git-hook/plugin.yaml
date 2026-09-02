@@ -1,8 +1,9 @@
 name: git-hook
-version: 0.3.0
+version: 0.3.1
 description: >-
   Auto fetch/pull before reads, and commit+push only the files this turn
-  changed, for any git worktree Hermes touches. No tools, no scripts.
+  changed, for any git worktree Hermes touches. Failures surface in-session
+  (not log-only); busy/push-fail retries. No tools, no scripts.
   Disable with GIT_HOOK_COMMIT=0.
 author: aean0x
 kind: standalone

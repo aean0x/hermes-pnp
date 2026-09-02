@@ -56,7 +56,13 @@ _lock = threading.Lock()
 _pulled: Set[str] = set()
 _before: Dict[str, frozenset[str]] = {}
 _dirty: Dict[str, Set[str]] = {}
+_unpushed: Set[str] = set()
 _root_cache: Dict[str, Optional[str]] = {}
+
+# Flush outcomes that must put paths back on _dirty (commit never landed).
+_RETRY_DIRTY = frozenset(
+    {"busy", "locked", "timeout", "add-failed", "commit-skipped"}
+)
 
 
 def _truthy(name: str, default: bool = True) -> bool:
@@ -386,11 +392,41 @@ def _commit_message(paths: Iterable[str]) -> str:
     return f"update {len(names)} files"
 
 
+def _push(root: str, source: str, sha: str) -> str:
+    """Push HEAD. Fail-open; caller owns dirty/unpushed bookkeeping."""
+    if not _truthy("GIT_HOOK_PUSH", True):
+        log.info("git-hook [%s]: committed %s (push off)", source, sha)
+        return f"committed {sha}"
+    timeout = _timeout("GIT_HOOK_PUSH_TIMEOUT_S", 20)
+    try:
+        if not _has_upstream(root):
+            push = _git(["push", "origin", "HEAD"], cwd=root, timeout=timeout)
+        else:
+            push = _git(["push"], cwd=root, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        log.warning("git-hook [%s]: committed %s, push timeout", source, sha)
+        return f"committed_local_only {sha}"
+    except OSError as exc:
+        log.warning("git-hook [%s]: committed %s, push error %s", source, sha, exc)
+        return f"committed_local_only {sha}"
+    if push.returncode != 0:
+        log.warning(
+            "git-hook [%s]: committed %s, push failed %s",
+            source,
+            sha,
+            (push.stderr or "").strip()[:200],
+        )
+        return f"committed_local_only {sha}"
+    log.info("git-hook [%s]: pushed %s", source, sha)
+    return f"pushed {sha}"
+
+
 def commit_and_push(root: str, paths: Set[str], source: str) -> str:
     """Stage only `paths`, commit, optionally push. Fail-open."""
     if not paths:
         return "clean"
     if _busy(root):
+        log.warning("git-hook: busy %s (merge/rebase in progress); will retry", root)
         return "busy"
     rels = sorted({p for p in paths if p and not p.startswith("/")})
     if not rels:
@@ -425,26 +461,10 @@ def commit_and_push(root: str, paths: Set[str], source: str) -> str:
             )
             if commit.returncode != 0:
                 err = (commit.stderr or commit.stdout or "").strip()[:300]
-                log.info("git-hook: commit skipped %s (%s)", root, err)
+                log.warning("git-hook: commit skipped %s (%s)", root, err)
                 return "commit-skipped"
             sha = (_git(["rev-parse", "--short", "HEAD"], cwd=root, timeout=3).stdout or "").strip()
-            if not _truthy("GIT_HOOK_PUSH", True):
-                log.info("git-hook [%s]: committed %s (push off)", source, sha)
-                return f"committed {sha}"
-            if not _has_upstream(root):
-                push = _git(["push", "origin", "HEAD"], cwd=root, timeout=_timeout("GIT_HOOK_PUSH_TIMEOUT_S", 20))
-            else:
-                push = _git(["push"], cwd=root, timeout=_timeout("GIT_HOOK_PUSH_TIMEOUT_S", 20))
-            if push.returncode != 0:
-                log.warning(
-                    "git-hook [%s]: committed %s, push failed %s",
-                    source,
-                    sha,
-                    (push.stderr or "").strip()[:200],
-                )
-                return f"committed_local_only {sha}"
-            log.info("git-hook [%s]: pushed %s", source, sha)
-            return f"pushed {sha}"
+            return _push(root, source, sha)
     except OSError:
         return "locked"
     except subprocess.TimeoutExpired:
@@ -502,30 +522,82 @@ def on_post_tool_call(
             _before[root] = after
 
 
-def _flush(source: str) -> None:
+def _note(root: str, status: str) -> Optional[str]:
+    short = Path(root).name
+    if status in {"busy", "locked", "timeout"}:
+        return f"{short}: {status} — git-hook will retry"
+    if status == "add-failed":
+        return f"{short}: git add failed (see agent.log)"
+    if status == "commit-skipped":
+        return f"{short}: commit skipped (identity/hook). Files stay uncommitted."
+    if status.startswith("committed_local_only"):
+        return f"{short}: committed locally but push failed. git-hook will retry push."
+    return None
+
+
+def _flush(source: str) -> Optional[str]:
     if disabled():
-        return
+        return None
     with _lock:
         pending = {root: set(paths) for root, paths in _dirty.items() if paths}
+        unpushed = set(_unpushed)
         _dirty.clear()
+    notes: list[str] = []
     for root, paths in pending.items():
         try:
-            commit_and_push(root, paths, source)
+            status = commit_and_push(root, paths, source)
         except Exception:
             log.exception("git-hook: flush failed %s", root)
+            status = "timeout"
+        note = _note(root, status)
+        if note:
+            notes.append(note)
+        with _lock:
+            if status in _RETRY_DIRTY:
+                _dirty.setdefault(root, set()).update(paths)
+            if status.startswith("committed_local_only"):
+                _unpushed.add(root)
+            elif status.startswith("pushed") or status.startswith("committed "):
+                _unpushed.discard(root)
+    for root in unpushed:
+        if root in pending:
+            continue
+        try:
+            sha = (
+                _git(["rev-parse", "--short", "HEAD"], cwd=root, timeout=3).stdout or ""
+            ).strip()
+            status = _push(root, source, sha or "HEAD")
+        except Exception:
+            log.exception("git-hook: push retry failed %s", root)
+            continue
+        note = _note(root, status)
+        if note:
+            notes.append(note)
+        with _lock:
+            if status.startswith("pushed"):
+                _unpushed.discard(root)
+    if not notes:
+        return None
+    return "git-hook:\n" + "\n".join(f"- {n}" for n in notes)
 
 
-def on_post_llm_call(**kwargs: Any) -> None:
+def on_post_llm_call(**kwargs: Any) -> Optional[Dict[str, str]]:
     if kwargs.get("error"):
-        return
-    _flush("post_llm_call")
+        return None
+    body = _flush("post_llm_call")
+    if body:
+        return {"context": body}
+    return None
 
 
-def on_session_end(**kwargs: Any) -> None:
+def on_session_end(**kwargs: Any) -> Optional[Dict[str, str]]:
     reason = str(kwargs.get("turn_exit_reason") or "")
     if reason == "error" and kwargs.get("error"):
-        return
-    _flush(f"on_session_end:{reason or 'unknown'}")
+        return None
+    body = _flush(f"on_session_end:{reason or 'unknown'}")
+    if body:
+        return {"context": body}
+    return None
 
 
 def reset_state() -> None:
@@ -534,6 +606,7 @@ def reset_state() -> None:
         _pulled.clear()
         _before.clear()
         _dirty.clear()
+        _unpushed.clear()
         _root_cache.clear()
 
 
