@@ -171,6 +171,45 @@ class GitSync(unittest.TestCase):
             ["pre_tool_call", "post_tool_call", "post_llm_call", "on_session_end"],
         )
 
+    def test_busy_preserves_dirty_and_surfaces(self):
+        _, work = self._clone_pair()
+        os.environ["GIT_HOOK_PUSH"] = "0"
+        target = work / "touched.txt"
+        sync.on_pre_tool_call("write_file", {"path": str(target)})
+        target.write_text("ours\n")
+        sync.on_post_tool_call("write_file", {"path": str(target)}, status="ok")
+        (work / ".git" / "MERGE_HEAD").write_text("deadbeef\n")
+        result = sync.on_post_llm_call()
+        self.assertIsNotNone(result)
+        self.assertIn("busy", result["context"])
+        self.assertTrue(sync._dirty.get(str(work)))
+
+    def test_commit_skip_is_warning_status(self):
+        _, work = self._clone_pair()
+        os.environ["GIT_HOOK_PUSH"] = "0"
+        hook = work / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.chmod(0o755)
+        (work / "touched.txt").write_text("ours\n")
+        status = sync.commit_and_push(str(work), {"touched.txt"}, "test")
+        self.assertEqual(status, "commit-skipped")
+
+    def test_push_fail_surfaces_and_retries(self):
+        _, work = self._clone_pair()
+        target = work / "touched.txt"
+        sync.on_pre_tool_call("write_file", {"path": str(target)})
+        target.write_text("ours\n")
+        sync.on_post_tool_call("write_file", {"path": str(target)}, status="ok")
+        _git(["remote", "set-url", "origin", str(self.root / "missing.git")], cwd=work)
+        result = sync.on_post_llm_call()
+        self.assertIsNotNone(result)
+        self.assertIn("push failed", result["context"])
+        self.assertIn(str(work), sync._unpushed)
+        again = sync.on_post_llm_call()
+        self.assertIsNotNone(again)
+        self.assertIn("push failed", again["context"])
+        self.assertIn(str(work), sync._unpushed)
+
 
 if __name__ == "__main__":
     if not shutil.which("git"):
