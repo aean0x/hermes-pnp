@@ -22,7 +22,6 @@ let
     cookiesDir
     logDir
     workspaceDir
-    gateHome
     display
     hermesBrowserGate
     launchXvfb
@@ -55,7 +54,7 @@ let
       export XDG_CONFIG_HOME=/tmp/browser-home/.config
       export XDG_CACHE_HOME=/tmp/browser-home/.cache
       export FONTCONFIG_FILE=${fontconfigFile}
-      mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" /tmp/.X11-unix ${profileDir} ${cookiesDir} ${logDir} ${gateHome}
+      mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" /tmp/.X11-unix ${profileDir} ${cookiesDir} ${logDir}
       touch "$XAUTHORITY"
       chmod 600 "$XAUTHORITY"
 
@@ -98,7 +97,6 @@ let
       "${profileDir}:${profileDir}"
       "${cookiesDir}:${cookiesDir}"
       "${logDir}:${logDir}"
-      "${gateHome}:${gateHome}"
     ]
     ++ caBinds;
     extraEnv = {

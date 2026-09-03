@@ -14,7 +14,7 @@ packages).
 | [library-plugins.nix](library-plugins.nix) | Composer off. First-party plugins only (`nixosModules.plugins`) |
 | [mcp-proxy.nix](mcp-proxy.nix) | Loopback MCP proxy + `mcpServers` pointed at it |
 | [gbrain.nix](gbrain.nix) | Loopback `gbrain serve` + the two gbrain plugins |
-| [browser.nix](browser.nix) | CDP engine + dashboard `publicUrl` (Caddy in the consumer) |
+| [browser.nix](browser.nix) | CDP engine + browser-ui gate `publicUrl` (Caddy in the consumer) |
 | [toolbox.nix](toolbox.nix) | Extra CLI on the shared PATH |
 | [skills.nix](skills.nix) | Consumer skill trees beside the catalog |
 | [hmc.nix](hmc.nix) | Pin hermes-context-manager as extraPluginDirs |

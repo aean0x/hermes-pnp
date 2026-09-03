@@ -1,13 +1,13 @@
 ---
 name: browser
-description: Use when driving the composer CDP browser or dashboard gate.
+description: Use when driving the composer CDP browser or browser-ui gate.
 version: 1.1.0
 author: Hermes Agent
 license: MIT
 platforms: [linux]
 metadata:
   hermes:
-    tags: [browser, cdp, dashboard, hermes-pnp]
+    tags: [browser, cdp, gate, hermes-pnp]
 ---
 
 # Browser
@@ -31,7 +31,7 @@ credentials, vendor quirks). Those belong in the consumer via
   `browser.engine` follows `package.meta.mainProgram`.
 - CDP: `http://127.0.0.1:9222` — also `BROWSER_CDP_URL` and `BU_CDP_URL`
 - Profile / cookies / logs: `$stateDir/browser-{profile,cookies,logs}`
-- Gate: agent-browser dashboard `:4848` (on when `browser.gate.enable`,
+- Gate: browser-ui cast `:4848` (on when `browser.gate.enable`,
   default true). Relay URL is `HERMES_BROWSER_GATE_URL`.
 - PATH aliases: `chromium`, `chrome`, `google-chrome` → the configured engine
 - Units (host-native): `hermes-browser`, `hermes-browser-gate`
@@ -49,10 +49,10 @@ curl -sS --max-time 2 -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4848/
 
 1. Native `browser_*` tools against the sticky CDP URL. Same profile
    every time — do not spawn a second browser.
-2. Gate: stop and hand the dashboard URL to a human. Resume on the
+2. Gate: stop and hand the gate URL to a human. Resume on the
    same CDP after they say the page is clear.
-3. Do not run `agent-browser connect` / `open` yourself — the unit
-   already attached. A second connect can steal the session.
+3. The gate is a CDP proxy — there is no `connect` step and no
+   second-browser risk. Drive the same `:9222` engine the human sees.
 
 Consumer extras (different engine, different ports, site playbooks)
 go in `services.hermesPnP.skills.extraSkills`, not this file.

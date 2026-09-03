@@ -77,7 +77,7 @@ in
     };
 
     systemd.services.hermes-browser-gate = lib.mkIf cfg.gate.enable {
-      description = "Hermes browser gate (agent-browser dashboard, loopback)";
+      description = "Hermes browser gate (browser-ui static + CDP proxy, loopback)";
       wantedBy = [ "multi-user.target" ];
       after = [
         "hermes-browser.service"

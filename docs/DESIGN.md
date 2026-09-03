@@ -5,7 +5,7 @@ on top of official `services.hermes-agent`. WebUI is part of the
 product. Site identity stays in the consumer flake.
 
 This is not a host flake. It does not own secrets, hostnames, Telegram
-IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/dashboard
+IDs, mail routing, RAM caps, or SOUL.md. Browser CDP/browser-ui gate
 provisioning is a composer opinion (`services.hermesPnP.browser`); the
 engine stays in the consumer.
 
@@ -87,7 +87,7 @@ hermes-pnp/
     default.nix                  # composer
     enable.nix                   # enable, environmentFiles, container.*
     webui/                       # pairing + host harden + OCI jail
-    browser/                     # CDP browser + dashboard
+    browser/                     # CDP browser + browser-ui gate
     mcp-proxy.nix                # services.hermesPnP.mcpProxy (alias: services.mcpProxy)
   pkgs/                          # packages + overlays.default
   checks/                        # eval + plugin/proxy tests
@@ -129,7 +129,7 @@ the official option PnP set via `mkDefault`.
    or the MCP proxy. `mcpServers` may reference env vars; never raw tokens.
 8. **Site policy stays out.** Telegram allowlists, home channel, RAM
    caps, Composio filters, hostnames, sops paths — consumer flake.
-   Browser CDP/dashboard is composer-owned; the engine is a consumer
+   Browser CDP/browser-ui gate is composer-owned; the engine is a consumer
    choice.
 
 ### Official (passthrough)
@@ -183,7 +183,7 @@ the official option PnP set via `mkDefault`.
   `services.mcpProxy` is an alias. Composer sets `clientAuth` to
   `token` via `mkDefault`; à-la-carte stays `none`.
 - `services.hermesPnP.browser.enable` / `package` / `engine` / `cdpPort`
-  / `cdpAllowOrigins` / `gate.*` — persistent CDP browser + dashboard.
+  / `cdpAllowOrigins` / `gate.*` — persistent CDP browser + browser-ui gate.
   Seeds `BROWSER_CDP_URL` and `settings.browser.{cdp_url,engine}`. Extra
   host mounts use official `container.extraVolumes`.
 - `services.hermesPnP.browser.profileImport` — build-time auth seed.
@@ -380,20 +380,13 @@ bind `/etc/ssl` or `/etc/static`: Docker mounts the NixOS
 `shmSize` unless a consumer really wants `/dev/shm`.
 
 `hermesPnP.browser.maxTabs` (default 5) adds
-`--renderer-process-limit`. Gate watchdog is
-CDP + session `default.pid` + `dashboard.pid`. Do not curl dashboard
-HTTP (GET `/` blocks during `/api/exec` and looks like a drop).
-Do not `dashboard stop` / `connect` while those pids are alive —
-a second connect steals Chrome from the supervisor. `connect`
-uses `http://127.0.0.1:9222`, not a bare port — jail `localhost`
-is `::1` first and Brave binds IPv4 only.
-Do not grep `session info --json` (0.34 has no `connectionMethod`;
-that reconnects every 5s). Leftover `.agent-browser` sockets/version
-under gateHome are wiped on start so an old store path cannot
-keep a 0.27 daemon alive. The gate always `callPackage`s
-`pkgs/agent-browser.nix` (0.34 musl). Do not use
-`pkgs.agent-browser or pin` — consumers typically skip
-`overlays.default`, so nixpkgs 0.27.0 would win.
+`--renderer-process-limit`. The gate is a loopback static server that
+serves the `@agent-infra/browser-ui` page and proxies CDP `/json/*`
+(HTTP) + `/devtools/*` (WS) to the engine. It has no `connect` step,
+so it can never spawn a second browser; the page discovers the browser
+WebSocket via `/json/version` and rewrites it to same-origin. The
+bundle is vendored from `pkgs/agent-infra-browser-ui.nix` (npm tarball
+0.2.2) — the repo does not commit `dist/`.
 
 `hermesPnP.admin.enable` (off by default) is a host unix socket
 at `/run/hermes-admin/admin.sock` (0660, group hermes). The
@@ -411,7 +404,7 @@ WebUI mounts: `/nix/store:ro`, agent stateDir → `/data`, agent home →
 bind-mounts the NixOS `/etc/static` symlink as an empty dir). Not
 `/etc/nixos`, not docker.sock.
 
-Browser mounts: workspace, profile, cookies, logs, gate, system CA
+Browser mounts: workspace, profile, cookies, logs, system CA
 bundle onto Ubuntu ssl paths. Not hermes home, not `.hermes`, not
 host `/etc` / `/etc/static`. `--no-sandbox`: the container is the
 jail. `--cap-drop=ALL` and docker `no-new-privileges` stay; do not
@@ -443,10 +436,10 @@ fold into the same env.
 One browser, two control planes:
 
 - Agent: CDP `127.0.0.1:9222`
-- Human: dashboard on `listenAddress` (default `127.0.0.1`), via Caddy
+- Human: browser-ui cast on `listenAddress` (default `127.0.0.1`), via Caddy
 
 `--remote-allow-origins` is HTTP origins (scheme+host+port), not CIDR.
-Default is loopback CDP + dashboard, plus `gate.publicUrl` / a
+Default is loopback CDP + browser-ui gate, plus `gate.publicUrl` / a
 non-loopback `listenAddress` when set. `[ "*" ]` is the wildcard.
 
 Do not bind `0.0.0.0:4848` unless you accept an unauthenticated
