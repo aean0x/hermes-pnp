@@ -45,14 +45,28 @@ class ClassifyReply(unittest.TestCase):
 
 
 class FindClarifyCallback(unittest.TestCase):
-    def test_falls_back_when_no_session_key_match(self) -> None:
-        # WebUI worker: resolve_session_key_for_tool() yields "default" and no
-        # heap object carries a matching session key. Must still find the agent's
-        # clarify_callback so the prompt actually surfaces.
+    def test_stack_walk_beats_stale_heap_object(self) -> None:
+        live = lambda *_a, **_k: "live"
+        stale = lambda *_a, **_k: "stale"
+        holder = types.SimpleNamespace(clarify_callback=stale, session_id="old")
+
+        class Agent:
+            clarify_callback = staticmethod(live)
+            session_id = "now"
+
+        def outer():
+            agent = Agent()  # noqa: F841 — visible to stack walk
+            with patch("gc.get_objects", return_value=[holder]):
+                return h._find_clarify_callback("default")
+
+        found = outer()
+        self.assertIs(found, live)
+
+    def test_heap_skips_unmatched_when_session_is_default(self) -> None:
         holder = types.SimpleNamespace(clarify_callback=lambda *_a, **_k: "pw")
         with patch("gc.get_objects", return_value=[holder]):
-            found = h._find_clarify_callback("default")
-        self.assertIs(found, holder.clarify_callback)
+            found = h._find_clarify_callback_on_heap("default")
+        self.assertIsNone(found)
 
     def test_exact_session_key_match_wins(self) -> None:
         holder = types.SimpleNamespace(
@@ -60,7 +74,7 @@ class FindClarifyCallback(unittest.TestCase):
             _gateway_session_key="real-session",
         )
         with patch("gc.get_objects", return_value=[holder]):
-            found = h._find_clarify_callback("real-session")
+            found = h._find_clarify_callback_on_heap("real-session")
         self.assertIs(found, holder.clarify_callback)
 
 
