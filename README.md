@@ -113,13 +113,13 @@ Reading the source path at eval is impure: `nixos-rebuild switch
 
 ## GBrain
 
-Optional. GBrain is a bun-global CLI + PGLite + a minted HTTP Bearer
-that Hermes will not expand from `${GBRAIN_REMOTE_TOKEN}` — it does
-not drop into a declarative host on its own. The hook starts loopback
-`gbrain serve` (`gbrain-mcp-http` on `:3131`), sets the MCP URL, and
-re-applies a **literal** Bearer after official config merge. Then run
-[`scripts/gbrain-setup.sh`](scripts/gbrain-setup.sh) (CLI, init, mint,
-import/embed). Operator notes: [`docs/gbrain.md`](docs/gbrain.md).
+Optional. GBrain is a bun-global CLI + PGLite + a minted HTTP Bearer.
+The hook starts loopback `gbrain serve` (`gbrain-mcp-http` on `:3131`),
+sets `mcpServers.gbrain.url` + `headers.Authorization: Bearer
+${GBRAIN_TOKEN}` (env-ref, expanded by Hermes from `.env`). Then run
+[`scripts/gbrain-setup.sh`](scripts/gbrain-setup.sh) (CLI, init, mint
+`gbrain auth create hermes`, import/embed). Operator notes:
+[`docs/gbrain.md`](docs/gbrain.md).
 
 `gbrain.enable` also installs the two plugins (you can list them
 without the hook; they no-op if the env is unset):

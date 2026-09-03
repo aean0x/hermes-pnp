@@ -72,9 +72,6 @@ _TRIVIAL_RE = re.compile(
 
 def _token_paths() -> tuple[Path | None, ...]:
     paths: list[Path | None] = []
-    env = os.environ.get("GBRAIN_TOKEN_FILE", "").strip()
-    if env:
-        paths.append(Path(env))
     if os.environ.get("HOME"):
         paths.append(Path(os.environ["HOME"]) / ".gbrain" / "hermes-mcp.token")
     paths.extend(
@@ -260,6 +257,11 @@ def _build_volunteer_window(user_text: str, history: Any) -> str:
 
 
 def _read_bearer_token() -> str:
+    # 1. Process env — Hermes loads $HERMES_HOME/.env into os.environ.
+    tok = os.environ.get("GBRAIN_TOKEN", "").strip()
+    if tok:
+        return tok
+    # 2. Durable token file (minted by gbrain auth create).
     for p in _TOKEN_PATHS:
         if p is None:
             continue
@@ -270,6 +272,7 @@ def _read_bearer_token() -> str:
                     return tok
         except OSError:
             continue
+    # 3. .env fallback (read directly).
     for p in _ENV_PATHS:
         if p is None:
             continue
@@ -277,7 +280,7 @@ def _read_bearer_token() -> str:
             if not p.is_file():
                 continue
             for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-                if line.startswith("GBRAIN_REMOTE_TOKEN="):
+                if line.startswith("GBRAIN_TOKEN="):
                     tok = line.split("=", 1)[1].strip().strip('"').strip("'")
                     if tok:
                         return tok

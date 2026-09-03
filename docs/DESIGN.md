@@ -173,11 +173,11 @@ the official option PnP set via `mkDefault`.
   present (else host). RAM caps and extra volumes stay official.
 - `services.hermesPnP.hmc.enable` — default `false`.
 - `services.hermesPnP.gbrain.enable` — default `false`. Loopback
-  `gbrain serve`, `mcpServers.gbrain.url`, plugin env, literal Bearer
-  rewrite after official config merge. Appends the two gbrain plugins
-  if missing. No PGLite, sources, or memory registry. CLI is
-  `scripts/gbrain-setup.sh`.
-- `services.hermesPnP.gbrain.url` / `bind` / `port` / `tokenFile`.
+  `gbrain serve`, `mcpServers.gbrain.url` + `headers.Authorization`
+  (`Bearer ${GBRAIN_TOKEN}` env-ref, expanded by Hermes from `.env`),
+  plugin env. Appends the two gbrain plugins if missing. No PGLite,
+  sources, or memory registry. CLI is `scripts/gbrain-setup.sh`.
+- `services.hermesPnP.gbrain.url` / `bind` / `port`.
 - `services.hermesPnP.mcpProxy` — enable, listen, backends,
   `clientAuth` (`none` / `token`), `clientTokenFile`.
   `services.mcpProxy` is an alias. Composer sets `clientAuth` to
@@ -432,7 +432,6 @@ When official `container.enable` is on, **stable** jail paths go on
 `container.extraOptions --env` (`mkDockerEnv`), not `$HERMES_HOME/.env`:
 
 - `HERMES_BROWSER_PROFILE=/data/browser-profile`
-- `GBRAIN_TOKEN_FILE=/home/hermes/.gbrain/hermes-mcp.token`
 - toolbox `PATH` / `HERMES_PYTHON` (`~/.venv` then `/data/toolbox/bin`)
 
 Activation drops a host `HERMES_BROWSER_PROFILE` from `.env` in jail
@@ -481,11 +480,11 @@ jail is read-only (no apt).
 
 `modules/gbrain.nix`, `gbrain.enable` (default false):
 
-- `url` / `bind` / `port` / `tokenFile`
-- `mkDefault` `services.hermes-agent.mcpServers.gbrain` (url + timeouts;
-  not headers — token is minted at runtime)
-- activation after `hermes-agent-setup` re-applies literal Bearer
-- env for the two gbrain plugins
+- `url` / `bind` / `port`
+- `mkDefault` `services.hermes-agent.mcpServers.gbrain` (url + timeouts
+  + `headers.Authorization` = `Bearer ${GBRAIN_TOKEN}` env-ref, expanded
+  by Hermes from `$HERMES_HOME/.env` at runtime)
+- env for the two gbrain plugins (`GBRAIN_MCP_URL`)
 - `gbrain-mcp-http`: `gbrain serve --http` on loopback. Binary is the
   consumer-bootstrapped bun-global CLI.
 
@@ -493,8 +492,7 @@ Enabling the plugins does not require `gbrain.enable`. They no-op if
 the env is unset.
 
 Operator scripts: `scripts/gbrain-setup.sh` (needs the unit),
-`scripts/validate-gbrain.sh`, `scripts/gbrain-wire-config.py`. See
-`docs/gbrain.md`.
+`scripts/validate-gbrain.sh`. See `docs/gbrain.md`.
 
 ## MCP proxy
 
