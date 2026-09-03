@@ -492,14 +492,27 @@ def on_pre_tool_call(
         return
     # Writes still record a before-snapshot; pull only on non-write.
     do_pull = tool_name not in _WRITE_TOOLS
-    with _lock:
-        for root in _roots_for(tool_name, args):
-            if root not in _before:
-                _before[root] = _porcelain_paths(root)
-            if do_pull:
-                status = pull_if_clean(root)
-                if status == "pulled":
-                    _before[root] = _porcelain_paths(root)
+    roots = _roots_for(tool_name, args)
+    for root in roots:
+        # Snapshot + optional pull run OUTSIDE the module lock. The lock only
+        # guards dict state; holding it across git subprocesses (porcelain up
+        # to 5s, pull up to GIT_HOOK_PULL_TIMEOUT_S) made one session's slow
+        # git op block every other session's git-hook callbacks for seconds —
+        # the plugin manager then saw the callback still running at the next
+        # tool completion and skipped it ("previous timeout or still running").
+        with _lock:
+            missing = root not in _before
+        if missing:
+            snap = _porcelain_paths(root)
+            with _lock:
+                if root not in _before:
+                    _before[root] = snap
+        if do_pull:
+            status = pull_if_clean(root)
+            if status == "pulled":
+                snap = _porcelain_paths(root)
+                with _lock:
+                    _before[root] = snap
 
 
 def on_post_tool_call(
@@ -512,10 +525,20 @@ def on_post_tool_call(
         return
     if status in {"blocked"}:
         return
+    roots = _roots_for(tool_name, args)
+    if not roots:
+        return
+    # Porcelain (git status subprocess, up to 5s per root) runs OUTSIDE the
+    # module lock so a busy repo or another session's git op cannot hold this
+    # callback hostage — see on_pre_tool_call. Delta bookkeeping is a short
+    # locked section; the set ops are atomic under the GIL.
+    snapshots: dict[str, frozenset[str]] = {}
+    for root in roots:
+        snapshots[root] = _porcelain_paths(root)
     with _lock:
-        for root in _roots_for(tool_name, args):
+        for root in roots:
             before = _before.get(root, frozenset())
-            after = _porcelain_paths(root)
+            after = snapshots[root]
             delta = set(after - before)
             if delta:
                 _dirty.setdefault(root, set()).update(delta)
