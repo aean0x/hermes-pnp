@@ -39,34 +39,55 @@ let
         inherit extraPythonPackages extraDependencyGroups;
       };
 
-  silenceOverlay =
+  agentSrc = pnp.internal.officialAgentSrc;
+
+  pnpOverlay =
     hermesVenv:
-    pkgs.runCommand "hermes-gateway-silence-fix" { } ''
-      src=""
-      for cand in ${hermesVenv}/lib/python*/site-packages/gateway; do
-        if [ -d "$cand" ]; then src="$cand"; break; fi
-      done
-      if [ -z "$src" ]; then
-        echo "silence fix: gateway package not found in hermesVenv" >&2
-        exit 1
-      fi
-      mkdir -p "$out/site-packages/gateway"
-      ${pkgs.rsync}/bin/rsync -a --copy-links --chmod=Du+w,Fu+w \
-        "$src/" "$out/site-packages/gateway/"
-      if grep -q 'return _canonical_silence_candidate(line) in LIVE_GATEWAY_SILENT_MARKERS' \
-          "$out/site-packages/gateway/response_filters.py"; then
-        ${pkgs.gnused}/bin/sed \
-          's/return _canonical_silence_candidate(line) in LIVE_GATEWAY_SILENT_MARKERS/return any(c in LIVE_GATEWAY_SILENT_MARKERS for c in _canonical_silence_candidates(line))/' \
-          "$out/site-packages/gateway/response_filters.py" \
-          > "$out/site-packages/gateway/response_filters.py.new"
-        mv "$out/site-packages/gateway/response_filters.py.new" \
-          "$out/site-packages/gateway/response_filters.py"
-      fi
-      if ! grep -q '_canonical_silence_candidates(line)' \
-          "$out/site-packages/gateway/response_filters.py"; then
-        echo "silence fix: expected _canonical_silence_candidates usage missing" >&2
-        exit 1
-      fi
+    pkgs.runCommand "hermes-pnp-pythonpath" { } ''
+      mkdir -p "$out/site-packages"
+      ${lib.optionalString pnp.packageFixes.silenceMarkers ''
+        gw=""
+        for cand in ${hermesVenv}/lib/python*/site-packages/gateway; do
+          if [ -d "$cand" ]; then gw="$cand"; break; fi
+        done
+        if [ -z "$gw" ]; then
+          echo "silence fix: gateway package not found in hermesVenv" >&2
+          exit 1
+        fi
+        mkdir -p "$out/site-packages/gateway"
+        ${pkgs.rsync}/bin/rsync -a --copy-links --chmod=Du+w,Fu+w \
+          "$gw/" "$out/site-packages/gateway/"
+        if grep -q 'return _canonical_silence_candidate(line) in LIVE_GATEWAY_SILENT_MARKERS' \
+            "$out/site-packages/gateway/response_filters.py"; then
+          ${pkgs.gnused}/bin/sed \
+            's/return _canonical_silence_candidate(line) in LIVE_GATEWAY_SILENT_MARKERS/return any(c in LIVE_GATEWAY_SILENT_MARKERS for c in _canonical_silence_candidates(line))/' \
+            "$out/site-packages/gateway/response_filters.py" \
+            > "$out/site-packages/gateway/response_filters.py.new"
+          mv "$out/site-packages/gateway/response_filters.py.new" \
+            "$out/site-packages/gateway/response_filters.py"
+        fi
+        if ! grep -q '_canonical_silence_candidates(line)' \
+            "$out/site-packages/gateway/response_filters.py"; then
+          echo "silence fix: expected _canonical_silence_candidates usage missing" >&2
+          exit 1
+        fi
+      ''}
+      ${lib.optionalString (pnp.packageFixes.missingPyModules && agentSrc != null) ''
+        # uv2nix sealed venv only ships [tool.setuptools] py-modules. New
+        # top-level hermes_*.py files (e.g. hermes_state_holders) crash the
+        # gateway until upstream lists them.
+        for f in ${agentSrc}/hermes_*.py; do
+          [ -f "$f" ] || continue
+          base=$(basename "$f")
+          present=0
+          for cand in ${hermesVenv}/lib/python*/site-packages/"$base"; do
+            if [ -e "$cand" ]; then present=1; break; fi
+          done
+          if [ "$present" = 0 ]; then
+            cp "$f" "$out/site-packages/"
+          fi
+        done
+      ''}
     '';
 
   wrapPackage =
@@ -74,8 +95,11 @@ let
     let
       base = makeBase extraPythonPackages extraDependencyGroups;
       overlay =
-        if pnp.packageFixes.silenceMarkers && (base ? hermesVenv) then
-          silenceOverlay base.hermesVenv
+        if
+          (pnp.packageFixes.silenceMarkers || pnp.packageFixes.missingPyModules)
+          && (base ? hermesVenv)
+        then
+          pnpOverlay base.hermesVenv
         else
           null;
     in
@@ -83,7 +107,7 @@ let
       base
     else
       pkgs.symlinkJoin {
-        name = "hermes-agent-silence-fix";
+        name = "hermes-agent-pnp-fix";
         paths = [ base ];
         nativeBuildInputs = [ pkgs.makeWrapper ];
         postBuild = ''
@@ -148,12 +172,28 @@ in
       '';
     };
 
+    packageFixes.missingPyModules = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Copy top-level hermes_*.py files from the hermes-agent source that
+        the uv2nix sealed venv omitted (py-modules list drift).
+      '';
+    };
+
     internal.officialAgentPackageFor = mkOption {
       type = types.functionTo types.package;
       internal = true;
       default = system: throw "hermesPnP package wrap requires nixosModules.default (official agent package not wired for ${system})";
       defaultText = lib.literalExpression "system: throw \"…\"";
       description = "system → official hermes-agent package. Set by the composer flake.";
+    };
+
+    internal.officialAgentSrc = mkOption {
+      type = types.nullOr types.path;
+      internal = true;
+      default = null;
+      description = "hermes-agent flake source (for missing py-modules overlay).";
     };
   };
 
@@ -165,7 +205,7 @@ in
         lib.mapAttrs (_: mkDefault) hermesRuntimeEnv
       );
     }
-    (mkIf (pnp.packageFixes.silenceMarkers || extrasNonEmpty) {
+    (mkIf (pnp.packageFixes.silenceMarkers || pnp.packageFixes.missingPyModules || extrasNonEmpty) {
       # mkDefault so a consumer package assignment wins.
       services.hermes-agent.package = mkDefault wrapped;
     })

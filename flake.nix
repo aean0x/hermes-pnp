@@ -39,6 +39,7 @@
         ];
         services.hermesPnP.internal.officialAgentPackageFor =
           system: hermes-agent.packages.${system}.default;
+        services.hermesPnP.internal.officialAgentSrc = hermes-agent.outPath;
       };
     in
     {

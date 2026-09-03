@@ -199,6 +199,8 @@ the official option PnP set via `mkDefault`.
   users on build and target machines.
 - `services.hermesPnP.packageFixes.silenceMarkers` — default `true`.
   Autonomous silence match via PYTHONPATH.
+- `services.hermesPnP.packageFixes.missingPyModules` — default `true`.
+  Copy top-level `hermes_*.py` omitted from the uv2nix sealed venv.
 - `services.hermesPnP.pluginInstall.*` — installer internals. Not
   advertised.
 
@@ -314,7 +316,8 @@ Do not install first-party plugins via official `extraPlugins`.
 
 `modules/package.nix`:
 
-1. Optional silence-marker wrap (`packageFixes.silenceMarkers`).
+1. Optional silence-marker wrap (`packageFixes.silenceMarkers`) plus
+   missing top-level `hermes_*.py` (`packageFixes.missingPyModules`).
 2. Same `services.hermes-agent.package` for gateway and WebUI.
 3. Share map: `HERMES_BUNDLED_PLUGINS`, `HERMES_BUNDLED_SKILLS`,
    `HERMES_OPTIONAL_SKILLS`, `HERMES_BUNDLED_LOCALES`,

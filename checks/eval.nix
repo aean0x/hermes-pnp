@@ -53,6 +53,7 @@ let
       services.hermes-webui.package = dummyWebui;
       # Skip the official package wrap.
       services.hermesPnP.packageFixes.silenceMarkers = false;
+      services.hermesPnP.packageFixes.missingPyModules = false;
     }
   ];
 
@@ -527,6 +528,7 @@ in
     test "${optionsEval.config.services.hermesPnP.mcpProxy.clientAuth}" = "none"
     test "${toString (optionsEval.options.services ? mcpProxy)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.packageFixes.silenceMarkers.default}" = "1"
+    test "${toString optionsEval.options.services.hermesPnP.packageFixes.missingPyModules.default}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? hmc)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.hmc.enable.default}" = ""
     test "$(printf '%s\n' ${lib.escapeShellArg (builtins.readFile ../modules/hmc.nix)} | ${pkgs.gnugrep}/bin/grep -A1 'deduplication:' | ${pkgs.gnugrep}/bin/grep -c 'enabled: false')" = "1"
