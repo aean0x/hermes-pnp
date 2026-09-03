@@ -5,7 +5,7 @@ modules or flake outputs.
 
 This is a **library flake**, not a host flake. Site identity, secrets,
 hostnames, Telegram IDs, mail policy, RAM caps, and SOUL.md / USER.md /
-MEMORY.md stay in the consumer. Browser CDP/dashboard provisioning is a
+MEMORY.md stay in the consumer. Browser CDP/browser-ui gate provisioning is a
 composer opinion (`services.hermesPnP.browser`); the engine stays in the
 consumer.
 
@@ -61,14 +61,14 @@ consumer.
 lib/                      # mkOciJail, mkDockerEnv, remapStatePath
 modules/                  # composer + pairing; options next to config
 modules/webui/            # WebUI pairing + host harden + OCI jail
-modules/browser/          # CDP browser + dashboard + cookie import
+modules/browser/          # CDP browser + browser-ui gate + cookie import
 pkgs/mcp-proxy/           # proxy package + src/tests/examples
-pkgs/agent-browser.nix    # pinned musl-static release
+pkgs/agent-infra-browser-ui.nix  # vendored @agent-infra/browser-ui UMD
 checks/                   # eval + plugin/proxy tests
 examples/                 # consumer snippets (evalled by checks)
 plugins/catalog.nix       # plugin name → path
 skills/catalog.nix        # first-party skill name → path
-scripts/                  # gbrain-setup / validate-gbrain / wire-config (not Nix)
+scripts/                  # gbrain-setup / validate-gbrain (not Nix)
 plugins/                  # first-party plugin trees
 skills/                   # first-party skill trees
 ```
