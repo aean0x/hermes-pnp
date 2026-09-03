@@ -34,6 +34,10 @@ the mint / repair procedure when `gbrain-setup` has not run or MCP 401s.
 2. Keep the same secret in **two Hermes-owned places** (operator state, not Nix):
    - `~/.gbrain/hermes-mcp.token` (mode 600) — durable source + plugin ambient HTTP fallback
    - `~/.hermes/.env` → `GBRAIN_TOKEN=…` — what Hermes expands
+   Official `hermes-agent-setup` rewrites `.env` from `environmentFiles` on
+   every Nix switch. The composer re-copies `GBRAIN_TOKEN` from the token
+   file after that rewrite — do not treat a missing `.env` line after
+   switch as a reason to re-mint if the token file still works.
 3. Do **not** print the token in chat/logs.
 4. Do **not** install `gbrain autopilot` or a second `gbrain serve`.
 
@@ -70,7 +74,9 @@ Expect: tools list includes `get_page` / `put_page` / `query` / `volunteer_conte
 
 ## If 401 again
 
-1. Token file empty/missing or `GBRAIN_TOKEN` missing from `.env` → re-run mint (this skill).
+1. Token file empty/missing → re-run mint (this skill). `GBRAIN_TOKEN`
+   missing from `.env` after a switch is restored from the token file on
+   the next activation; if the unit is already up, restart `hermes-agent`.
 2. New session after restart (old WebUI chat may lag).
 3. Exactly one `gbrain serve --http` on :3131.
 

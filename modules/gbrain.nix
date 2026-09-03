@@ -132,9 +132,12 @@ in
       wants = [ "gbrain-mcp-http.service" ];
     };
 
-    # Directories gbrain serve expects. The bearer token itself is Hermes
-    # state (minted by scripts/gbrain-setup.sh into $HERMES_HOME/.env as
-    # GBRAIN_TOKEN), never Nix.
+    # Directories gbrain serve expects. The bearer value is Hermes state
+    # (gbrain-setup → ${home}/.gbrain/hermes-mcp.token), never Nix.
+    # Official hermes-agent-setup rewrites $HERMES_HOME/.env from
+    # environment{} + environmentFiles on every switch, which drops
+    # GBRAIN_TOKEN unless we re-copy it after that rewrite (same
+    # post-setup inject as mcp-proxy's MCP_PROXY_TOKEN).
     system.activationScripts.hermes-gbrain = lib.stringAfter [ "hermes-agent-setup" ] ''
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}
       install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.gbrain
@@ -143,6 +146,14 @@ in
         ln -sfn ${home} /home/hermes
       elif [ ! -L /home/hermes ] && [ ! -d /home/hermes ]; then
         ln -sfn ${home} /home/hermes
+      fi
+      tokenFile=${home}/.gbrain/hermes-mcp.token
+      envFile=${agent.stateDir}/.hermes/.env
+      if [ -s "$tokenFile" ] && [ -f "$envFile" ]; then
+        if ! ${pkgs.gnugrep}/bin/grep -q '^GBRAIN_TOKEN=' "$envFile"; then
+          ${pkgs.coreutils}/bin/printf 'GBRAIN_TOKEN=%s\n' "$(${pkgs.coreutils}/bin/tr -d '\r\n' < "$tokenFile")" >> "$envFile"
+          ${pkgs.coreutils}/bin/chown ${agent.user}:${agent.group} "$envFile" || true
+        fi
       fi
     '';
   };
