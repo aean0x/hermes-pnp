@@ -35,13 +35,15 @@ const MIME = {
 };
 
 function proxyHttp(req, res) {
+  const headers = { ...req.headers, host: CDP_HOST + ":" + CDP_PORT };
+  delete headers["origin"];
   const upstream = http.request(
     {
       host: CDP_HOST,
       port: CDP_PORT,
       path: req.url,
       method: req.method,
-      headers: req.headers,
+      headers,
     },
     (up) => {
       res.writeHead(up.statusCode, up.headers);

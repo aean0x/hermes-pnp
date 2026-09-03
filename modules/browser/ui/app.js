@@ -16,7 +16,7 @@
       version = await cdpVersion();
       break;
     } catch (e) {
-      set("waiting for browser… (" + e.message + ")");
+      set("waiting for CDP… (" + e.message + ")");
       await new Promise((r) => setTimeout(r, 2000));
     }
   }
@@ -32,14 +32,26 @@
   const endpoint = scheme + "://" + location.host + wsPath;
   set("connected: " + (version.Browser || "browser"));
 
-  const BrowserUI = window.agent_infra_browser_ui.BrowserUI;
-  BrowserUI.create({
-    root: document.getElementById("browserContainer"),
-    browserOptions: {
-      connect: {
-        browserWSEndpoint: endpoint,
-        defaultViewport: { width: 1400, height: 900 },
+  const BrowserUI = window.agent_infra_browser_ui && window.agent_infra_browser_ui.BrowserUI;
+  if (!BrowserUI) {
+    set("browser-ui bundle missing (window.agent_infra_browser_ui)");
+    return;
+  }
+
+  try {
+    const created = BrowserUI.create({
+      root: document.getElementById("browserContainer"),
+      browserOptions: {
+        connect: {
+          browserWSEndpoint: endpoint,
+          defaultViewport: { width: 1400, height: 900 },
+        },
       },
-    },
-  });
+    });
+    if (created && typeof created.then === "function") {
+      created.catch((e) => set("browser-ui failed: " + (e && e.message ? e.message : e)));
+    }
+  } catch (e) {
+    set("browser-ui failed: " + (e && e.message ? e.message : e));
+  }
 })();
