@@ -141,11 +141,13 @@ let
   pkg = agent.package;
   share = "${pkg}/share/hermes-agent";
 
-  silencePythonpath =
-    if pnp.packageFixes.silenceMarkers && (pkg ? silenceFixedGateway) then
+  overlayPythonpath =
+    if pkg ? silenceFixedGateway then
       "${pkg.silenceFixedGateway}/site-packages"
-    else if pnp.packageFixes.silenceMarkers && (pkg ? hermesVenv) then
-      "${silenceOverlay pkg.hermesVenv}/site-packages"
+    else if
+      (pnp.packageFixes.silenceMarkers || pnp.packageFixes.missingPyModules) && (pkg ? hermesVenv)
+    then
+      "${pnpOverlay pkg.hermesVenv}/site-packages"
     else
       null;
 
@@ -158,8 +160,8 @@ let
     HERMES_WEB_DIST = "${share}/web_dist";
     HERMES_TUI_DIR = "${pkg}/ui-tui";
   }
-  // optionalAttrs (silencePythonpath != null) {
-    PYTHONPATH = silencePythonpath;
+  // optionalAttrs (overlayPythonpath != null) {
+    PYTHONPATH = overlayPythonpath;
   };
 in
 {
