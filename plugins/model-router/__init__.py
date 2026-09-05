@@ -71,6 +71,7 @@ _PROVIDER_HOSTS = _s.PROVIDER_HOSTS
 _CLASSIFIER = _s.CLASSIFIER
 _HANDOFF_TAIL_CHARS = _s.HANDOFF_TAIL_CHARS
 _CLASSIFIER_CONTEXT_CHARS = _s.CLASSIFIER_CONTEXT_CHARS
+_CLASSIFIER_TIMEOUT_S = _s.CLASSIFIER_TIMEOUT_S
 _MIN = "low"
 _MID = "medium"
 _TOP = NAMES[-1]  # "high"
@@ -748,7 +749,15 @@ def _classify(user_message: str, history: list, session_id: str = "") -> str:
             messages.append({"role": "assistant", "content": "Understood."})
         messages.append({"role": "user", "content": body[:800] or user_message[:800]})
 
-        call_kwargs: dict[str, Any] = {"messages": messages, "max_tokens": 8, "temperature": 0.0}
+        call_kwargs: dict[str, Any] = {
+            "messages": messages,
+            "max_tokens": 8,
+            "temperature": 0.0,
+            # Hard cap so this advisory call can never eat the gateway's 30s
+            # hook budget (pre_llm_call).  On timeout _classify fails open to
+            # low — the turn proceeds, escalation corrects a miss later.
+            "timeout": _CLASSIFIER_TIMEOUT_S,
+        }
         rt = _resolve_tier_runtime(prev, _get_agent(session_id))
         if rt and rt.get("base_url"):
             call_kwargs.update(
