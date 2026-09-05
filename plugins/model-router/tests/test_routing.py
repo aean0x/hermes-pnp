@@ -217,6 +217,7 @@ class ClassifierSignal(unittest.TestCase):
 
         def fake_call_llm(**kwargs):
             captured["messages"] = kwargs.get("messages")
+            captured["timeout"] = kwargs.get("timeout")
             return SimpleNamespace(
                 choices=[SimpleNamespace(message=SimpleNamespace(content="low"))]
             )
@@ -231,6 +232,15 @@ class ClassifierSignal(unittest.TestCase):
         ):
             self.mod._classify(user_message, [], sid)
         return captured
+
+    def test_classifier_call_is_bounded(self) -> None:
+        # Regression: the classifier runs synchronously inside the
+        # pre_llm_call hook (30s gateway budget). An unbounded LLM
+        # round-trip there timed the hook out during API latency spikes.
+        captured = self._capture("s-timeout")
+        self.assertIsInstance(captured.get("timeout"), float)
+        self.assertGreaterEqual(captured["timeout"], 1.0)
+        self.assertLessEqual(captured["timeout"], 15.0)
 
     def test_no_prev_tier_omits_signal(self) -> None:
         captured = self._capture("s1")

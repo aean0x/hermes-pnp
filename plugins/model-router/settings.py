@@ -211,6 +211,8 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         state["handoff_tail_chars"] = max(1000, int(data["handoff_tail_chars"]))
     if "classifier_context_chars" in data:
         state["classifier_context_chars"] = max(1000, int(data["classifier_context_chars"]))
+    if "classifier_timeout_s" in data:
+        state["classifier_timeout_s"] = max(1.0, float(data["classifier_timeout_s"]))
 
 
 def load_settings() -> dict[str, Any]:
@@ -223,6 +225,14 @@ def load_settings() -> dict[str, Any]:
         "classifier_system": None,
         "handoff_tail_chars": 64000,
         "classifier_context_chars": 12000,
+        # Bounded per-call timeout for the auxiliary tier classifier.  The
+        # classifier runs synchronously inside the pre_llm_call hook, whose
+        # gateway budget is 30s; an unbounded LLM round-trip there (observed
+        # 50-80s during API latency spikes) blew the budget, got the hook
+        # abandoned mid-run, and cascaded into "skipped after previous
+        # timeout" storms.  Fail-open to low is the designed degradation, so
+        # a short cap only costs a classification, never the turn.
+        "classifier_timeout_s": 8.0,
     }
 
     for candidate, origin in (
@@ -269,6 +279,13 @@ def load_settings() -> dict[str, Any]:
 
     _require_model_ids(models)
 
+    env_timeout = os.environ.get("MODEL_ROUTER_CLASSIFIER_TIMEOUT_S")
+    if env_timeout:
+        try:
+            state["classifier_timeout_s"] = max(1.0, float(env_timeout))
+        except (TypeError, ValueError):
+            pass
+
     if state["escalate_max"] not in models:
         state["escalate_max"] = "high" if "high" in models else next(iter(models))
 
@@ -293,6 +310,7 @@ PROVIDER_HOSTS: dict[str, dict[str, list[str]]] = _SETTINGS["provider_hosts"]
 CLASSIFIER: str = _SETTINGS["classifier_system"]
 HANDOFF_TAIL_CHARS: int = _SETTINGS["handoff_tail_chars"]
 CLASSIFIER_CONTEXT_CHARS: int = _SETTINGS["classifier_context_chars"]
+CLASSIFIER_TIMEOUT_S: float = _SETTINGS["classifier_timeout_s"]
 
 
 def webui_models() -> list[dict[str, str]]:
