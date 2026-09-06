@@ -20,6 +20,9 @@
         pkgs.sops
       ];
       # pythonPackages = ps: with ps; [ requests pyyaml toml ];
+      # Defaults already bake numpy + pillow into the toolbox python3
+      # (native wheels do not dlopen on nix). tesseract with eng+deu is
+      # part of the default toolbox, so is poppler-utils (pdfinfo, pdftoppm).
     };
   };
 }
