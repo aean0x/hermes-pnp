@@ -136,6 +136,7 @@ let
     pkgs.ffmpeg
     pkgs.sox
     pkgs.poppler-utils
+    (pkgs.tesseract.override { enableLanguages = [ "eng" "deu" ]; })
     pkgs.gnupg
     pkgs.age
     pkgs.file
@@ -235,9 +236,19 @@ in
           pip
           setuptools
           wheel
+          numpy
+          pillow
         ];
-      defaultText = literalExpression "ps: with ps; [ requests pyyaml toml pip setuptools wheel ]";
-      description = "Python packages baked into the toolbox python3/python. pip seeds the writable ~/.venv (jail prefix is immutable).";
+      defaultText = literalExpression "ps: with ps; [ requests pyyaml toml pip setuptools wheel numpy pillow ]";
+      description = ''
+        Python packages baked into the toolbox python3/python. Prefer nix-built
+        native packages here over `pip install` of manylinux wheels: wheels
+        dlopen libstdc++/libz from the host loader paths, which a nix container
+        does not provide, so they fail with "libstdc++.so.6 not found". Nix
+        builds link correctly and are visible in the writable ~/.venv because
+        it is created with --system-site-packages. pip then only adds
+        pure-Python extras.
+      '';
     };
 
     # Resolved paths for other modules.
@@ -305,13 +316,19 @@ in
 
       # Writable venv for pip. Toolbox python prefix is immutable and
       # has ENABLE_USER_SITE=False, so PIP_USER cannot work.
+      # --system-site-packages is REQUIRED: without it the venv cannot see
+      # the nix-built pythonPackages (numpy, pillow, …) and every package
+      # must come from pip — native manylinux wheels then fail to dlopen
+      # libstdc++.so.6 because nix keeps it in the store, not in the
+      # loader's default paths.
       venv=${hostVenv}
       py=${pythonEnv}/bin/python3
       current=$(${pkgs.coreutils}/bin/readlink -f "$venv/bin/python3" 2>/dev/null || true)
       wanted=$(${pkgs.coreutils}/bin/readlink -f "$py")
-      if [ "$current" != "$wanted" ]; then
+      has_sys_site=$(${pkgs.gnugrep}/bin/grep -c 'include-system-site-packages = true' "$venv/pyvenv.cfg" 2>/dev/null || true)
+      if [ "$current" != "$wanted" ] || [ "$has_sys_site" = "0" ]; then
         rm -rf "$venv"
-        "$py" -m venv "$venv"
+        "$py" -m venv --system-site-packages "$venv"
         chown -R ${agent.user}:${agent.group} "$venv"
       fi
 
