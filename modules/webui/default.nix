@@ -50,8 +50,8 @@ in
   config = mkIf pairing {
     assertions = [
       {
-        assertion = !(lib.elem "model-router" pnp.plugins) || extensionDir != null;
-        message = "hermes-webui needs hermesPnP model-router plugin for HERMES_WEBUI_EXTENSION_DIR.";
+        assertion = !pnp.modelRouter.enable || extensionDir != null;
+        message = "hermes-webui needs modelRouter.enable (model-router plugin) for HERMES_WEBUI_EXTENSION_DIR.";
       }
     ];
 
