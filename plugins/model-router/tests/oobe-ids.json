@@ -1,7 +1,7 @@
 {
   "models": {
     "low": { "model": "test-low", "provider": "test" },
-    "medium": { "model": "test-medium", "provider": "test" },
+    "default": { "model": "test-default", "provider": "test" },
     "high": { "model": "test-high", "provider": "test" }
   }
 }
