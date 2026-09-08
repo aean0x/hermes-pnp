@@ -57,18 +57,15 @@ let
         mkdir -p "$out/site-packages/gateway"
         ${pkgs.rsync}/bin/rsync -a --copy-links --chmod=Du+w,Fu+w \
           "$gw/" "$out/site-packages/gateway/"
-        if grep -q 'return _canonical_silence_candidate(line) in LIVE_GATEWAY_SILENT_MARKERS' \
-            "$out/site-packages/gateway/response_filters.py"; then
+        rf="$out/site-packages/gateway/response_filters.py"
+        if grep -q 'return _canonical_silence_candidate(line) in LIVE_GATEWAY_SILENT_MARKERS' "$rf"; then
           ${pkgs.gnused}/bin/sed \
             's/return _canonical_silence_candidate(line) in LIVE_GATEWAY_SILENT_MARKERS/return any(c in LIVE_GATEWAY_SILENT_MARKERS for c in _canonical_silence_candidates(line))/' \
-            "$out/site-packages/gateway/response_filters.py" \
-            > "$out/site-packages/gateway/response_filters.py.new"
-          mv "$out/site-packages/gateway/response_filters.py.new" \
-            "$out/site-packages/gateway/response_filters.py"
+            "$rf" > "$rf.new"
+          mv "$rf.new" "$rf"
         fi
-        if ! grep -q '_canonical_silence_candidates(line)' \
-            "$out/site-packages/gateway/response_filters.py"; then
-          echo "silence fix: expected _canonical_silence_candidates usage missing" >&2
+        if ! grep -qE '_canonical_silence_candidates\(' "$rf"; then
+          echo "silence fix: neither old line nor _canonical_silence_candidates() present" >&2
           exit 1
         fi
       ''}
