@@ -33,6 +33,9 @@
   the toolbox env back on `extraPackages`.
 - WebUI/browser jails follow official `container.enable` (and
   `container.network` when that option exists).
+- `hermesPnP.desktop.enable` is native-only: official
+  `container.enable` must be false. It starts official
+  `backend.mode = serve` and wraps Desktop onto that backend.
 - model-router keys are `low` / `medium` / `high`. Commands `/low`
   `/medium` `/high` `/auto`. Auto turn-start classifier replies
   `low`, `medium`, or `high` (`high` is money / irreversible / security).
@@ -40,7 +43,7 @@
   Auto always classifies low/medium/high (no classify_high flag).
   Model id and provider are Nix options (`hermesPnP.models.*`), written
   to plugin `config.json`. Catalog JSON has labels / `best_for` /
-  escalate_* only — no model IDs. Overlay via Nix, plugin `config.json`,
+  escalate_* defaults only — no model IDs. Overlay via Nix, plugin `config.json`,
   or `MODEL_ROUTER_{LOW,MEDIUM,HIGH}_*`.
   Each router tier has `best_for` (`listOf str`), `label`, and `short`.
 - Official `settings` is `deepConfigType`: `mkDefault` on a leaf is

@@ -46,6 +46,10 @@ consumer.
   `services.hermesPnP.packageFixes.silenceMarkers`. Missing sealed-venv
   `hermes_*.py` files use `packageFixes.missingPyModules`.
 - Extra host mounts go on official `container.extraVolumes`.
+- `hermesPnP.desktop.enable` is native-only. It `mkForce`s the
+  composer container knob off and asserts official
+  `container.enable` is false. Wrap Desktop with extraEnv /
+  extraRun; never `--set` the session token.
 
 ## Do not
 
@@ -63,6 +67,7 @@ lib/                      # mkOciJail, mkDockerEnv, remapStatePath
 modules/                  # composer + pairing; options next to config
 modules/webui/            # WebUI pairing + host harden + OCI jail
 modules/browser/          # CDP browser + browser-ui gate + cookie import
+modules/desktop.nix       # native Desktop + official hermes-backend
 pkgs/mcp-proxy/           # proxy package + src/tests/examples
 pkgs/agent-infra-browser-ui.nix  # vendored @agent-infra/browser-ui UMD
 checks/                   # eval + plugin/proxy tests

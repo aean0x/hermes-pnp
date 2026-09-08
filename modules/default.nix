@@ -15,6 +15,7 @@
     ./webui
     ./browser
     ./admin.nix
+    ./desktop.nix
     ./mcp-proxy.nix
   ];
 }

@@ -40,6 +40,8 @@
         services.hermesPnP.internal.officialAgentPackageFor =
           system: hermes-agent.packages.${system}.default;
         services.hermesPnP.internal.officialAgentSrc = hermes-agent.outPath;
+        services.hermesPnP.internal.officialDesktopPackageFor =
+          system: hermes-agent.packages.${system}.desktop;
       };
     in
     {
@@ -60,6 +62,7 @@
       nixosModules.skills = ./modules/skills.nix;
       nixosModules.toolbox = ./modules/toolbox.nix;
       nixosModules.browser = ./modules/browser;
+      nixosModules.desktop = ./modules/desktop.nix;
 
       overlays.default = overlay;
 

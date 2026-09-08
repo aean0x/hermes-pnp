@@ -18,6 +18,7 @@ packages).
 | [toolbox.nix](toolbox.nix) | Extra CLI on the shared PATH |
 | [skills.nix](skills.nix) | Consumer skill trees beside the catalog |
 | [hmc.nix](hmc.nix) | Pin hermes-context-manager as extraPluginDirs |
+| [desktop.nix](desktop.nix) | Native Desktop: official `hermes-backend` + wrapped launcher |
 
 Combine them: `container.nix` + `gbrain.nix` is a jailed gateway with
 GBrain. `composer.nix` + `mcp-proxy.nix` is the usual pairing plus
