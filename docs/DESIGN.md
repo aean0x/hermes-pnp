@@ -212,6 +212,7 @@ the official option PnP set via `mkDefault`.
 - `services.hermes-webui.hermesHome` = `${agent.stateDir}/.hermes`
 - `services.hermes-webui.host = "127.0.0.1"`
 - `services.hermes-webui.port = 8787`
+- `services.hermes-webui.extraEnvironment.HERMES_WEBUI_GATEWAY_BASE_URL = "http://127.0.0.1:8642"` (gateway liveness/chat probe; the agent api_server must be enabled via `API_SERVER_KEY` in the consumer sops env)
 - `services.hermes-webui.environmentFiles` = agent environmentFiles
 - `services.hermes-agent.addToSystemPackages = true`
 
@@ -354,8 +355,9 @@ tab OOM must not exit the container. Identity is
 `/var/lib/hermes-oci/<name>` (root 0700). Docker backend `requires
 docker.service`. Network follows official `container.network` when
 that option exists (else host) so the stack can leave host net
-together. Loopback pairing (CDP, WebUI, GBrain, mcp-proxy) still
-uses `127.0.0.1` until those URLs are remapped. Host-native flags live in
+together. Loopback pairing (CDP, WebUI, GBrain, mcp-proxy, and the
+gateway api_server `:8642`) still uses `127.0.0.1` until those URLs are
+remapped. Host-native flags live in
 `lib/harden-host.nix`. Path remaps (`stateDir` → `/data`,
 `${stateDir}/home` → `/home/hermes`) live in `lib.remapStatePath`.
 Host `/home/hermes` (gbrain activation, only if that path is missing)

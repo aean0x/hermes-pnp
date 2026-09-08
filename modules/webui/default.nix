@@ -72,6 +72,12 @@ in
         HERMES_WEBUI_SECURE = mkDefault "true";
         # Caddy on this host. Override for a proxy whose peer is not loopback.
         HERMES_WEBUI_TRUSTED_PROXY_CIDRS = mkDefault "127.0.0.1/32,::1/128";
+        # Gateway liveness/chat: probe the agent's loopback API server over
+        # HTTP instead of the shared gateway_state.json, whose updated_at goes
+        # stale across containers and makes the dashboard report "gateway dead"
+        # while the gateway is fine. Requires API_SERVER_KEY in the agent env
+        # (consumer sops) so the api_server adapter actually binds :8642.
+        HERMES_WEBUI_GATEWAY_BASE_URL = mkDefault "http://127.0.0.1:8642";
       }
       // optionalAttrs (extensionDir != null) {
         HERMES_WEBUI_EXTENSION_DIR = toString extensionDir;

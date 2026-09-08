@@ -232,6 +232,7 @@ in
       toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_TRUST_FORWARDED_PROTO)
     }" = "1"
     test "${modulesConfig.services.hermes-webui.extraEnvironment.HERMES_WEBUI_TRUSTED_PROXY_CIDRS}" = "127.0.0.1/32,::1/128"
+    test "${modulesConfig.services.hermes-webui.extraEnvironment.HERMES_WEBUI_GATEWAY_BASE_URL}" = "http://127.0.0.1:8642"
     test "${modulesConfig.systemd.services.hermes-webui.serviceConfig.UMask}" = "0077"
     test "${
       toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_EXTENSION_DIR)
