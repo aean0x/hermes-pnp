@@ -1,7 +1,10 @@
 # Seed services.hermes-agent.settings from hermesPnP.models.
-# services.hermesPnP.model.default ("low" | "medium" | "high"; default
-# "medium") picks which tier seeds settings.model.default. fallback_model
-# stays on models.high.
+# Always-on slots: models.default + models.auxiliary.
+# modelRouter.enable adds models.low + models.high and the plugin.
+# services.hermesPnP.model.default ("low" | "default" | "high"; default
+# "default") picks which tier seeds settings.model.default when the
+# router is on. "medium" is a deprecated alias for "default".
+# fallback_model is models.high with the router, else models.default.
 #
 # settings is deepConfigType: do not wrap leaves in mkDefault (the merge
 # stores the wrapper as a literal). Last writer wins; assign consumer
@@ -165,13 +168,28 @@ let
     "kanban_decomposer"
   ];
 
-  # Router names only. Auxiliary shares low's model id — do not fold it
-  # in or it would just rewrite the same threshold.
-  namedModels = [
-    models.low
-    models.medium
-    models.high
-  ];
+  # Session-facing names only. Auxiliary often shares default's model
+  # id — do not fold it in or it would just rewrite the same threshold.
+  sessionTier =
+    let
+      raw = pnp.model.default;
+      name = if raw == "medium" then "default" else raw;
+    in
+    if pnp.modelRouter.enable then name else "default";
+
+  namedModels =
+    if pnp.modelRouter.enable then
+      [
+        models.low
+        models.default
+        models.high
+      ]
+    else
+      [ models.default ];
+
+  workhorse = models.default;
+  fallbackSlot = if pnp.modelRouter.enable then models.high else models.default;
+  cronSlot = if pnp.modelRouter.enable then models.low else models.default;
 
   modelThresholds = foldl' (
     acc: m: acc // { "${m.model}" = m.compression_ratio; }
@@ -192,19 +210,40 @@ let
   ) { } namedModels;
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule
+      [ "services" "hermesPnP" "models" "medium" ]
+      [ "services" "hermesPnP" "models" "default" ]
+    )
+  ];
+
+  options.services.hermesPnP.modelRouter.enable = mkOption {
+    type = types.bool;
+    default = true;
+    description = ''
+      Install the model-router plugin and seed low / default / high.
+      false: do not materialize the plugin, do not set
+      context.engine = "model-router", and seed session / fallback /
+      delegation / cron from models.default only. models.default and
+      models.auxiliary stay required either way.
+    '';
+  };
+
   options.services.hermesPnP.model = {
     default = mkOption {
       type = types.enum [
         "low"
-        "medium"
+        "default"
         "high"
+        "medium"
       ];
-      default = "medium";
+      default = "default";
       description = ''
-        Which router tier seeds settings.model.default. The chosen
-        tier's model + provider are written to
-        services.hermes-agent.settings.model.{default,provider}.
-        fallback_model stays on models.high.
+        Which named slot seeds settings.model.default when
+        modelRouter.enable is true. "medium" is accepted as "default".
+        Ignored when the router is off (always models.default).
+        fallback_model is models.high with the router, else
+        models.default.
 
         Consumers can still override directly: assign
         services.hermes-agent.settings.model.default in a module after
@@ -224,12 +263,12 @@ in
       description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
     };
 
-    medium = mkNamedModel {
+    default = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-v4-pro";
-      inherit (pluginModels.medium) best_for label short;
+      inherit (pluginModels.default) best_for label short;
       compression_ratio = 0.26;
-      description = "Workhorse. OOBE seed for delegation and model-router medium.";
+      description = "Workhorse. Session seed, delegation, and model-router default.";
     };
 
     high = mkNamedModel {
@@ -261,43 +300,53 @@ in
   };
 
   config = mkIf pnp.enable {
+    assertions = [
+      {
+        assertion = pnp.modelRouter.enable || sessionTier == "default";
+        message = ''
+          services.hermesPnP.model.default must be "default" when
+          modelRouter.enable is false (low/high are router-only).
+        '';
+      }
+    ];
+
     services.hermes-agent.settings = {
       model = {
-        provider = models.${pnp.model.default}.provider;
-        default = models.${pnp.model.default}.model;
+        provider = models.${sessionTier}.provider;
+        default = models.${sessionTier}.model;
         # No global context_length. Hermes resolves each model's window.
         # Override per name via models.<name>.context_length → model_overrides.
       };
       context = {
-        engine = "model-router";
+        engine = if pnp.modelRouter.enable then "model-router" else "compressor";
       };
       compression = {
         model_thresholds = modelThresholds;
       };
       fallback_model = {
-        provider = models.high.provider;
-        model = models.high.model;
+        provider = fallbackSlot.provider;
+        model = fallbackSlot.model;
       };
       delegation = {
-        provider = models.medium.provider;
-        model = models.medium.model;
+        provider = workhorse.provider;
+        model = workhorse.model;
       }
-      // optionalAttrs (models.medium.reasoning_effort != null) {
-        reasoning_effort = models.medium.reasoning_effort;
+      // optionalAttrs (workhorse.reasoning_effort != null) {
+        reasoning_effort = workhorse.reasoning_effort;
       };
       cron = {
-        model = models.low.model;
-        model_provider = models.low.provider;
+        model = cronSlot.model;
+        model_provider = cronSlot.provider;
       }
-      // optionalAttrs (models.low.reasoning_effort != null) {
-        reasoning_effort = models.low.reasoning_effort;
+      // optionalAttrs (cronSlot.reasoning_effort != null) {
+        reasoning_effort = cronSlot.reasoning_effort;
       };
       auxiliary = genAttrs auxiliarySlots (_: auxiliarySlot);
     }
     // optionalAttrs (modelOverrides != { }) {
       model_overrides = modelOverrides;
     }
-    // optionalAttrs (models.high.reasoning_effort != null) {
+    // optionalAttrs (pnp.modelRouter.enable && models.high.reasoning_effort != null) {
       agent.reasoning_effort = models.high.reasoning_effort;
     };
   };
