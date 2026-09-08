@@ -13,7 +13,7 @@
       provider = "deepseek";
       model = "deepseek-v4-flash";
     };
-    models.medium = {
+    models.default = {
       provider = "deepseek";
       model = "deepseek-v4-pro";
     };
@@ -21,7 +21,8 @@
       provider = "xai-oauth";
       model = "grok-4.6";
     };
-    # model.default = "medium"; # tier seeding settings.model.default: low | medium | high
+    # model.default = "default"; # tier seeding settings.model.default: low | default | high
+    # modelRouter.enable = true; # false: no plugin; only models.default + auxiliary
     # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; };
     # models.high.reasoning_effort = "high"; # else Hermes session default
     # models.low.best_for = [ "Short acknowledgements" ];
