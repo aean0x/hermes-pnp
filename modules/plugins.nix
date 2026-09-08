@@ -31,9 +31,18 @@ let
 
   officialExtraPluginNames = map lib.getName (agent.extraPlugins or [ ]);
 
+  routerOn = pnp.modelRouter.enable;
+
   # Materialize only PnP trees. Official extraPlugins already land as
   # nix-managed-* under $HERMES_HOME/plugins.
-  pnpNames = lib.unique (pnp.plugins ++ lib.optionals gbrainOn gbrainPlugins ++ lib.attrNames extra);
+  # model-router is gated by modelRouter.enable (same pattern as gbrain):
+  # enable=true injects it; enable=false strips it even if listed.
+  pnpNames = lib.unique (
+    (lib.filter (n: n != "model-router") pnp.plugins)
+    ++ lib.optional routerOn "model-router"
+    ++ lib.optionals gbrainOn gbrainPlugins
+    ++ lib.attrNames extra
+  );
 
   # plugins.enabled is an opt-in allow-list. Union PnP names with
   # official extraPlugins (path key + getName) so we do not hide them.
@@ -51,7 +60,7 @@ let
 
   routerOrder = [
     "low"
-    "medium"
+    "default"
     "high"
   ];
 
@@ -201,7 +210,7 @@ in
       ];
 
       services.hermesPnP.pluginInstall.webuiExtensionDir = lib.mkIf (
-        lib.elem "model-router" enabledNames && resolvedSources ? model-router
+        routerOn && lib.elem "model-router" enabledNames && resolvedSources ? model-router
       ) "${resolvedSources.model-router}/webui";
 
       services.hermes-agent.settings.plugins.enabled = enabledNames;
@@ -255,11 +264,13 @@ in
     })
 
     (mkIf pnp.enable {
-      services.hermesPnP.plugins = mkDefault [
-        "model-router"
-        "tool-call-coherency"
-        "secret-handoff"
-      ];
+      services.hermesPnP.plugins = mkDefault (
+        lib.optional routerOn "model-router"
+        ++ [
+          "tool-call-coherency"
+          "secret-handoff"
+        ]
+      );
     })
   ];
 }
