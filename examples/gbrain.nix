@@ -13,6 +13,7 @@
   services.hermesPnP = {
     enable = true;
     gbrain.enable = true;
+    # gbrain.model = "google:gemini-3.5-flash-lite";
     # gbrain.url = "http://127.0.0.1:3131/mcp";
     # gbrain.bind = "127.0.0.1";
     # gbrain.port = 3131;

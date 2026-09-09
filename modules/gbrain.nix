@@ -69,6 +69,20 @@ in
       default = 3131;
       description = "Port gbrain serve listens on. 3131 is the stock gbrain --http default.";
     };
+
+    model = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "google:gemini-3.5-flash-lite";
+      description = ''
+        Chat/expansion model for `gbrain serve` (`GBRAIN_MODEL`).
+        Null keeps gbrain's key-aware default. Independent of
+        `container.enable` / `desktop.enable` — this unit is always
+        native systemd (User=hermes), never an OCI jail.
+        Embeddings stay `embedding_model` in `~/.gbrain/config.json`
+        (gbrain init / scripts/gbrain-setup.sh), not this option.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -93,6 +107,9 @@ in
       ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
+      environment = lib.optionalAttrs (cfg.model != null) {
+        GBRAIN_MODEL = cfg.model;
+      };
       # systemd only honours StartLimit* under [Unit], not [Service]
       unitConfig = {
         StartLimitIntervalSec = 120;

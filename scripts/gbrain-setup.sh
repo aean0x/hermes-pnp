@@ -24,7 +24,7 @@
 #   5. Bearer token for Hermes MCP clients (auth create → token file + .env)
 #   6. Wire config.yaml headers (url + Authorization)
 #   7. Import ~/brain markdown if present (serve stopped)
-#   8. Embed --stale with ZEROENTROPY (serve stopped)
+#   8. Embed --stale (Gemini/Voyage/OpenAI/ZE if a key is present) (serve stopped)
 #   9. Start HTTP serve + restart hermes-agent (+ webui if enabled)
 #  10. Smoke: health, hermes mcp test / list
 #
@@ -56,27 +56,45 @@ if ! systemctl cat gbrain-mcp-http.service >/dev/null 2>&1; then
   die "gbrain-mcp-http unit missing — set services.hermesPnP.gbrain.enable = true and switch first"
 fi
 
+# Provider keys must not appear on sudo argv (sudo logs COMMAND=).
+_hermes_key_vars=(
+  GOOGLE_GENERATIVE_AI_API_KEY GEMINI_API_KEY GOOGLE_API_KEY
+  OPENAI_API_KEY OPENROUTER_API_KEY VOYAGE_API_KEY ZEROENTROPY_API_KEY
+  GBRAIN_MODEL
+)
+
 as_hermes() {
-  # shellcheck disable=SC2086
-  sudo -u hermes env HOME="${HERMES_HOME_DIR}" \
-    PATH="${BUN_BIN}:/run/current-system/sw/bin:/usr/bin:/bin" \
-    ${ZEROENTROPY_API_KEY:+ZEROENTROPY_API_KEY="${ZEROENTROPY_API_KEY}"} \
-    "$@"
+  local preserve=() k
+  for k in "${_hermes_key_vars[@]}"; do
+    [[ -n "${!k:-}" ]] && preserve+=("$k")
+  done
+  if ((${#preserve[@]})); then
+    local IFS=,
+    sudo -u hermes --preserve-env="${preserve[*]}" \
+      env HOME="${HERMES_HOME_DIR}" \
+      PATH="${BUN_BIN}:/run/current-system/sw/bin:/usr/bin:/bin" \
+      "$@"
+  else
+    sudo -u hermes env HOME="${HERMES_HOME_DIR}" \
+      PATH="${BUN_BIN}:/run/current-system/sw/bin:/usr/bin:/bin" \
+      "$@"
+  fi
 }
 
-load_ze() {
+load_hermes_env() {
   if [[ -f /run/hermes.env ]]; then
-    # shellcheck disable=SC1091
     set -a
-    # shellcheck source=/dev/null
+    # shellcheck disable=SC1091
     . /run/hermes.env
     set +a
   fi
-  if [[ -z "${ZEROENTROPY_API_KEY:-}" ]]; then
-    warn "ZEROENTROPY_API_KEY not in /run/hermes.env — keyword search works; embed may no-op"
-  else
-    log "ZEROENTROPY_API_KEY present (len=${#ZEROENTROPY_API_KEY})"
-  fi
+  local k
+  for k in "${_hermes_key_vars[@]}"; do
+    if [[ -n "${!k:-}" ]]; then
+      val="${!k}"
+      log "$k present (len=${#val})"
+    fi
+  done
 }
 
 stop_brain_consumers() {
@@ -126,7 +144,14 @@ ensure_bun_gbrain() {
 ensure_init() {
   if [[ ! -d "${GBRAIN_HOME}/brain.pglite" ]]; then
     log "gbrain init --pglite"
-    as_hermes "${GBRAIN_BIN}" init --pglite || as_hermes "${GBRAIN_BIN}" init
+    init_args=(--pglite --non-interactive)
+    if [[ -n "${GBRAIN_MODEL:-}" ]]; then
+      init_args+=(--chat-model "${GBRAIN_MODEL}" --expansion-model "${GBRAIN_MODEL}")
+    fi
+    if [[ -n "${GOOGLE_GENERATIVE_AI_API_KEY:-}${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ]]; then
+      init_args+=(--embedding-model google:gemini-embedding-2 --embedding-dimensions 768)
+    fi
+    as_hermes "${GBRAIN_BIN}" init "${init_args[@]}" || as_hermes "${GBRAIN_BIN}" init --pglite
   else
     log "PGLite dir exists — skip init"
   fi
@@ -237,11 +262,11 @@ import_and_embed() {
   else
     log "no markdown under ${BRAIN_REPO} — skip import"
   fi
-  if [[ -n "${ZEROENTROPY_API_KEY:-}" ]]; then
+  if [[ -n "${GOOGLE_GENERATIVE_AI_API_KEY:-}${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}${VOYAGE_API_KEY:-}${OPENAI_API_KEY:-}${OPENROUTER_API_KEY:-}${ZEROENTROPY_API_KEY:-}" ]]; then
     log "gbrain embed --stale"
     as_hermes "${GBRAIN_BIN}" embed --stale || warn "embed had errors"
   else
-    warn "skip embed (no ZEROENTROPY_API_KEY)"
+    warn "skip embed (no embedding API key)"
   fi
 }
 
@@ -303,7 +328,7 @@ smoke() {
 }
 
 main() {
-  load_ze
+  load_hermes_env
   ensure_dirs
   ensure_bun_gbrain
   stop_brain_consumers

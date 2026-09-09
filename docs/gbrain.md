@@ -1,12 +1,18 @@
 # GBrain (operator)
 
-Off by default. Two steps:
+Off by default. Native systemd (`User=hermes`), not an OCI jail — same
+with `desktop.enable` (native gateway) or `container.enable` (jailed
+agent). Two steps:
 
 1. `services.hermesPnP.gbrain.enable = true` then switch — starts
    loopback `gbrain serve` (`gbrain-mcp-http`), sets
    `mcpServers.gbrain.url` + `headers.Authorization: Bearer ${GBRAIN_TOKEN}`
    (env-ref, expanded by Hermes from `$HERMES_HOME/.env`), and installs
    `gbrain-retrieval-reflex` + `gbrain-memory-flush`.
+   Optional `gbrain.model = "google:gemini-3.5-flash-lite"` sets
+   `GBRAIN_MODEL` on the unit (chat/expansion). Embeddings are
+   `gbrain init`, not this option. ZeroEntropy hosted API shut down
+   2026-09-04; new brains should init with Gemini or Voyage.
 2. `scripts/gbrain-setup.sh` (root; consumer `./deploy gbrain-setup`) —
    bun CLI, PGLite init, mint token (`gbrain auth create hermes`) into
    `~/.gbrain/hermes-mcp.token` + `GBRAIN_TOKEN` in `~/.hermes/.env`,

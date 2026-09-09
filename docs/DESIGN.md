@@ -177,7 +177,7 @@ the official option PnP set via `mkDefault`.
   (`Bearer ${GBRAIN_TOKEN}` env-ref, expanded by Hermes from `.env`),
   plugin env. Appends the two gbrain plugins if missing. No PGLite,
   sources, or memory registry. CLI is `scripts/gbrain-setup.sh`.
-- `services.hermesPnP.gbrain.url` / `bind` / `port`.
+- `services.hermesPnP.gbrain.url` / `bind` / `port` / `model` (`GBRAIN_MODEL` on the native `gbrain-mcp-http` unit; never an OCI jail).
 - `services.hermesPnP.mcpProxy` — enable, listen, backends,
   `clientAuth` (`none` / `token`), `clientTokenFile`.
   `services.mcpProxy` is an alias. Composer sets `clientAuth` to
