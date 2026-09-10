@@ -97,7 +97,10 @@ transitives, and prefixes PYTHONPATH on the Nix-wrapped `hermes`
 binary. Same wrap for native systemd and the Ubuntu jail. Pyproject
 extras (`google`, `messaging`, …) stay on
 `services.hermes-agent.extraDependencyGroups`. Example:
-`examples/python-extras.nix`.
+`examples/python-extras.nix`. Do not `pip install -e` into the sealed
+venv — `hermes doctor`'s venv entry-point warning is a false positive
+on Nix (pnp skips it). Vertex Gemini ids must be `google/<model>` on
+the OpenAPI endpoint.
 
 ## Hermes WebUI
 

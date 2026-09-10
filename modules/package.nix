@@ -128,6 +128,12 @@ let
       ''}
     '';
 
+  hooksOverlay = pkgs.runCommand "hermes-pnp-hooks" { } ''
+    mkdir -p "$out/site-packages"
+    cp ${./hermes_pnp_hooks.py} "$out/site-packages/hermes_pnp_hooks.py"
+    printf '%s\n' 'import hermes_pnp_hooks; hermes_pnp_hooks.install()' > "$out/site-packages/hermes_pnp_hooks.pth"
+  '';
+
   wrapPackage =
     extraPythonPackages: extraDependencyGroups:
     let
@@ -150,6 +156,7 @@ let
         if silenceOverlay == null then null else "${silenceOverlay}/site-packages";
       pythonpath = lib.concatStringsSep ":" (
         lib.filter (p: p != null) [
+          "${hooksOverlay}/site-packages"
           extrasPythonpath
           silencePythonpath
         ]
@@ -173,6 +180,7 @@ let
         passthru = (base.passthru or { }) // {
           silenceFixedGateway = silenceOverlay;
           pythonExtrasOverlay = extrasPythonpath;
+          hooksOverlay = "${hooksOverlay}/site-packages";
           unfixed = base;
         }
         // lib.optionalAttrs (base ? hermesVenv) {
@@ -194,27 +202,23 @@ let
   pkg = agent.package;
   share = "${pkg}/share/hermes-agent";
 
-  overlayPythonpath =
-    if pkg ? pythonExtrasOverlay && pkg.pythonExtrasOverlay != null then
-      lib.concatStringsSep ":" (
-        lib.filter (p: p != null) [
+  overlayPythonpath = lib.concatStringsSep ":" (
+    lib.filter (p: p != null) [
+      "${hooksOverlay}/site-packages"
+      (
+        if pkg ? pythonExtrasOverlay && pkg.pythonExtrasOverlay != null then
           pkg.pythonExtrasOverlay
-          (
-            if pkg ? silenceFixedGateway && pkg.silenceFixedGateway != null then
-              "${pkg.silenceFixedGateway}/site-packages"
-            else
-              null
-          )
-        ]
+        else
+          null
       )
-    else if pkg ? silenceFixedGateway && pkg.silenceFixedGateway != null then
-      "${pkg.silenceFixedGateway}/site-packages"
-    else if
-      (pnp.packageFixes.silenceMarkers || pnp.packageFixes.missingPyModules) && (pkg ? hermesVenv)
-    then
-      "${pnpOverlay pkg.hermesVenv}/site-packages"
-    else
-      null;
+      (
+        if pkg ? silenceFixedGateway && pkg.silenceFixedGateway != null then
+          "${pkg.silenceFixedGateway}/site-packages"
+        else
+          null
+      )
+    ]
+  );
 
   hermesRuntimeEnv = {
     HERMES_BUNDLED_PLUGINS = "${share}/plugins";
@@ -321,15 +325,10 @@ in
         services.hermesPnP.internal.runtimeEnv = hermesRuntimeEnv;
         services.hermes-agent.environment = lib.mapAttrs (_: mkDefault) hermesRuntimeEnv;
       }
-      (mkIf (
-        pnp.packageFixes.silenceMarkers
-        || pnp.packageFixes.missingPyModules
-        || extrasNonEmpty
-        || pythonExtrasNonEmpty
-      ) {
-        # mkDefault so a consumer package assignment wins.
+      {
+        # Always wrap: Vertex publisher prefix + Nix doctor skip live on PYTHONPATH.
         services.hermes-agent.package = mkDefault wrapped;
-      })
+      }
     ]))
   ];
 }
