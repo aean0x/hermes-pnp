@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest import mock
 
-from hermes_pnp_hooks import nix_hermes_bin, vertex_model_id
+from hermes_pnp_hooks import _wrap_doctor_config, nix_hermes_bin, vertex_model_id
 
 
 class VertexModelIdTests(unittest.TestCase):
@@ -82,3 +82,13 @@ class NixHermesBinTests(unittest.TestCase):
             with mock.patch("hermes_pnp_hooks.shutil.which", return_value="/usr/bin/hermes"):
                 with mock.patch("hermes_pnp_hooks.sys.argv", ["hermes"]):
                     self.assertIsNone(nix_hermes_bin())
+
+
+class DoctorConfigTests(unittest.TestCase):
+    def test_adds_vertex_to_vendor_slug_providers(self) -> None:
+        class Mod:
+            _VENDOR_SLUG_PROVIDERS = frozenset({"openrouter", "nous"})
+
+        _wrap_doctor_config(Mod)
+        self.assertIn("vertex", Mod._VENDOR_SLUG_PROVIDERS)
+        self.assertIn("openrouter", Mod._VENDOR_SLUG_PROVIDERS)
