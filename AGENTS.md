@@ -48,7 +48,9 @@ consumer.
   not `hermesPnP.container.enable`.
 - Gate the silence-marker wrap on
   `services.hermesPnP.packageFixes.silenceMarkers`. Missing sealed-venv
-  `hermes_*.py` files use `packageFixes.missingPyModules`.
+  `hermes_*.py` files use `packageFixes.missingPyModules`. A PYTHONPATH
+  `hermes_pnp_hooks` overlay prefixes Vertex Gemini ids (`google/…`) and
+  skips doctor's pip `venv/bin` check on Nix.
 - Extra host mounts go on official `container.extraVolumes`.
 - `hermesPnP.desktop.enable` is native-only. On NixOS it `mkForce`s the
   composer container knob off and asserts official
