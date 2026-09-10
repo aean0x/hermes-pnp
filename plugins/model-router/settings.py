@@ -1,7 +1,10 @@
-"""model-router settings — three named tiers (low < medium < high).
+"""model-router settings — three named tiers (low < default < high).
 
-This module does not own model IDs. Slot names are low/medium/high.
-Labels and `best_for` default from config.default.json. Model id and
+This module does not own model IDs. Slot names are low/default/high.
+"medium" is the deprecated alias for "default" (the v0.8 lexicon) and is
+still accepted in config keys, MODEL_ROUTER_MEDIUM_* env, and
+pin/classifier tokens. Labels and `best_for` default from
+config.default.json. Model id and
 provider come from config.json (Nix `hermesPnP.models`), a
 MODEL_ROUTER_CONFIG path, or MODEL_ROUTER_* env. No Hermes/WebUI core
 files are edited.
@@ -22,8 +25,23 @@ from typing import Any
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
 
-NAMES: tuple[str, ...] = ("low", "medium", "high")
-RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
+NAMES: tuple[str, ...] = ("low", "default", "high")
+RANK: dict[str, int] = {"low": 0, "default": 1, "high": 2}
+
+# Deprecated tier token. Accepted everywhere a tier name is accepted and
+# always resolves to the canonical "default" slot, so a v0.8 consumer
+# config (keys, MODEL_ROUTER_MEDIUM_* env, /medium pin) keeps working.
+LEGACY_NAMES: dict[str, str] = {"medium": "default"}
+_ALIASES: dict[str, str] = {**LEGACY_NAMES, **{n: n for n in NAMES}}
+
+# Per-slot env prefixes. The deprecated MODEL_ROUTER_MEDIUM_* group is listed
+# first so an explicit MODEL_ROUTER_DEFAULT_* value wins when both are set.
+_ENV_SLOTS: tuple[tuple[str, str], ...] = (
+    ("low", "MODEL_ROUTER_LOW_"),
+    ("default", "MODEL_ROUTER_MEDIUM_"),
+    ("default", "MODEL_ROUTER_DEFAULT_"),
+    ("high", "MODEL_ROUTER_HIGH_"),
+)
 
 _CATALOG_PATH = _PLUGIN_DIR / "config.default.json"
 
@@ -70,11 +88,13 @@ class SettingsError(ValueError):
 
 
 def as_name(raw: Any) -> str | None:
-    """Map a config/env/classifier token onto low|medium|high, or None."""
+    """Map a config/env/classifier token onto low|default|high, or None.
+
+    "medium" resolves to "default" (deprecated alias).
+    """
     if raw is None:
         return None
-    name = str(raw).strip().lower()
-    return name if name in RANK else None
+    return _ALIASES.get(str(raw).strip().lower())
 
 
 def as_best_for(raw: Any) -> list[str]:
@@ -112,7 +132,7 @@ def _coerce_models_map(raw: Any, *, origin: str) -> dict[str, dict[str, Any]]:
     if extra:
         raise SettingsError(
             f"model-router: {origin} declares unknown models {extra}; "
-            "only low, medium, high are allowed"
+            "only low, default, high are allowed"
         )
     if len(raw) > 3 or len(out) > 3:
         raise SettingsError(
@@ -144,7 +164,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
     """Build the turn-start triage prompt from `best_for` plus a steer block.
 
-    Keys stay low/medium/high. Labels (Quick/Standard/Expert) are display.
+    Keys stay low/default/high. Labels (Quick/Standard/Expert) are display.
     """
     names = NAMES
     lines = ["Route this turn to the cheapest model that will do it well.", ""]
@@ -159,12 +179,12 @@ def _generated_classifier(models: dict[str, dict[str, Any]]) -> str:
     lines.append("")
     lines.append("high is ONLY the cases listed above — it is rare.")
     lines.append(
-        "When uncertain between low and medium, prefer low — a wrong low "
+        "When uncertain between low and default, prefer low — a wrong low "
         "route is cheaply corrected by escalation."
     )
     lines.append(
         "The previous turn's tier is given in the request. If it was low or "
-        "medium, prefer to keep it unless the scope or topic of the work has "
+        "default, prefer to keep it unless the scope or topic of the work has "
         "significantly changed. If it was high, do not carry it over — "
         "classify at-will."
     )
@@ -200,7 +220,7 @@ def _apply_file(data: dict[str, Any], state: dict[str, Any], *, origin: str) -> 
         if extra:
             raise SettingsError(
                 f"model-router: {origin}.escalation_errors has unknown keys {extra}; "
-                "only low, medium, high are allowed"
+                "only low, default, high are allowed"
             )
         state["escalation_errors"] = errors
     if "skip_platforms" in data and isinstance(data["skip_platforms"], list):
@@ -220,7 +240,7 @@ def load_settings() -> dict[str, Any]:
         "models": _slot_shells(),
         "provider_hosts": deepcopy(DEFAULT_PROVIDER_HOSTS),
         "escalate_max": "high",
-        "escalation_errors": {"low": 4, "medium": 3},
+        "escalation_errors": {"low": 4, "default": 3},
         "skip_platforms": ["cron", "subagent"],
         "classifier_system": None,
         "handoff_tail_chars": 64000,
@@ -253,16 +273,12 @@ def load_settings() -> dict[str, Any]:
     extra = [name for name in models if name not in RANK]
     if extra:
         raise SettingsError(
-            f"model-router: unknown models {extra}; only low, medium, high are allowed"
+            f"model-router: unknown models {extra}; only low, default, high are allowed"
         )
     if len(models) > 3:
         raise SettingsError("model-router: a fourth model is not allowed")
 
-    for name, prefix in (
-        ("low", "MODEL_ROUTER_LOW_"),
-        ("medium", "MODEL_ROUTER_MEDIUM_"),
-        ("high", "MODEL_ROUTER_HIGH_"),
-    ):
+    for name, prefix in _ENV_SLOTS:
         model = os.environ.get(prefix + "MODEL")
         provider = os.environ.get(prefix + "PROVIDER")
         label = os.environ.get(prefix + "LABEL")

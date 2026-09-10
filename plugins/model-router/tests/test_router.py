@@ -27,11 +27,15 @@ class Pins(unittest.TestCase):
 
     def test_named_slash_pins(self) -> None:
         self.assertEqual(self.mod._detect_explicit_tier("/low"), "low")
-        self.assertEqual(self.mod._detect_explicit_tier("/medium"), "medium")
+        self.assertEqual(self.mod._detect_explicit_tier("/default"), "default")
         self.assertEqual(self.mod._detect_explicit_tier("/high please"), "high")
 
+    def test_deprecated_medium_slash_pins_default(self) -> None:
+        self.assertEqual(self.mod._detect_explicit_tier("/medium"), "default")
+
     def test_use_phrase(self) -> None:
-        self.assertEqual(self.mod._detect_explicit_tier("please use medium"), "medium")
+        self.assertEqual(self.mod._detect_explicit_tier("please use default"), "default")
+        self.assertEqual(self.mod._detect_explicit_tier("please use medium"), "default")
         self.assertEqual(self.mod._detect_explicit_tier("pin high"), "high")
 
     def test_bare_name_in_long_critique_is_not_a_pin(self) -> None:
@@ -39,7 +43,14 @@ class Pins(unittest.TestCase):
         self.assertIsNone(self.mod._detect_explicit_tier(msg))
 
     def test_short_bare_name_is_a_pin(self) -> None:
-        self.assertEqual(self.mod._detect_explicit_tier("medium"), "medium")
+        self.assertEqual(self.mod._detect_explicit_tier("medium"), "default")
+        self.assertEqual(self.mod._detect_explicit_tier("low please"), "low")
+
+    def test_bare_default_is_not_a_pin(self) -> None:
+        # "default" is ordinary English; only /default or "pin default" pins it.
+        self.assertIsNone(self.mod._detect_explicit_tier("is that the default?"))
+        self.assertIsNone(self.mod._detect_explicit_tier("default"))
+        self.assertEqual(self.mod._detect_explicit_tier("pin default"), "default")
 
     def test_mid_paragraph_slash_high_is_not_a_pin(self) -> None:
         msg = (
@@ -58,11 +69,13 @@ class Names(unittest.TestCase):
     def test_as_name_named_only(self) -> None:
         self.assertEqual(self.mod.as_name("low"), "low")
         self.assertEqual(self.mod.as_name("HIGH"), "high")
+        self.assertEqual(self.mod.as_name("default"), "default")
+        self.assertEqual(self.mod.as_name("medium"), "default")
         self.assertIsNone(self.mod.as_name("ultra"))
 
     def test_higher_climbs_to_high(self) -> None:
-        self.assertEqual(self.mod._higher("low"), "medium")
-        self.assertEqual(self.mod._higher("medium"), "high")
+        self.assertEqual(self.mod._higher("low"), "default")
+        self.assertEqual(self.mod._higher("default"), "high")
         self.assertEqual(self.mod._higher("high"), "high")
 
     def test_router_does_not_touch_reasoning_config(self) -> None:

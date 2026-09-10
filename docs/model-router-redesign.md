@@ -2,7 +2,8 @@
 
 Status: implemented in model-router v0.7.0; classifier prior and
 slash-at-start pins in v0.8.0; 3-way Auto is always-on as of v0.8.2
-(`classify_high` removed). Public split is `low` / `medium` / `high`.
+(`classify_high` removed). Public split is `low` / `default` / `high`
+(`medium` is the deprecated alias for `default`).
 Model id / provider are Nix `hermesPnP.models` options. Official
 `settings.auxiliary` stays Nix-only (`models.auxiliary`).
 
@@ -16,7 +17,7 @@ cost spike when the router climbs to `high`. This redesign makes the climb to
 
 ## Design
 
-### 1. Turn-start classification is 3-way (`low` / `medium` / `high`)
+### 1. Turn-start classification is 3-way (`low` / `default` / `high`)
 
 - Auto classifies all three. `high` is only money / irreversible / security
   (the `best_for` prior). There is no `classify_high` off-ramp.
@@ -29,7 +30,7 @@ cost spike when the router climbs to `high`. This redesign makes the climb to
 ### 2. Escalation is a checkpoint + tool, not an auto-climb
 
 - `on_post_tool_call` no longer climbs. After N consecutive tool errors (4 on
-  low, 3 on medium) it stages an **escalation checkpoint**.
+  low, 3 on default) it stages an **escalation checkpoint**.
 - The next tool-continuation `pre_llm_call` injects a one-shot nudge
   (`_CHECKPOINT_NUDGE`) telling the working model it may call `escalate_model`.
 - The working model decides — it can keep going or escalate. The classifier is
@@ -60,7 +61,7 @@ Hermes auto-compaction keeps churning. The user-facing knob is
 own window):
 
 - `low` default `0.95` → overflow-only on a 1M window
-- `medium` default `0.26` → ~260k on a 1M window
+- `default` default `0.26` → ~260k on a 1M window
 - `high` default `0.28` → ~140k intent on a 500k window (Hermes
   floors models under 512k at ≥0.75 unless a global
   `compression.threshold_tokens` cap is lower)
