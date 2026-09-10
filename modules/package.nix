@@ -279,7 +279,7 @@ in
       type = types.functionTo types.package;
       internal = true;
       default = system: throw "hermesPnP package wrap requires nixosModules.default (official agent package not wired for ${system})";
-      defaultText = lib.literalExpression "system: throw \\\"…\\\"";
+      defaultText = lib.literalExpression "system: throw \"…\"";
       description = "system → official hermes-agent package. Set by the composer flake.";
     };
 
@@ -294,7 +294,7 @@ in
       type = types.functionTo types.raw;
       internal = true;
       default = system: throw "hermesPnP pythonExtras requires nixosModules.default (hermes-agent python312Packages not wired for ${system})";
-      defaultText = lib.literalExpression "system: throw \\\"…\\\"";
+      defaultText = lib.literalExpression "system: throw \"…\"";
       description = "system → hermes-agent flake python312Packages (same interpreter as hermesVenv).";
     };
   };
