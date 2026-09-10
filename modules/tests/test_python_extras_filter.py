@@ -77,6 +77,17 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(run(venv_site, dest, [leaf]), 0)
         self.assertFalse((dest / "google" / "cloud" / "pubsub_v1" / "subscriber.py").exists())
 
+    def test_skips_dev_output_without_site_packages(self) -> None:
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(base, ignore_errors=True))
+        venv_site = base / "venv" / "lib" / "python3.12" / "site-packages"
+        venv_site.mkdir(parents=True)
+        dev = base / "grpcio-dev"
+        (dev / "include").mkdir(parents=True)
+        dest = base / "overlay"
+        self.assertEqual(run(venv_site, dest, [dev]), 0)
+        self.assertEqual(list(dest.iterdir()), [])
+
     def test_missing_venv_fails(self) -> None:
         base = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: shutil.rmtree(base, ignore_errors=True))
