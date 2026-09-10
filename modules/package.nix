@@ -4,7 +4,12 @@
 # gateway. extraOptions is only for stable remapped paths — official
 # identity hashes it.
 # Forward extraPythonPackages / extraDependencyGroups. Leave package
-# alone when both lists are empty.
+# alone when both lists are empty and pythonExtras is empty.
+# pythonExtras names resolve against the hermes-agent flake's Python
+# (same interpreter as the sealed venv). Transitive dists already in
+# the venv are dropped at wrap time so the upstream collision check
+# never fires. The overlay is on the Nix-wrapped hermes binary, so it
+# applies to native systemd and the Ubuntu jail (/nix/store:ro).
 {
   config,
   lib,
@@ -28,6 +33,8 @@ let
   extrasNonEmpty =
     agent.extraPythonPackages != [ ] || agent.extraDependencyGroups != [ ];
 
+  pythonExtrasNonEmpty = pnp.pythonExtras != [ ];
+
   officialPkg = pnp.internal.officialAgentPackageFor pkgs.stdenv.hostPlatform.system;
 
   makeBase =
@@ -40,6 +47,39 @@ let
       };
 
   agentSrc = pnp.internal.officialAgentSrc;
+
+  resolvePythonExtras =
+    let
+      pyPkgs = pnp.internal.officialPythonPackagesFor pkgs.stdenv.hostPlatform.system;
+      leaves = map (
+        name:
+        pyPkgs.${name}
+          or (throw "services.hermesPnP.pythonExtras: '${name}' is not an attr of hermes-agent python312Packages")
+      ) pnp.pythonExtras;
+    in
+    if leaves == [ ] then [ ] else pyPkgs.requiredPythonModules leaves;
+
+  extrasOverlay =
+    hermesVenv: extraPkgs:
+    pkgs.runCommand "hermes-pnp-python-extras" { } ''
+      mkdir -p "$out/site-packages"
+      venv_sp=""
+      for cand in ${hermesVenv}/lib/python*/site-packages; do
+        if [ -d "$cand" ]; then venv_sp="$cand"; break; fi
+      done
+      if [ -z "$venv_sp" ]; then
+        echo "python extras: hermesVenv site-packages not found" >&2
+        exit 1
+      fi
+      extras=()
+      ${lib.concatMapStringsSep "\n" (p: ''
+        extras+=("${p}")
+      '') extraPkgs}
+      ${pkgs.python3}/bin/python3 ${./python_extras_filter.py} \
+        --venv-site "$venv_sp" \
+        --dest "$out/site-packages" \
+        "''${extras[@]}"
+    '';
 
   pnpOverlay =
     hermesVenv:
@@ -91,7 +131,7 @@ let
     extraPythonPackages: extraDependencyGroups:
     let
       base = makeBase extraPythonPackages extraDependencyGroups;
-      overlay =
+      silenceOverlay =
         if
           (pnp.packageFixes.silenceMarkers || pnp.packageFixes.missingPyModules)
           && (base ? hermesVenv)
@@ -99,8 +139,22 @@ let
           pnpOverlay base.hermesVenv
         else
           null;
+      extrasPkgs = if pythonExtrasNonEmpty then resolvePythonExtras else [ ];
+      extrasPythonpath =
+        if extrasPkgs == [ ] || !(base ? hermesVenv) then
+          null
+        else
+          "${extrasOverlay base.hermesVenv extrasPkgs}/site-packages";
+      silencePythonpath =
+        if silenceOverlay == null then null else "${silenceOverlay}/site-packages";
+      pythonpath = lib.concatStringsSep ":" (
+        lib.filter (p: p != null) [
+          extrasPythonpath
+          silencePythonpath
+        ]
+      );
     in
-    if overlay == null then
+    if pythonpath == "" then
       base
     else
       pkgs.symlinkJoin {
@@ -111,12 +165,13 @@ let
           for bin in hermes hermes-agent hermes-acp; do
             if [ -e "$out/bin/$bin" ]; then
               wrapProgram "$out/bin/$bin" \
-                --prefix PYTHONPATH : "${overlay}/site-packages"
+                --prefix PYTHONPATH : "${pythonpath}"
             fi
           done
         '';
         passthru = (base.passthru or { }) // {
-          silenceFixedGateway = overlay;
+          silenceFixedGateway = silenceOverlay;
+          pythonExtrasOverlay = extrasPythonpath;
           unfixed = base;
         }
         // lib.optionalAttrs (base ? hermesVenv) {
@@ -139,7 +194,19 @@ let
   share = "${pkg}/share/hermes-agent";
 
   overlayPythonpath =
-    if pkg ? silenceFixedGateway then
+    if pkg ? pythonExtrasOverlay && pkg.pythonExtrasOverlay != null then
+      lib.concatStringsSep ":" (
+        lib.filter (p: p != null) [
+          pkg.pythonExtrasOverlay
+          (
+            if pkg ? silenceFixedGateway && pkg.silenceFixedGateway != null then
+              "${pkg.silenceFixedGateway}/site-packages"
+            else
+              null
+          )
+        ]
+      )
+    else if pkg ? silenceFixedGateway && pkg.silenceFixedGateway != null then
       "${pkg.silenceFixedGateway}/site-packages"
     else if
       (pnp.packageFixes.silenceMarkers || pnp.packageFixes.missingPyModules) && (pkg ? hermesVenv)
@@ -157,12 +224,40 @@ let
     HERMES_WEB_DIST = "${share}/web_dist";
     HERMES_TUI_DIR = "${pkg}/ui-tui";
   }
-  // optionalAttrs (overlayPythonpath != null) {
+  // optionalAttrs (overlayPythonpath != null && overlayPythonpath != "") {
     PYTHONPATH = overlayPythonpath;
   };
 in
 {
   options.services.hermesPnP = {
+    pythonExtras = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = [
+        "google-cloud-pubsub"
+        "redis"
+      ];
+      description = ''
+        Extra python312Packages attrs sealed into the gateway PYTHONPATH.
+
+        Names resolve against the hermes-agent flake's nixpkgs (the same
+        Python 3.12 that built the uv2nix venv). Host
+        pkgs.python312Packages is the wrong interpreter and is silently
+        dropped by requiredPythonModules.
+
+        Transitive dists already in the sealed venv are omitted at wrap
+        time, so overlapping trees (Pub/Sub, grpc, protobuf, google-api-core)
+        do not trip the upstream extraPythonPackages collision assertion.
+
+        Prefer this over services.hermes-agent.extraPythonPackages for any
+        library that is not a pyproject extra. Pyproject extras still use
+        extraDependencyGroups (uv2nix, no PYTHONPATH).
+
+        The wrap is the Nix hermes binary. Native systemd and the Ubuntu
+        jail both execute it from /nix/store.
+      '';
+    };
+
     packageFixes.silenceMarkers = mkOption {
       type = types.bool;
       default = true;
@@ -194,19 +289,42 @@ in
       default = null;
       description = "hermes-agent flake source (for missing py-modules overlay).";
     };
+
+    internal.officialPythonPackagesFor = mkOption {
+      type = types.functionTo types.raw;
+      internal = true;
+      default = system: throw "hermesPnP pythonExtras requires nixosModules.default (hermes-agent python312Packages not wired for ${system})";
+      defaultText = lib.literalExpression "system: throw \"…\"";
+      description = "system → hermes-agent flake python312Packages (same interpreter as hermesVenv).";
+    };
   };
 
-  config = mkIf pnp.enable (mkMerge [
+  config = mkMerge [
     {
-      services.hermes-agent.environment = lib.mapAttrs (_: mkDefault) hermesRuntimeEnv;
-
-      services.hermes-webui.extraEnvironment = mkIf pnp.webui.enable (
-        lib.mapAttrs (_: mkDefault) hermesRuntimeEnv
-      );
+      assertions = [
+        {
+          assertion = pnp.pythonExtras == [ ] || pnp.enable;
+          message = "services.hermesPnP.pythonExtras requires services.hermesPnP.enable = true";
+        }
+      ];
     }
-    (mkIf (pnp.packageFixes.silenceMarkers || pnp.packageFixes.missingPyModules || extrasNonEmpty) {
-      # mkDefault so a consumer package assignment wins.
-      services.hermes-agent.package = mkDefault wrapped;
-    })
-  ]);
+    (mkIf pnp.enable (mkMerge [
+      {
+        services.hermes-agent.environment = lib.mapAttrs (_: mkDefault) hermesRuntimeEnv;
+
+        services.hermes-webui.extraEnvironment = mkIf pnp.webui.enable (
+          lib.mapAttrs (_: mkDefault) hermesRuntimeEnv
+        );
+      }
+      (mkIf (
+        pnp.packageFixes.silenceMarkers
+        || pnp.packageFixes.missingPyModules
+        || extrasNonEmpty
+        || pythonExtrasNonEmpty
+      ) {
+        # mkDefault so a consumer package assignment wins.
+        services.hermes-agent.package = mkDefault wrapped;
+      })
+    ]))
+  ];
 }

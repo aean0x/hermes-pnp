@@ -153,6 +153,8 @@ let
 
   skillsConfig = eval [ ../examples/skills.nix ];
 
+  pythonExtrasConfig = eval [ ../examples/python-extras.nix ];
+
   # Skip the GitHub fetch; keep the pin options.
   hmcConfig = eval [
     ../examples/hmc.nix
@@ -530,6 +532,8 @@ in
     test "${toString (optionsEval.options.services ? mcpProxy)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.packageFixes.silenceMarkers.default}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.packageFixes.missingPyModules.default}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP ? pythonExtras)}" = "1"
+    test "${toString (optionsEval.options.services.hermesPnP.pythonExtras.default == [ ])}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? hmc)}" = "1"
     test "${toString optionsEval.options.services.hermesPnP.hmc.enable.default}" = ""
     test "$(printf '%s\n' ${lib.escapeShellArg (builtins.readFile ../modules/hmc.nix)} | ${pkgs.gnugrep}/bin/grep -A1 'deduplication:' | ${pkgs.gnugrep}/bin/grep -c 'enabled: false')" = "1"
@@ -579,6 +583,9 @@ in
     test "${toString (skillsConfig.services.hermesPnP.skills.extraSkills ? site-runbook)}" = "1"
     test "${toString (hmcConfig.services.hermesPnP.hmc.compressPercent == 0.30)}" = "1"
     test "${toString hmcConfig.services.hermesPnP.hmc.enable}" = ""
+    test "${toString (pythonExtrasConfig.services.hermesPnP.pythonExtras == [ "google-cloud-pubsub" ])}" = "1"
+    test "${toString (pythonExtrasConfig.services.hermes-agent.extraPythonPackages == [ ])}" = "1"
+    test "${toString (pythonExtrasConfig.services.hermes-agent.extraDependencyGroups == [ ])}" = "1"
     test "${builtins.head bestForConfig.services.hermesPnP.models.low.best_for}" = "Only acks"
     test "${builtins.head bestForConfig.services.hermesPnP.models.default.best_for}" = "${builtins.head pluginRouterDefaults.default.best_for}"
     test "${toString (ratioConfig.services.hermesPnP.models.default.compression_ratio == 0.5)}" = "1"

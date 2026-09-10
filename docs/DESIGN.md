@@ -197,6 +197,17 @@ the official option PnP set via `mkDefault`.
   (empty profile or `overwrite = true`) preserves gate-added logins.
   The seeded cookies/logins are Nix store content, readable by local
   users on build and target machines.
+- `services.hermesPnP.pythonExtras` — `listOf str`, default `[]`.
+  python312Packages attr names sealed into gateway PYTHONPATH from the
+  hermes-agent flake's Python (same interpreter as the uv2nix venv).
+  Transitive dists already in the venv are dropped at wrap time so the
+  upstream extraPythonPackages collision assertion never fires. Use
+  this for libraries that are not pyproject extras (e.g.
+  `google-cloud-pubsub`). Pyproject extras stay on official
+  `extraDependencyGroups`. Host `pkgs.python312Packages` is the wrong
+  instance and is silently dropped. The wrap is the Nix hermes
+  binary: native systemd and the Ubuntu jail both run it from
+  `/nix/store`.
 - `services.hermesPnP.packageFixes.silenceMarkers` — default `true`.
   Autonomous silence match via PYTHONPATH.
 - `services.hermesPnP.packageFixes.missingPyModules` — default `true`.
@@ -324,12 +335,22 @@ Do not install first-party plugins via official `extraPlugins`.
 3. Share map: `HERMES_BUNDLED_PLUGINS`, `HERMES_BUNDLED_SKILLS`,
    `HERMES_OPTIONAL_SKILLS`, `HERMES_BUNDLED_LOCALES`,
    `HERMES_OPTIONAL_MCPS`, `HERMES_WEB_DIST`, `HERMES_TUI_DIR`, plus
-   optional silence `PYTHONPATH`.
+   optional silence / pythonExtras `PYTHONPATH`.
 4. Apply that map to `environment{}` and WebUI `extraEnvironment`.
    Not official `container.extraOptions`.
 
 Forward `extraDependencyGroups` / `extraPythonPackages`. Do not
 default extras. Native `full` already has what most users need.
+
+`pythonExtras` is the collision-safe channel for packages that are
+not in pyproject.toml. `modules/package.nix` resolves names from
+`hermes-agent.inputs.nixpkgs` python312Packages, expands
+`requiredPythonModules`, then `python_extras_filter.py` copies only
+dists the sealed venv does not already ship. Result is a PYTHONPATH
+overlay on the same wrap used for silence markers — native unit and
+OCI jail share it. Do not put overlapping trees on official
+`extraPythonPackages` (upstream asserts and aborts). Do not pass
+host-python packages (interpreter identity strips them).
 
 ## Container
 

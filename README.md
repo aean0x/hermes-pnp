@@ -51,6 +51,8 @@ sandboxing, and the add-ons that should have been one enable.
     # hmc.enable = true;
 
     # gbrain.enable = true; # then scripts/gbrain-setup.sh — see GBrain below
+
+    # pythonExtras = [ "google-cloud-pubsub" ]; # sealed venv extras; see below
   };
 
   # services.hermes-agent.mcpServers.github.url = "http://127.0.0.1:3140/github";
@@ -80,6 +82,18 @@ is the recommended host: Ubuntu 24.04, `/nix/store:ro`, no view of
 `/etc/nixos`. Network follows official `container.network` when that
 option exists (else host). Extra binds stay on official
 `container.extraVolumes`. RAM caps stay in the consumer.
+
+**Sealed Python extras.** The gateway is a read-only uv2nix venv.
+`pip` does not exist on the host unit or in the jail. Official
+`extraPythonPackages` uses the *host* Python by accident (silently
+dropped) or collides with dists already in the venv (build abort).
+`services.hermesPnP.pythonExtras = [ "google-cloud-pubsub" ];` names
+python312Packages attrs from the hermes-agent flake, drops overlapping
+transitives, and prefixes PYTHONPATH on the Nix-wrapped `hermes`
+binary. Same wrap for native systemd and the Ubuntu jail. Pyproject
+extras (`google`, `messaging`, …) stay on
+`services.hermes-agent.extraDependencyGroups`. Example:
+`examples/python-extras.nix`.
 
 ## Hermes WebUI
 
