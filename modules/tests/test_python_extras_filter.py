@@ -90,3 +90,27 @@ class MergeTests(unittest.TestCase):
         dest = base / "dest"
         self.assertEqual(merge_extra(src, dest, {"protobuf"}), "copy")
         self.assertTrue((dest / "grpc" / "__init__.py").is_file())
+
+    def test_skips_no_dist_interpreter(self) -> None:
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(base, ignore_errors=True))
+        src = base / "src"
+        src.mkdir()
+        dest = base / "dest"
+        self.assertEqual(merge_extra(src, dest, set()), "skip-no-dist")
+        self.assertFalse(dest.exists())
+
+    def test_second_extra_merges_into_readonly_namespace(self) -> None:
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(base, ignore_errors=True))
+        first = base / "first"
+        _write_dist(first, "google-auth", "google/auth/__init__.py")
+        second = base / "second"
+        _write_dist(second, "google-cloud-pubsub", "google/cloud/pubsub_v1/__init__.py")
+        dest = base / "dest"
+        self.assertEqual(merge_extra(first, dest, set()), "copy")
+        dest.chmod(0o555)
+        (dest / "google").chmod(0o555)
+        self.assertEqual(merge_extra(second, dest, set()), "copy")
+        self.assertTrue((dest / "google" / "auth" / "__init__.py").is_file())
+        self.assertTrue((dest / "google" / "cloud" / "pubsub_v1" / "__init__.py").is_file())
