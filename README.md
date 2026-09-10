@@ -24,7 +24,7 @@ sandboxing, and the add-ons that should have been one enable.
     browser.package = pkgs.brave; # engine follows package.meta.mainProgram
 
     models.low       = { provider = "deepseek";  model = "deepseek-v4-flash"; }; # cheap helper, cron
-    models.medium    = { provider = "deepseek";  model = "deepseek-v4-pro"; };   # workhorse, delegation
+    models.default   = { provider = "deepseek";  model = "deepseek-v4-pro"; };   # workhorse, delegation
     models.high      = { provider = "xai-oauth"; model = "grok-4.6"; };          # session voice + fallback
     # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; }; # aux tasks; reasoning_effort = "none"
     # models.low.best_for = [ "Short acknowledgements" ]; # classifier matrix; plugin defaults otherwise
@@ -88,7 +88,7 @@ user/group/package/env files as the agent, `hermesHome` pointed at
 `${stateDir}/.hermes`, forwarded-proto / trusted-proxy set for a
 loopback Caddy. When `container.enable` is on, WebUI is its own OCI
 jail — terminals it spawns see only the binds you add. model-router
-ships a WebUI extension (`/low` `/medium` `/high` `/auto`). Caddy and
+ships a WebUI extension (`/low` `/default` `/high` `/auto`). Caddy and
 the public hostname are consumer work. Set `webui.enable = false` for
 gateway-only.
 
@@ -156,10 +156,11 @@ Materialize to `$stateDir/plugins/<name>`, discovered via
 installed through official `extraPlugins`. `extraPluginDirs` is
 `attrsOf path` for your own trees (`extraPlugins` is a renamed alias).
 
-**model-router** (v0.8.4) — per-turn low / medium / high, labelled
+**model-router** (v0.9.1) — per-turn low / default / high, labelled
 Quick / Standard / Expert. Auto classifies all three; `high` is only
-money / irreversible / security. Pins: `/low` `/medium` `/high`
-`/auto`. Writes `config.json` + WebUI extension from
+money / irreversible / security. Pins: `/low` `/default` `/high`
+`/auto` (`/medium` is the deprecated alias for `/default`). Writes
+`config.json` + WebUI extension from
 `hermesPnP.models` (model, provider, label, short, best_for). Catalog
 JSON holds labels / `best_for` / escalate_* defaults, not model IDs.
 Official aux tasks use `models.auxiliary`, not a router tier.

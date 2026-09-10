@@ -148,7 +148,7 @@ the official option PnP set via `mkDefault`.
 - `services.hermesPnP.enable` — composer on. Default `false`.
 - `services.hermesPnP.environmentFiles` — forwarded to official
   `environmentFiles`. Key list: `docs/hermes.env.example`.
-- `services.hermesPnP.models.{low,medium,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Router tiers also have `best_for` (classifier matrix; plugin JSON defaults). Auxiliary is Nix-only; effort unset except auxiliary (`"none"`).
+- `services.hermesPnP.models.{low,default,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Router tiers also have `best_for` (classifier matrix; plugin JSON defaults). Auxiliary is Nix-only; effort unset except auxiliary (`"none"`).
 - `services.hermesPnP.plugins` — `listOf str`. Composer on defaults
   via `mkDefault` to model-router, tool-call-coherency, secret-handoff.
 - `services.hermesPnP.extraPluginDirs` — `attrsOf path` beside the catalog
@@ -222,8 +222,9 @@ explicit `plugins` / `extraPluginDirs`, `mcpProxy.enable`, and opt-in
 
 ## Named models
 
-Model-router, WebUI labels, and slash commands speak `low` / `medium` /
-`high` only. Nix also has `models.auxiliary` for official auxiliary
+Model-router, WebUI labels, and slash commands speak `low` / `default` /
+`high` only (`medium` is the deprecated alias for `default`). Nix also has
+`models.auxiliary` for official auxiliary
 slots — not a router tier, no `/auxiliary`.
 
 Each named model has `reasoning_effort` (`nullOr str`). Default is
@@ -234,35 +235,35 @@ unset (Hermes session defaults) except auxiliary, which defaults to
 | name       | role                     | seeds                                         |
 | ---------- | ------------------------ | --------------------------------------------- |
 | low        | cheap helper             | `settings.cron`                               |
-| medium     | workhorse                | `settings.delegation`, `settings.model.default` (default tier) |
+| default    | workhorse                | `settings.delegation`, `settings.model.default` (default tier) |
 | high       | session identity + voice | `fallback_model`                              |
 | auxiliary  | official aux tasks       | every seeded `settings.auxiliary.<slot>`      |
 
 ```nix
 models.low       = { provider = "deepseek";  model = "deepseek-v4-flash"; };
-models.medium    = { provider = "deepseek";  model = "deepseek-v4-pro"; };
+models.default   = { provider = "deepseek";  model = "deepseek-v4-pro"; };
 models.high      = { provider = "xai-oauth"; model = "grok-4.6"; };
 models.auxiliary = { provider = "deepseek";  model = "deepseek-v4-flash"; }; # reasoning_effort = "none"
 ```
 
-`services.hermesPnP.model.default` (enum `low` / `medium` / `high`,
-default `"medium"`) picks which tier seeds
+`services.hermesPnP.model.default` (enum `low` / `default` / `high`,
+default `"default"`; `"medium"` is a deprecated alias) picks which tier seeds
 `settings.model.{provider,default}`. A consumer assignment of
 `settings.model.default` after the PnP import overrides the seed
 (`deepConfigType` last-writer-wins).
 
 When `hermesPnP.enable` (`modules/models.nix`):
 
-- `settings.model.{provider,default}` ← `models.${model.default}` (default tier `medium`). No global `context_length`.
+- `settings.model.{provider,default}` ← `models.${model.default}` (default tier `default`). No global `context_length`.
 - `settings.context.engine` ← `model-router` (handoff compaction on escalate)
 - `settings.compression.model_thresholds.<model>` ← each name's `compression_ratio`
 - `settings.model_overrides` ← only when `models.<name>.context_length` is set
 - `settings.fallback_model.{provider,model}` ← high
-- `settings.delegation.{provider,model}` ← medium
+- `settings.delegation.{provider,model}` ← default
 - `settings.cron.{model,model_provider}` ← low
 - `settings.auxiliary.<slot>` ← `models.auxiliary` (provider, model, and `reasoning_effort` when set)
 - `settings.agent.reasoning_effort` ← high only when `models.high.reasoning_effort` is set
-- `delegation` / `cron` `reasoning_effort` ← medium / low only when those options are set
+- `delegation` / `cron` `reasoning_effort` ← default / low only when those options are set
 
 Slots match official DEFAULT_CONFIG: `title_generation`, `compression`,
 `approval`, `web_extract`, `skills_hub`, `mcp`, `triage_specifier`,
@@ -284,9 +285,9 @@ Each router name also has `compression_ratio` (fraction of that
 model's own window) and optional `context_length` (writes
 `model_overrides`, never a global `model.context_length`).
 
-Classifier: Auto turn-start is low / medium / high. `high` is only
+Classifier: Auto turn-start is low / default / high. `high` is only
 money, irreversible/destructive/publish, or security. Prefer low on
-doubt. 4 consecutive tool errors on low, 3 on medium, cap
+doubt. 4 consecutive tool errors on low, 3 on default, cap
 `escalate_max` (high). `/high` pins. `escalate_model` still climbs.
 Client rebuilds that pair the live provider with the previous API host
 (WebUI `credential_refresh`) are refused at the agent client rebuild;
@@ -530,7 +531,7 @@ this host). Jail entrypoint `umask 0077`; host unit `UMask=0077`.
 - `checks.${system}.options` — user-facing option paths; no
   `plugins.enable` / `plugins.modelRouter`; composer seeds
   `settings.auxiliary.triage_specifier.model` from `models.auxiliary` and
-  `settings.model.default` from `models.${model.default}` (default `medium`)
+  `settings.model.default` from `models.${model.default}` (default `default`)
 - `checks.${system}.examples` — every file in `examples/`
 
 ## Out of scope

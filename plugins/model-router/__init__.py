@@ -1,21 +1,23 @@
 """model-router — per-turn cost routing for Hermes across three named tiers.
 
-Exactly three models: low < medium < high. Models, providers, labels, and
+Exactly three models: low < default < high. Models, providers, labels, and
 escalation are config — see settings.py and config.default.json. Override via
 a plugin-adjacent config.json, a MODEL_ROUTER_CONFIG path, or MODEL_ROUTER_*
-env vars.
+env vars. "medium" is the deprecated alias for "default" and still pins the
+default slot.
 
 Policy:
   • Each real user turn is classified once; the work loop stays on that tier
     for the whole multi-tool turn.
-  • Classifier is 3-way (low/medium/high). High is rare (money /
+  • Classifier is 3-way (low/default/high). High is rare (money /
     irreversible / security). Prefer low on doubt.
   • The classifier is told the previous tier and biased to keep it when the
-    scope/topic is unchanged (low/medium only; high is never sticky).
+    scope/topic is unchanged (low/default only; high is never sticky).
   • A classifier-driven tier change compacts the transcript before the switch
     so the new model cold-reads a summary (explicit pins/escalation skip this).
   • Consecutive tool errors climb one tier, capped at escalate_max.
-  • Manual /low /medium /high pins pause auto-routing until /auto.
+  • Manual /low /default /high pins pause auto-routing until /auto. /medium
+    is the deprecated form of /default.
   • Slash pins must start the message; a mid-paragraph /high is not a pin.
   • Classifier matrices (`best_for`) are config — Nix / config.json / env.
   • Client rebuilds that pair the live provider with the previous API host
@@ -63,6 +65,7 @@ _s = _import_settings()
 MODELS = _s.MODELS
 NAMES = _s.NAMES
 RANK = _s.RANK
+LEGACY_NAMES = _s.LEGACY_NAMES
 as_name = _s.as_name
 _ESCALATE_MAX = _s.ESCALATE_MAX
 _ESCALATION_ERRORS = _s.ESCALATION_ERRORS
@@ -73,7 +76,7 @@ _HANDOFF_TAIL_CHARS = _s.HANDOFF_TAIL_CHARS
 _CLASSIFIER_CONTEXT_CHARS = _s.CLASSIFIER_CONTEXT_CHARS
 _CLASSIFIER_TIMEOUT_S = _s.CLASSIFIER_TIMEOUT_S
 _MIN = "low"
-_MID = "medium"
+_MID = "default"
 _TOP = NAMES[-1]  # "high"
 
 
@@ -118,8 +121,16 @@ def _escalation_threshold(name: str) -> int:
 # count toward escalation, otherwise two clean tool calls false-escalate.
 _ERROR_PAT = re.compile(r'"(?:error|failed)"\s*:\s*(?!\s*null\b)(?!\s*false\b)(?!\s*"")')
 
+# Tier tokens a message may name: canonical low/default/high plus the
+# deprecated "medium" alias, which as_name() resolves to "default".
+_TIER_WORD = "|".join((*NAMES, *LEGACY_NAMES))
+# Bare mentions are restricted to the unambiguous tokens. A bare "default" is
+# ordinary English ("the default is fine") and must not pin a tier, so the
+# canonical name pins only via the /default slash form or an explicit phrase.
+_BARE_WORD = "|".join(n for n in (*NAMES, *LEGACY_NAMES) if n != "default")
+
 _NAME_RE = re.compile(
-    r"(?:^|(?<=\s)|(?<=\())/?(low|medium|high)(?:\b|(?=\)))",
+    rf"(?:^|(?<=\s)|(?<=\())/?({_BARE_WORD})(?:\b|(?=\)))",
     re.IGNORECASE,
 )
 _ACK_RE = re.compile(
@@ -136,13 +147,13 @@ _WEBUI_WORKSPACE_RE = re.compile(
 # Slash pin only at the start of the message (after the WebUI workspace prefix).
 # Mid-paragraph "/high" in a bug report must not route to grok.
 _SLASH_PIN_RE = re.compile(
-    r"^/(low|medium|high)\b",
+    rf"^/({_TIER_WORD})\b",
     re.IGNORECASE,
 )
-# Phrase pins ("pin high", "please use medium") — only honoured on short messages.
+# Phrase pins ("pin high", "please use default") — only honoured on short messages.
 _PIN_PHRASE_RE = re.compile(
     r"(?:^|\s)(?:use|pin|switch\s+to|run\s+(?:on|at)|please\s+use)\s+/?"
-    r"(low|medium|high)\b",
+    rf"({_TIER_WORD})\b",
     re.IGNORECASE,
 )
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?]+\s+|\n+")
@@ -638,7 +649,8 @@ def _detect_explicit_tier(msg: str) -> str | None:
             mentions.add(name)
     if len(mentions) != 1:
         return None
-    # Short messages like "medium please" / "high" only.
+    # Short messages like "medium please" / "high" only. A bare "default" is
+    # not a mention — see _NAME_RE.
     if len(words) <= 6:
         return next(iter(mentions))
     return None
@@ -699,12 +711,12 @@ def _resolve_tier_runtime(name: str, agent: Any) -> dict[str, str] | None:
 
 
 def _classify(user_message: str, history: list, session_id: str = "") -> str:
-    """Return low|medium|high. Fail-open to low — escalation corrects a miss.
+    """Return low|default|high. Fail-open to low — escalation corrects a miss.
 
     Runs on the previous turn's tier (never ``high``/grok) with real history so
     the classifier sees the same conversation the previous model already read.
     The actual previous tier is surfaced in the request so the classifier can
-    prefer to stay put (low/medium only; high is never sticky).
+    prefer to stay put (low/default only; high is never sticky).
     """
     try:
         from agent.auxiliary_client import call_llm
@@ -1303,7 +1315,7 @@ def register(ctx: Any) -> None:
     ctx.register_command("auto", _cmd_auto, "Resume model-router auto routing")
     labels = " / ".join(f"{n} {MODELS[n].get('label')}" for n in NAMES)
     logger.info(
-        "model-router: %s | escalate≤%s | /low /medium /high /auto | no SOUL writes",
+        "model-router: %s | escalate≤%s | /low /default /high /auto | no SOUL writes",
         labels,
         _ESCALATE_MAX,
     )

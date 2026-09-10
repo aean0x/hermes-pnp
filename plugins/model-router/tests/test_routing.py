@@ -68,9 +68,9 @@ class TargetTier(unittest.TestCase):
 
     def test_cached_message_reuses_tier(self) -> None:
         with self.mod._lock:
-            self.mod._last_msg["s5"] = ("same", "medium")
+            self.mod._last_msg["s5"] = ("same", "default")
         name, reason = self.mod._target_tier("s5", "same", [])
-        self.assertEqual(name, "medium")
+        self.assertEqual(name, "default")
         self.assertEqual(reason, "cached")
 
     def test_explicit_slash_pins_session(self) -> None:
@@ -90,7 +90,7 @@ class TargetTier(unittest.TestCase):
             "check the session where I did an explicit /high and it finished as pro."
         )
         with (
-            patch.object(self.mod, "_classify", return_value="medium"),
+            patch.object(self.mod, "_classify", return_value="default"),
             patch.object(self.mod, "_get_agent", return_value=None),
         ):
             self.mod.on_pre_llm_call(
@@ -100,7 +100,7 @@ class TargetTier(unittest.TestCase):
             )
         with self.mod._lock:
             self.assertFalse(self.mod._pinned.get("pin2", False))
-            self.assertEqual(self.mod._last_tier.get("pin2"), "medium")
+            self.assertEqual(self.mod._last_tier.get("pin2"), "default")
 
 
 class Escalate(unittest.TestCase):
@@ -118,14 +118,14 @@ class Escalate(unittest.TestCase):
             self.mod._last_user_sid = ""
 
     def test_higher_ladder(self) -> None:
-        self.assertEqual(self.mod._higher("low"), "medium")
-        self.assertEqual(self.mod._higher("medium"), "high")
+        self.assertEqual(self.mod._higher("low"), "default")
+        self.assertEqual(self.mod._higher("default"), "high")
         self.assertEqual(self.mod._higher("high"), "high")
 
     def test_pinned_refuses_escalation(self) -> None:
         with self.mod._lock:
             self.mod._pinned["sid"] = True
-            self.mod._last_tier["sid"] = "medium"
+            self.mod._last_tier["sid"] = "default"
             self.mod._last_user_sid = "sid"
         out = self.mod._handle_escalate_model(
             session_id="sid",
@@ -135,7 +135,7 @@ class Escalate(unittest.TestCase):
         )
         self.assertIn("Pinned", out)
         with self.mod._lock:
-            self.assertEqual(self.mod._last_tier["sid"], "medium")
+            self.assertEqual(self.mod._last_tier["sid"], "default")
 
     def test_already_high_refuses(self) -> None:
         with self.mod._lock:
@@ -148,11 +148,11 @@ class Escalate(unittest.TestCase):
         )
         self.assertIn("highest tier", out)
 
-    def test_escalate_medium_to_high_stashes_handoff(self) -> None:
+    def test_escalate_default_to_high_stashes_handoff(self) -> None:
         engine = SimpleNamespace(handoff=None)
         agent = SimpleNamespace(context_compressor=engine, session_id="sid")
         with self.mod._lock:
-            self.mod._last_tier["sid"] = "medium"
+            self.mod._last_tier["sid"] = "default"
         with (
             patch.object(self.mod, "_get_agent", return_value=agent),
             patch.object(self.mod, "_set_tier") as set_tier,
@@ -169,14 +169,14 @@ class Escalate(unittest.TestCase):
         set_tier.assert_called_once_with("sid", "high", "escalate_model")
         self.assertEqual(engine.handoff["failure_point"], "exact error: boom")
         self.assertEqual(engine.handoff["summary"], "we decided X")
-        self.assertEqual(engine.handoff["from_tier"], "medium")
+        self.assertEqual(engine.handoff["from_tier"], "default")
         self.assertEqual(engine.handoff["to_tier"], "high")
         self.assertEqual(engine.handoff["to_model"], self.mod.MODELS["high"]["model"])
 
     def test_auto_after_high_pin_bumps_down(self) -> None:
         # Live 0.5.0 bug: /auto after /high left the router on grok because the
         # 3-way classifier kept returning high. 0.7.0 clears the pin+cached
-        # tier on /auto, and even a high-leaning classify is clamped to medium.
+        # tier on /auto, and even a high-leaning classify is clamped to default.
         with self.mod._lock:
             self.mod._pinned["s"] = True
             self.mod._last_tier["s"] = "high"
@@ -247,19 +247,19 @@ class ClassifierSignal(unittest.TestCase):
         system = captured["messages"][0]["content"]
         self.assertNotIn("Previous turn tier", system)
 
-    def test_prev_medium_signals_and_runs_medium(self) -> None:
+    def test_prev_default_signals_and_runs_default(self) -> None:
         with self.mod._lock:
-            self.mod._last_tier["s2"] = "medium"
+            self.mod._last_tier["s2"] = "default"
         captured = self._capture("s2")
-        self.assertIn("Previous turn tier: medium", captured["messages"][0]["content"])
-        self.assertEqual(captured["resolve_name"], "medium")
+        self.assertIn("Previous turn tier: default", captured["messages"][0]["content"])
+        self.assertEqual(captured["resolve_name"], "default")
 
-    def test_prev_high_signals_high_but_runs_medium(self) -> None:
+    def test_prev_high_signals_high_but_runs_default(self) -> None:
         with self.mod._lock:
             self.mod._last_tier["s3"] = "high"
         captured = self._capture("s3")
         self.assertIn("Previous turn tier: high", captured["messages"][0]["content"])
-        self.assertEqual(captured["resolve_name"], "medium")
+        self.assertEqual(captured["resolve_name"], "default")
 
 
 class ForceCompaction(unittest.TestCase):
@@ -286,7 +286,7 @@ class ForceCompaction(unittest.TestCase):
         with self.mod._lock:
             self.mod._last_tier["s1"] = "low"
         with (
-            patch.object(self.mod, "_classify", return_value="medium"),
+            patch.object(self.mod, "_classify", return_value="default"),
             patch.object(self.mod, "_get_agent", return_value=agent),
             patch.object(self.mod, "_set_tier"),
         ):
@@ -300,9 +300,9 @@ class ForceCompaction(unittest.TestCase):
     def test_no_change_does_not_request_compaction(self) -> None:
         agent = self._agent("s2")
         with self.mod._lock:
-            self.mod._last_tier["s2"] = "medium"
+            self.mod._last_tier["s2"] = "default"
         with (
-            patch.object(self.mod, "_classify", return_value="medium"),
+            patch.object(self.mod, "_classify", return_value="default"),
             patch.object(self.mod, "_get_agent", return_value=agent),
             patch.object(self.mod, "_set_tier"),
         ):
@@ -331,7 +331,7 @@ class ForceCompaction(unittest.TestCase):
     def test_first_turn_does_not_request_compaction(self) -> None:
         agent = self._agent("s4")
         with (
-            patch.object(self.mod, "_classify", return_value="medium"),
+            patch.object(self.mod, "_classify", return_value="default"),
             patch.object(self.mod, "_get_agent", return_value=agent),
             patch.object(self.mod, "_set_tier"),
         ):
@@ -365,7 +365,7 @@ class HandoffEngine(unittest.TestCase):
     def test_handoff_replaces_request_and_keeps_system(self) -> None:
         engine = self.eng.ModelRouterContextEngine(model="grok-4.6")
         engine.handoff = {
-            "from_tier": "medium",
+            "from_tier": "default",
             "to_tier": "high",
             "to_model": "grok-4.6",
             "summary": "established A",
@@ -388,7 +388,7 @@ class HandoffEngine(unittest.TestCase):
         self.assertEqual(out[1]["role"], "user")
         self.assertIn("Error: boom", out[1]["content"])
         self.assertIn("established A", out[1]["content"])
-        self.assertIn("medium → high (grok-4.6)", out[1]["content"])
+        self.assertIn("default → high (grok-4.6)", out[1]["content"])
         self.assertTrue(any(m.get("content") == "Error: boom" for m in out[2:]))
         self.assertIsNone(engine.handoff)
 
