@@ -7,9 +7,13 @@
     ../models.nix
     ../package.nix
     ../plugins.nix
+    ./plugins.nix
     ../skills.nix
+    ./skills.nix
     ../gbrain.nix
+    ./gbrain.nix
     ../hmc.nix
+    ./hmc.nix
     ./pairing.nix
   ];
 }

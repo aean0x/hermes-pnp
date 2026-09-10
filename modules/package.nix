@@ -14,7 +14,6 @@
   config,
   lib,
   pkgs,
-  options,
   ...
 }:
 
@@ -298,6 +297,13 @@ in
       defaultText = lib.literalExpression "system: throw \"…\"";
       description = "system → hermes-agent flake python312Packages (same interpreter as hermesVenv).";
     };
+
+    internal.runtimeEnv = mkOption {
+      type = types.attrsOf types.str;
+      internal = true;
+      default = { };
+      description = "Store-safe BUNDLED_*/PYTHONPATH map. Gateway and WebUI both consume this.";
+    };
   };
 
   config = mkMerge [
@@ -311,13 +317,9 @@ in
     }
     (mkIf pnp.enable (mkMerge [
       {
+        services.hermesPnP.internal.runtimeEnv = hermesRuntimeEnv;
         services.hermes-agent.environment = lib.mapAttrs (_: mkDefault) hermesRuntimeEnv;
       }
-      (mkIf (options.services ? hermes-webui && options.services.hermesPnP ? webui) {
-        services.hermes-webui.extraEnvironment = mkIf pnp.webui.enable (
-          lib.mapAttrs (_: mkDefault) hermesRuntimeEnv
-        );
-      })
       (mkIf (
         pnp.packageFixes.silenceMarkers
         || pnp.packageFixes.missingPyModules

@@ -23,9 +23,6 @@ let
   agent = config.services.hermes-agent;
   extra = pnp.extraPluginDirs;
   catalog = import ../plugins/catalog.nix;
-  install = pnp.pluginInstall;
-  isHomeManager = options ? home && options.home ? homeDirectory;
-
   gbrainOn = (options.services.hermesPnP ? gbrain) && pnp.gbrain.enable;
 
   gbrainPlugins = [
@@ -132,9 +129,6 @@ let
       model-router = modelRouterPlugin;
     };
 
-  hermesHomePlugins = "${install.stateDir}/.hermes/plugins";
-  materializeRoot = "${install.stateDir}/plugins";
-  enabledPluginsJson = builtins.toJSON pnpNames;
 in
 {
   imports = [
@@ -202,6 +196,20 @@ in
         description = "Bundled model-router WebUI dir. Set when that plugin is enabled.";
       };
     };
+
+    internal.pnpPluginNames = mkOption {
+      type = types.listOf types.str;
+      internal = true;
+      default = [ ];
+      description = "Catalog + extraPluginDirs names to materialize.";
+    };
+
+    internal.pnpPluginSources = mkOption {
+      type = types.attrsOf types.path;
+      internal = true;
+      default = { };
+      description = "Name → store path for pnpPluginNames.";
+    };
   };
 
   config = lib.mkMerge [
@@ -218,70 +226,8 @@ in
       ) "${resolvedSources.model-router}/webui";
 
       services.hermes-agent.settings.plugins.enabled = enabledNames;
-    })
-    (mkIf (!isHomeManager && (pnp.plugins != [ ] || extra != { } || gbrainOn)) {
-      systemd.tmpfiles.rules = [
-        "d ${materializeRoot} 2770 ${install.user} ${install.group} -"
-        "d ${hermesHomePlugins} 2770 ${install.user} ${install.group} -"
-      ];
-
-      systemd.services.hermes-agent-plugins = {
-        description = "Materialize hermes-pnp plugins";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "hermes-agent.service" ];
-        requiredBy = [ "hermes-agent.service" ];
-
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = install.user;
-          Group = install.group;
-        };
-
-        script = ''
-          set -euo pipefail
-          dest='${materializeRoot}'
-          linkroot='${hermesHomePlugins}'
-          mkdir -p "$dest" "$linkroot"
-
-          want='${enabledPluginsJson}'
-          echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' | while read -r name; do
-            case "$name" in
-              *[!a-zA-Z0-9_-]* | "")
-                echo "hermes-pnp: skip unsafe plugin name: $name" >&2
-                continue
-                ;;
-            esac
-            chmod -R u+w "$dest/$name" 2>/dev/null || true
-            rm -rf "$dest/$name"
-          done
-
-          ${lib.concatMapStrings (name: ''
-            ${pkgs.rsync}/bin/rsync -a --delete --chmod=D2770,F0640 \
-              --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
-              ${resolvedSources.${name}}/ "$dest/${name}/"
-            ln -sfn "../../plugins/${name}" "$linkroot/${name}"
-          '') pnpNames}
-
-          echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' > "$dest/.enabled"
-        '';
-      };
-    })
-
-    (mkIf (isHomeManager && (pnp.plugins != [ ] || extra != { } || gbrainOn)) {
-      home.activation.hermesPnPPlugins = config.lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        set -euo pipefail
-        dest="${agent.hermesHome}/plugins"
-        $DRY_RUN_CMD mkdir -p "$dest"
-        ${lib.concatMapStrings (name: ''
-          $DRY_RUN_CMD chmod -R u+w "$dest/${name}" 2>/dev/null || true
-          $DRY_RUN_CMD rm -rf "$dest/${name}"
-          $DRY_RUN_CMD ${pkgs.rsync}/bin/rsync -a --delete --chmod=D0750,F0640 \
-            --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
-            ${resolvedSources.${name}}/ "$dest/${name}/"
-        '') pnpNames}
-        echo '${enabledPluginsJson}' | ${pkgs.jq}/bin/jq -r '.[]' | $DRY_RUN_CMD tee "$dest/.enabled" >/dev/null
-      '';
+      services.hermesPnP.internal.pnpPluginNames = pnpNames;
+      services.hermesPnP.internal.pnpPluginSources = resolvedSources;
     })
 
     (mkIf pnp.enable {

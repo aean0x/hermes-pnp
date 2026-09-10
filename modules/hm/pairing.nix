@@ -81,6 +81,7 @@ in
 
       programs.hermes-agent.enable = mkDefault true;
       services.hermes-agent.enable = mkDefault true;
+      # Official HM splits the messaging gateway from enable.
       services.hermes-agent.gateway.enable = mkDefault true;
       services.hermes-agent.environmentFiles = pnp.environmentFiles;
 

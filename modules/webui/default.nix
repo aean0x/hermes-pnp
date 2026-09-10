@@ -67,7 +67,7 @@ in
       port = mkDefault 8787;
       openFirewall = mkDefault false;
       environmentFiles = mkDefault agent.environmentFiles;
-      extraEnvironment = {
+      extraEnvironment = (lib.mapAttrs (_: mkDefault) pnp.internal.runtimeEnv) // {
         HERMES_WEBUI_TRUST_FORWARDED_PROTO = mkDefault "true";
         HERMES_WEBUI_SECURE = mkDefault "true";
         # Caddy on this host. Override for a proxy whose peer is not loopback.
