@@ -130,7 +130,7 @@ _TIER_WORD = "|".join((*NAMES, *LEGACY_NAMES))
 _BARE_WORD = "|".join(n for n in (*NAMES, *LEGACY_NAMES) if n != "default")
 
 _NAME_RE = re.compile(
-    rf"(?:^|(?<=\s)|(?=\())/?({_BARE_WORD})(?:\b|(?=\)))",
+    rf"(?:^|(?<=\s)|(?<=\())/?({_BARE_WORD})(?:\b|(?=\)))",
     re.IGNORECASE,
 )
 _ACK_RE = re.compile(
