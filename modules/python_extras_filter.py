@@ -75,8 +75,8 @@ def run(venv_site: Path, dest: Path, extras: list[Path]) -> int:
     for extra in extras:
         src_site = site_packages_of(extra)
         if src_site is None:
-            print(f"python extras: no site-packages in {extra}", file=sys.stderr)
-            return 1
+            print(f"python extras: skip-no-site {extra.name}")
+            continue
         action = merge_extra(src_site, dest, core)
         print(f"python extras: {action} {extra.name} ({', '.join(sorted(dist_names(src_site))) or 'no-dist'})")
         if action == "copy":
