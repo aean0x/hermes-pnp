@@ -41,12 +41,27 @@ def site_packages_of(root: Path) -> Path | None:
     return matches[0] if matches else None
 
 
+def ensure_writable(root: Path) -> None:
+    """Nix store copies land mode 555; later extras must merge into them."""
+    if not root.exists():
+        return
+    for path in [root, *root.rglob("*")]:
+        try:
+            path.chmod(path.stat().st_mode | 0o200)
+        except OSError:
+            continue
+
+
 def merge_extra(src_site: Path, dest: Path, core: set[str]) -> str:
     names = dist_names(src_site)
+    if not names:
+        return "skip-no-dist"
     if names & core:
         return "skip"
     dest.mkdir(parents=True, exist_ok=True)
+    ensure_writable(dest)
     shutil.copytree(src_site, dest, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    ensure_writable(dest)
     return "copy"
 
 
