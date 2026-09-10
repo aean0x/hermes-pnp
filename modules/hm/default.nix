@@ -8,6 +8,8 @@
     ../package.nix
     ../plugins.nix
     ../skills.nix
+    ../gbrain.nix
+    ../hmc.nix
     ./pairing.nix
   ];
 }

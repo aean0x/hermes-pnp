@@ -4,6 +4,7 @@
   config,
   lib,
   pkgs,
+  options,
   ...
 }:
 
@@ -11,6 +12,7 @@ let
   inherit (lib)
     mkEnableOption
     mkIf
+    mkMerge
     mkOption
     types
     ;
@@ -18,6 +20,8 @@ let
   pnp = config.services.hermesPnP;
   cfg = pnp.hmc;
   agent = config.services.hermes-agent;
+  isHomeManager = options ? home && options.home ? homeDirectory;
+  hermesHome = if isHomeManager then agent.hermesHome else "${agent.stateDir}/.hermes";
   src = cfg.src;
 
   hmcSrc = pkgs.fetchFromGitHub {
@@ -150,18 +154,26 @@ in
     };
   };
 
-  config = mkIf cfg.enable {
-    services.hermesPnP.extraPluginDirs.hermes-context-manager = hmcPluginSrc;
-
-    system.activationScripts.hermes-hmc-state =
-      lib.stringAfter
-        [
-          "users"
-          "groups"
-          "hermes-agent-setup"
-        ]
-        ''
-          install -d -m 2770 -o ${agent.user} -g ${agent.group} ${agent.stateDir}/.hermes/hmc_state
-        '';
-  };
+  config = mkIf cfg.enable (mkMerge [
+    {
+      services.hermesPnP.extraPluginDirs.hermes-context-manager = hmcPluginSrc;
+    }
+    (mkIf (!isHomeManager) {
+      system.activationScripts.hermes-hmc-state =
+        lib.stringAfter
+          [
+            "users"
+            "groups"
+            "hermes-agent-setup"
+          ]
+          ''
+            install -d -m 2770 -o ${agent.user} -g ${agent.group} ${agent.stateDir}/.hermes/hmc_state
+          '';
+    })
+    (mkIf isHomeManager {
+      home.activation.hermesHmcState = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        install -d -m 0700 "${hermesHome}/hmc_state"
+      '';
+    })
+  ]);
 }
