@@ -1,5 +1,5 @@
 {
-  description = "Hermes PnP — opinionated NixOS composer for Hermes Agent";
+  description = "Hermes PnP — opinionated NixOS composer and Home Manager module for Hermes Agent";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -47,6 +47,18 @@
         services.hermesPnP.internal.officialPythonPackagesFor =
           system: hermes-agent.inputs.nixpkgs.legacyPackages.${system}.python312Packages;
       };
+
+      homeComposer = {
+        imports = [
+          hermes-agent.homeManagerModules.default
+          ./modules/hm
+        ];
+        services.hermesPnP.internal.officialAgentPackageFor =
+          system: hermes-agent.packages.${system}.default;
+        services.hermesPnP.internal.officialAgentSrc = hermes-agent.outPath;
+        services.hermesPnP.internal.officialPythonPackagesFor =
+          system: hermes-agent.inputs.nixpkgs.legacyPackages.${system}.python312Packages;
+      };
     in
     {
       lib = {
@@ -68,6 +80,9 @@
       nixosModules.browser = ./modules/browser;
       nixosModules.desktop = ./modules/desktop.nix;
 
+      homeManagerModules.default = homeComposer;
+      homeManagerModules.hermesPnP = homeComposer;
+
       overlays.default = overlay;
 
       packages = forAllSystems (
@@ -84,7 +99,7 @@
       checks = forAllSystems (
         system:
         import ./checks {
-          inherit self nixpkgs system;
+          inherit self nixpkgs system hermes-agent;
           pkgs = pkgsFor system;
         }
       );

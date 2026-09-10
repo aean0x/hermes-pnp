@@ -70,6 +70,10 @@ work. `hermesPnP.enable = false` is the library path (plugins +
 mcp-proxy only). Keys for every `models.*` provider go in the env
 file; the list is `docs/hermes.env.example`.
 
+Personal/laptop identity is `homeManagerModules.default`
+(`docs/home-manager.md`): login user, `~/.hermes`, no jails. Do not
+import both composers for the same login.
+
 ## Hermes Agent
 
 Composer turns on the official gateway and pairs everything else to

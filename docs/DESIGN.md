@@ -76,6 +76,8 @@ Exports:
 - `nixosModules.default` — composer (agent + webui + pnp extras)
 - `nixosModules.agent` / `nixosModules.webui` — official modules only
 - `nixosModules.plugins` / `mcp-proxy` / `toolbox` / `browser` / `skills`
+- `homeManagerModules.default` — personal composer on official Home Manager.
+  Login user, `~/.hermes`. No jails, WebUI, toolbox, or system hermes user.
 
 ## Layout
 
@@ -86,6 +88,8 @@ hermes-pnp/
   modules/                       # nixosModules — options next to config
     default.nix                  # composer
     enable.nix                   # enable, environmentFiles, container.*
+    hm/                          # homeManagerModules.default
+    desktop.nix                  # NixOS Desktop client of the system daemon
     webui/                       # pairing + host harden + OCI jail
     browser/                     # CDP browser + browser-ui gate
     mcp-proxy.nix                # services.hermesPnP.mcpProxy (alias: services.mcpProxy)
@@ -230,6 +234,27 @@ the official option PnP set via `mkDefault`.
 When `services.hermesPnP.enable = false`, PnP is inert except
 explicit `plugins` / `extraPluginDirs`, `mcpProxy.enable`, and opt-in
 `gbrain` / `hmc`.
+
+## Two identity modes
+
+The gateway daemon stays independent of the Desktop app.
+
+**NixOS / hosted.** Daemon is the `hermes` system user,
+`/var/lib/hermes`. `desktop.enable` is a client: wrap `HERMES_HOME`,
+loopback remote URL, token at start. GUI logins join group `hermes`.
+Do not rewrite `services.hermes-agent.user` when Desktop is on.
+
+**Home Manager / personal.** `homeManagerModules.default` imports
+official HM. Leave `hermesHome` / `workingDirectory` unset. User
+units. `desktop.enable` turns on official `programs.hermes-agent.desktop`
+and official `hermes-backend`. No REMOTE_URL generalization — a hosted
+client that skips this shortcut sets `HERMES_DESKTOP_REMOTE_URL` on
+the official module.
+
+Do not import both composers for the same login. `container.enable`
+fails on HM.
+
+See `docs/home-manager.md` and `docs/desktop.md`.
 
 ## Named models
 
@@ -553,10 +578,10 @@ this host). Jail entrypoint `umask 0077`; host unit `UMask=0077`.
   `plugins.enable` / `plugins.modelRouter`; composer seeds
   `settings.auxiliary.triage_specifier.model` from `models.auxiliary` and
   `settings.model.default` from `models.${model.default}` (default `default`)
-- `checks.${system}.examples` — every file in `examples/`
+- `checks.${system}.examples` — NixOS files in `examples/`
+- `checks.${system}.home-manager` — `homeManagerModules.default` + `examples/home-manager.nix`
 
 ## Out of scope
 
 - Composio policy module
-- Home-manager module
 - darwin / Nix-on-Linux non-NixOS

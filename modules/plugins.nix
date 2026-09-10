@@ -1,5 +1,8 @@
-# Install catalog + extraPluginDirs to $stateDir/plugins/<name>
-# and symlink $stateDir/.hermes/plugins/<name> → ../../plugins/<name>.
+# Install catalog + extraPluginDirs.
+# NixOS: $stateDir/plugins/<name> and symlink
+# $stateDir/.hermes/plugins/<name> → ../../plugins/<name>.
+# Home Manager: $hermesHome/plugins/<name> (same dir as official
+# extraPlugins; only remove PnP-owned trees).
 {
   config,
   lib,
@@ -20,8 +23,6 @@ let
   agent = config.services.hermes-agent;
   extra = pnp.extraPluginDirs;
   catalog = import ../plugins/catalog.nix;
-  install = pnp.pluginInstall;
-
   gbrainOn = (options.services.hermesPnP ? gbrain) && pnp.gbrain.enable;
 
   gbrainPlugins = [
@@ -128,9 +129,6 @@ let
       model-router = modelRouterPlugin;
     };
 
-  hermesHomePlugins = "${install.stateDir}/.hermes/plugins";
-  materializeRoot = "${install.stateDir}/plugins";
-  enabledPluginsJson = builtins.toJSON pnpNames;
 in
 {
   imports = [
@@ -198,6 +196,20 @@ in
         description = "Bundled model-router WebUI dir. Set when that plugin is enabled.";
       };
     };
+
+    internal.pnpPluginNames = mkOption {
+      type = types.listOf types.str;
+      internal = true;
+      default = [ ];
+      description = "Catalog + extraPluginDirs names to materialize.";
+    };
+
+    internal.pnpPluginSources = mkOption {
+      type = types.attrsOf types.path;
+      internal = true;
+      default = { };
+      description = "Name → store path for pnpPluginNames.";
+    };
   };
 
   config = lib.mkMerge [
@@ -214,53 +226,8 @@ in
       ) "${resolvedSources.model-router}/webui";
 
       services.hermes-agent.settings.plugins.enabled = enabledNames;
-
-      systemd.tmpfiles.rules = [
-        "d ${materializeRoot} 2770 ${install.user} ${install.group} -"
-        "d ${hermesHomePlugins} 2770 ${install.user} ${install.group} -"
-      ];
-
-      systemd.services.hermes-agent-plugins = {
-        description = "Materialize hermes-pnp plugins";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "hermes-agent.service" ];
-        requiredBy = [ "hermes-agent.service" ];
-
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = install.user;
-          Group = install.group;
-        };
-
-        script = ''
-          set -euo pipefail
-          dest='${materializeRoot}'
-          linkroot='${hermesHomePlugins}'
-          mkdir -p "$dest" "$linkroot"
-
-          want='${enabledPluginsJson}'
-          echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' | while read -r name; do
-            case "$name" in
-              *[!a-zA-Z0-9_-]* | "")
-                echo "hermes-pnp: skip unsafe plugin name: $name" >&2
-                continue
-                ;;
-            esac
-            chmod -R u+w "$dest/$name" 2>/dev/null || true
-            rm -rf "$dest/$name"
-          done
-
-          ${lib.concatMapStrings (name: ''
-            ${pkgs.rsync}/bin/rsync -a --delete --chmod=D2770,F0640 \
-              --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
-              ${resolvedSources.${name}}/ "$dest/${name}/"
-            ln -sfn "../../plugins/${name}" "$linkroot/${name}"
-          '') pnpNames}
-
-          echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' > "$dest/.enabled"
-        '';
-      };
+      services.hermesPnP.internal.pnpPluginNames = pnpNames;
+      services.hermesPnP.internal.pnpPluginSources = resolvedSources;
     })
 
     (mkIf pnp.enable {

@@ -17,7 +17,8 @@ consumer.
 - `services.hermesPnP.enable = true`: WebUI pairing, share env, optional
   silence wrap, toolbox, browser. `workspace` (optional) is one host
   path for gateway `terminal.cwd` and WebUI default; remapped only in
-  the jail.
+  the jail. Home Manager (`homeManagerModules.default`) is the personal
+  path: login user, `~/.hermes`, no jails/WebUI/toolbox.
 
 ## Git identity
 
@@ -33,11 +34,14 @@ consumer.
 - Set pairing values with `mkDefault` only.
 - Forward `services.hermes-agent.extraPythonPackages` and
   `extraDependencyGroups` into the package wrap. Do not default extras.
+  Overlapping trees go on `services.hermesPnP.pythonExtras` (agent-flake
+  Python, PYTHONPATH overlay). Do not use host python312Packages.
 - Materialize first-party plugins to `$stateDir/plugins/<name>` and
   symlink `$stateDir/.hermes/plugins/<name>` → `../../plugins/<name>`.
-  Do not install them via official `extraPlugins`. Consumer trees
-  go on `extraPluginDirs`. Union official extraPlugins names into
-  `settings.plugins.enabled`.
+  Home Manager: `$hermesHome/plugins/<name>` (do not delete official
+  `nix-managed-*` trees). Do not install them via official
+  `extraPlugins`. Consumer trees go on `extraPluginDirs`. Union
+  official extraPlugins names into `settings.plugins.enabled`.
 - Fold official `extraPackages` into the toolbox buildEnv. Do not put
   the env back on `extraPackages`.
 - WebUI/browser jails follow official `container.enable` / network,
@@ -46,10 +50,12 @@ consumer.
   `services.hermesPnP.packageFixes.silenceMarkers`. Missing sealed-venv
   `hermes_*.py` files use `packageFixes.missingPyModules`.
 - Extra host mounts go on official `container.extraVolumes`.
-- `hermesPnP.desktop.enable` is native-only. It `mkForce`s the
+- `hermesPnP.desktop.enable` is native-only. On NixOS it `mkForce`s the
   composer container knob off and asserts official
   `container.enable` is false. Wrap Desktop with extraEnv /
-  extraRun; never `--set` the session token.
+  extraRun; never `--set` the session token. Identity stays the
+  hermes system user. Personal/laptop identity is
+  `homeManagerModules.default`.
 
 ## Do not
 
@@ -65,9 +71,10 @@ consumer.
 ```
 lib/                      # mkOciJail, mkDockerEnv, remapStatePath
 modules/                  # composer + pairing; options next to config
+modules/hm/               # homeManagerModules.default
 modules/webui/            # WebUI pairing + host harden + OCI jail
 modules/browser/          # CDP browser + browser-ui gate + cookie import
-modules/desktop.nix       # native Desktop + official hermes-backend
+modules/desktop.nix       # NixOS Desktop client of the system daemon
 pkgs/mcp-proxy/           # proxy package + src/tests/examples
 pkgs/agent-infra-browser-ui.nix  # vendored @agent-infra/browser-ui UMD
 checks/                   # eval + plugin/proxy tests

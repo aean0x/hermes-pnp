@@ -17,7 +17,6 @@ let
 
   pnp = config.services.hermesPnP;
   cfg = pnp.hmc;
-  agent = config.services.hermes-agent;
   src = cfg.src;
 
   hmcSrc = pkgs.fetchFromGitHub {
@@ -152,16 +151,5 @@ in
 
   config = mkIf cfg.enable {
     services.hermesPnP.extraPluginDirs.hermes-context-manager = hmcPluginSrc;
-
-    system.activationScripts.hermes-hmc-state =
-      lib.stringAfter
-        [
-          "users"
-          "groups"
-          "hermes-agent-setup"
-        ]
-        ''
-          install -d -m 2770 -o ${agent.user} -g ${agent.group} ${agent.stateDir}/.hermes/hmc_state
-        '';
   };
 }

@@ -3,7 +3,6 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 
@@ -18,27 +17,6 @@ let
 
   pnp = config.services.hermesPnP;
   cfg = pnp.gbrain;
-  agent = config.services.hermes-agent;
-
-  home = "${agent.stateDir}/home";
-  hostPath =
-    if pnp.enable && pnp.toolbox.enable then
-      pnp.toolbox.hostPath
-    else
-      "${home}/.bun/bin:${home}/.local/bin:/run/current-system/sw/bin:/usr/bin:/bin";
-  gbrainBin = "${home}/.bun/bin/gbrain";
-
-  gbrainHttpScript = pkgs.writeShellScript "gbrain-mcp-http" ''
-    set -euo pipefail
-    export HOME="${home}"
-    export PATH="${hostPath}"
-    if [ ! -x "${gbrainBin}" ] && ! command -v gbrain >/dev/null 2>&1; then
-      echo "gbrain-mcp-http: gbrain not installed under ${home}/.bun/bin (bootstrap first)" >&2
-      exit 1
-    fi
-    cd "$HOME"
-    exec gbrain serve --http --port ${toString cfg.port} --bind ${cfg.bind}
-  '';
 in
 {
   options.services.hermesPnP.gbrain = {
@@ -77,8 +55,8 @@ in
       description = ''
         Chat/expansion model for `gbrain serve` (`GBRAIN_MODEL`).
         Null keeps gbrain's key-aware default. Independent of
-        `container.enable` / `desktop.enable` — this unit is always
-        native systemd (User=hermes), never an OCI jail.
+        `container.enable` / `desktop.enable`. NixOS: native systemd
+        User=hermes. Home Manager: user unit, HOME is the login home.
         Embeddings stay `embedding_model` in `~/.gbrain/config.json`
         (gbrain init / scripts/gbrain-setup.sh), not this option.
       '';
@@ -99,79 +77,5 @@ in
 
     # Ambient plugin reads this for its own HTTP volunteer_context / query.
     services.hermes-agent.environment.GBRAIN_MCP_URL = mkDefault cfg.url;
-
-    systemd.services.gbrain-mcp-http = {
-      description = "GBrain MCP HTTP (loopback; sole PGLite writer)";
-      after = [
-        "network-online.target"
-      ];
-      wants = [ "network-online.target" ];
-      wantedBy = [ "multi-user.target" ];
-      environment = lib.optionalAttrs (cfg.model != null) {
-        GBRAIN_MODEL = cfg.model;
-      };
-      # systemd only honours StartLimit* under [Unit], not [Service]
-      unitConfig = {
-        StartLimitIntervalSec = 120;
-        StartLimitBurst = 5;
-      };
-      serviceConfig = {
-        Type = "simple";
-        User = agent.user;
-        Group = agent.group;
-        EnvironmentFile = map (path: "-${toString path}") agent.environmentFiles;
-        Environment = [
-          "HOME=${home}"
-          "PATH=${hostPath}"
-        ];
-        WorkingDirectory = home;
-        ExecStart = "${gbrainHttpScript}";
-        Restart = "on-failure";
-        RestartSec = 10;
-        TimeoutStartSec = "120";
-        # Conservative sandbox. Skip ProtectSystem=full / PrivateTmp:
-        # bun + PGLite WASM use $HOME/.gbrain and /tmp.
-        NoNewPrivileges = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectKernelLogs = true;
-        RestrictSUIDSGID = true;
-        LockPersonality = true;
-      };
-    };
-
-    systemd.services.hermes-agent = {
-      after = [ "gbrain-mcp-http.service" ];
-      wants = [ "gbrain-mcp-http.service" ];
-    };
-    systemd.services.hermes-webui = mkIf pnp.webui.enable {
-      after = [ "gbrain-mcp-http.service" ];
-      wants = [ "gbrain-mcp-http.service" ];
-    };
-
-    # Directories gbrain serve expects. The bearer value is Hermes state
-    # (gbrain-setup → ${home}/.gbrain/hermes-mcp.token), never Nix.
-    # Official hermes-agent-setup rewrites $HERMES_HOME/.env from
-    # environment{} + environmentFiles on every switch, which drops
-    # GBRAIN_TOKEN unless we re-copy it after that rewrite (same
-    # post-setup inject as mcp-proxy's MCP_PROXY_TOKEN).
-    system.activationScripts.hermes-gbrain = lib.stringAfter [ "hermes-agent-setup" ] ''
-      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}
-      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.gbrain
-      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/brain
-      if [ ! -e /home/hermes ]; then
-        ln -sfn ${home} /home/hermes
-      elif [ ! -L /home/hermes ] && [ ! -d /home/hermes ]; then
-        ln -sfn ${home} /home/hermes
-      fi
-      tokenFile=${home}/.gbrain/hermes-mcp.token
-      envFile=${agent.stateDir}/.hermes/.env
-      if [ -s "$tokenFile" ] && [ -f "$envFile" ]; then
-        if ! ${pkgs.gnugrep}/bin/grep -q '^GBRAIN_TOKEN=' "$envFile"; then
-          ${pkgs.coreutils}/bin/printf 'GBRAIN_TOKEN=%s\n' "$(${pkgs.coreutils}/bin/tr -d '\r\n' < "$tokenFile")" >> "$envFile"
-          ${pkgs.coreutils}/bin/chown ${agent.user}:${agent.group} "$envFile" || true
-        fi
-      fi
-    '';
   };
 }
