@@ -58,7 +58,7 @@ let
           or (throw "services.hermesPnP.pythonExtras: '${name}' is not an attr of hermes-agent python312Packages")
       ) pnp.pythonExtras;
     in
-    if leaves == [ ] then [ ] else pyPkgs.requiredPythonModules leaves;
+    if leaves == [ ] then [ ] else map (p: p.out or p) (pyPkgs.requiredPythonModules leaves);
 
   extrasOverlay =
     hermesVenv: extraPkgs:
@@ -74,7 +74,7 @@ let
       fi
       extras=()
       ${lib.concatMapStringsSep "\n" (p: ''
-        extras+=("${p}")
+        extras+=("${p.out or p}")
       '') extraPkgs}
       ${pkgs.python3}/bin/python3 ${./python_extras_filter.py} \
         --venv-site "$venv_sp" \
