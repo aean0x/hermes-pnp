@@ -48,12 +48,19 @@ users.users.aean.linger = true;
 
 ## Desktop
 
-`pnp.enable` turns on official `programs.hermes-agent` (CLI) and
-`services.hermes-agent` including `gateway.enable` (the messaging
-gateway user unit). `desktop.enable` adds official
-`programs.hermes-agent.desktop` and official `hermes-backend`
-(`serve` on loopback `:9119`). The official launcher already bakes
-`HERMES_HOME` and the loopback remote URL.
+`pnp.enable` is the daemon: official `programs.hermes-agent` (CLI) and
+`services.hermes-agent` with `gateway.enable` (messaging gateway user
+unit). Desktop is optional and attaches to that daemon.
+
+`desktop.enable` adds official `programs.hermes-agent.desktop` and
+official `hermes-backend` (`serve` on loopback `:9119`). The official
+launcher already bakes `HERMES_HOME` and the loopback remote URL.
+
+Sealed venv extras: `pythonExtras` (agent-flake Python, PYTHONPATH
+overlay) plus official `extraDependencyGroups` for pyproject extras.
+Do not use host `pkgs.python312Packages` or official
+`extraPythonPackages` for overlapping trees. User-unit PATH extras:
+official `extraPackages` (there is no toolbox buildEnv on HM).
 
 A hosted client that is **not** using this shortcut sets
 `HERMES_DESKTOP_REMOTE_URL` on the official module. PnP does not

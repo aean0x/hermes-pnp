@@ -34,6 +34,11 @@ services.hermesPnP = {
 and gets agent + WebUI + first-party plugins + toolbox + MCP proxy +
 CDP browser. Official options still work as documented.
 
+The product is always a systemd Hermes daemon. NixOS: system unit
+(optional Ubuntu jail). Home Manager: user unit (`gateway.enable`),
+same package wrap / plugins / skills / `pythonExtras`. Desktop is a
+client of that daemon, not a second identity.
+
 A user who wants more control keeps writing `services.hermes-agent.*`
 and `services.hermes-webui.*` as upstream declares them. PnP adds
 pairing, plugins, and a few extra modules.
@@ -245,11 +250,13 @@ loopback remote URL, token at start. GUI logins join group `hermes`.
 Do not rewrite `services.hermes-agent.user` when Desktop is on.
 
 **Home Manager / personal.** `homeManagerModules.default` imports
-official HM. Leave `hermesHome` / `workingDirectory` unset. User
-units. `desktop.enable` turns on official `programs.hermes-agent.desktop`
-and official `hermes-backend`. No REMOTE_URL generalization — a hosted
-client that skips this shortcut sets `HERMES_DESKTOP_REMOTE_URL` on
-the official module.
+official HM. Leave `hermesHome` / `workingDirectory` unset. `pnp.enable`
+starts the messaging gateway user unit (`gateway.enable`) even when
+Desktop is off. `desktop.enable` attaches official
+`programs.hermes-agent.desktop` and official `hermes-backend`.
+`pythonExtras` and `extraDependencyGroups` are the same wrap as NixOS.
+Toolbox/WebUI/CDP jails stay NixOS. User-unit PATH extras are official
+`services.hermes-agent.extraPackages`. No REMOTE_URL generalization.
 
 Do not import both composers for the same login. `container.enable`
 fails on HM.

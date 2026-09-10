@@ -99,6 +99,8 @@ in
     test "${toString (desktopCfg.home.activation ? hermesPnPPlugins)}" = "1"
     test "${toString (desktopCfg.home.activation ? hermesPnPSkills)}" = "1"
     test "${toString (hmEval.options.services.hermes-agent ? user)}" = ""
+    test "${toString (hmEval.options.services.hermesPnP ? pythonExtras)}" = "1"
+    test "${toString (desktopCfg.services.hermes-agent.hermesHome == desktopCfg.home.homeDirectory + "/.hermes")}" = "1"
     touch "$out"
   '';
 }
