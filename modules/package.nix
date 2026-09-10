@@ -9,7 +9,8 @@
 # (same interpreter as the sealed venv). Transitive dists already in
 # the venv are dropped at wrap time so the upstream collision check
 # never fires. The overlay is on the Nix-wrapped hermes binary, so it
-# applies to native systemd and the Ubuntu jail (/nix/store:ro).
+# applies to native systemd, Home Manager user units, and the Ubuntu
+# jail (/nix/store:ro).
 {
   config,
   lib,
@@ -253,8 +254,8 @@ in
         library that is not a pyproject extra. Pyproject extras still use
         extraDependencyGroups (uv2nix, no PYTHONPATH).
 
-        The wrap is the Nix hermes binary. Native systemd and the Ubuntu
-        jail both execute it from /nix/store.
+        The wrap is the Nix hermes binary. Native systemd, Home Manager
+        user units, and the Ubuntu jail all execute it from /nix/store.
       '';
     };
 

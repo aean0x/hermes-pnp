@@ -9,6 +9,7 @@
   services.hermesPnP = {
     enable = true;
     # environmentFiles = [ config.sops.secrets."hermes/env".path ];
+    # pythonExtras = [ "google-cloud-pubsub" ]; # sealed venv; see examples/python-extras.nix
 
     desktop = {
       enable = true;
@@ -18,4 +19,7 @@
       # mode = "serve"; # or "dashboard"
     };
   };
+
+  # services.hermes-agent.extraDependencyGroups = [ "google" "messaging" ];
+  # services.hermes-agent.extraPackages = [ pkgs.sops ];
 }
