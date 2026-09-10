@@ -112,6 +112,17 @@ def _wrap_doctor(mod: Any) -> None:
         doc.DOCTOR_CHECKS = tuple(patched if item is orig else item for item in checks)
 
 
+def _wrap_doctor_config(mod: Any) -> None:
+    """Vertex OpenAPI wants google/<model>; doctor treats slashes as aggregator-only."""
+    current = getattr(mod, "_VENDOR_SLUG_PROVIDERS", None)
+    if current is None:
+        return
+    extra = frozenset({"vertex", "google-vertex", "vertex-ai", "gcp-vertex", "vertexai"})
+    if extra <= frozenset(current):
+        return
+    mod._VENDOR_SLUG_PROVIDERS = frozenset(current) | extra
+
+
 def _maybe_patch(name: str) -> None:
     if name == "hermes_cli.model_normalize":
         mod = sys.modules.get(name)
@@ -121,10 +132,17 @@ def _maybe_patch(name: str) -> None:
         mod = sys.modules.get(name)
         if mod is not None:
             _wrap_doctor(mod)
+    elif name == "hermes_cli.doctor_config":
+        mod = sys.modules.get(name)
+        if mod is not None:
+            _wrap_doctor_config(mod)
     elif name == "hermes_cli.doctor":
         plat = sys.modules.get("hermes_cli.doctor_platform")
         if plat is not None:
             _wrap_doctor(plat)
+        cfg = sys.modules.get("hermes_cli.doctor_config")
+        if cfg is not None:
+            _wrap_doctor_config(cfg)
 
 
 def install() -> None:
@@ -150,7 +168,12 @@ def install() -> None:
         return
     _import._pnp_hooks = True  # type: ignore[attr-defined]
     builtins.__import__ = _import
-    for loaded in ("hermes_cli.model_normalize", "hermes_cli.doctor_platform", "hermes_cli.doctor"):
+    for loaded in (
+        "hermes_cli.model_normalize",
+        "hermes_cli.doctor_platform",
+        "hermes_cli.doctor_config",
+        "hermes_cli.doctor",
+    ):
         if loaded in sys.modules:
             _maybe_patch(loaded)
 

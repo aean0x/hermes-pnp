@@ -131,7 +131,8 @@ let
   hooksOverlay = pkgs.runCommand "hermes-pnp-hooks" { } ''
     mkdir -p "$out/site-packages"
     cp ${./hermes_pnp_hooks.py} "$out/site-packages/hermes_pnp_hooks.py"
-    printf '%s\n' 'import hermes_pnp_hooks; hermes_pnp_hooks.install()' > "$out/site-packages/hermes_pnp_hooks.pth"
+    # PYTHONPATH dirs do not process .pth; sitecustomize is imported by site.py.
+    printf '%s\n' 'import hermes_pnp_hooks; hermes_pnp_hooks.install()' > "$out/site-packages/sitecustomize.py"
   '';
 
   wrapPackage =
