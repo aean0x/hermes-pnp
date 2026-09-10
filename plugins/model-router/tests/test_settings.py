@@ -18,6 +18,7 @@ _ENV_KEYS = (
     "MODEL_ROUTER_LOW_MODEL",
     "MODEL_ROUTER_LOW_PROVIDER",
     "MODEL_ROUTER_LOW_BEST_FOR",
+    "MODEL_ROUTER_DEFAULT_MODEL",
     "MODEL_ROUTER_MEDIUM_MODEL",
     "MODEL_ROUTER_HIGH_MODEL",
 )
@@ -53,15 +54,15 @@ class Defaults(unittest.TestCase):
     def test_three_named_models(self) -> None:
         with _clean_env():
             mod = _load("mr_defaults")
-        self.assertEqual(mod.NAMES, ("low", "medium", "high"))
+        self.assertEqual(mod.NAMES, ("low", "default", "high"))
         self.assertIn("low", mod.MODELS)
-        self.assertIn("medium", mod.MODELS)
+        self.assertIn("default", mod.MODELS)
         self.assertIn("high", mod.MODELS)
         self.assertEqual(mod.ESCALATE_MAX, "high")
         self.assertEqual(mod.ESCALATION_ERRORS["low"], 4)
-        self.assertEqual(mod.ESCALATION_ERRORS["medium"], 3)
+        self.assertEqual(mod.ESCALATION_ERRORS["default"], 3)
         self.assertNotIn("rocknas", mod.CLASSIFIER.lower())
-        self.assertIn("low or medium or high", mod.CLASSIFIER)
+        self.assertIn("low or default or high", mod.CLASSIFIER)
         self.assertNotIn("ONLY a digit", mod.CLASSIFIER)
         self.assertNotIn("T1", mod.CLASSIFIER)
         self.assertFalse(hasattr(mod, "CLASSIFY_HIGH"))
@@ -76,7 +77,7 @@ class Defaults(unittest.TestCase):
         self.assertNotIn("Trivial Q&A", mod.CLASSIFIER)
         self.assertNotIn("Rules:", mod.CLASSIFIER)
         cmds = [row["cmd"] for row in mod.webui_models()]
-        self.assertEqual(cmds, ["/low", "/medium", "/high", "/auto"])
+        self.assertEqual(cmds, ["/low", "/default", "/high", "/auto"])
         labels = [row["label"] for row in mod.webui_models()[:3]]
         self.assertEqual(labels, ["Quick", "Standard", "Expert"])
 
@@ -84,7 +85,11 @@ class Defaults(unittest.TestCase):
         with _clean_env():
             mod = _load("mr_defaults_json")
         cfg = json.loads((ROOT / "config.default.json").read_text(encoding="utf-8"))
-        for name in ("low", "medium", "high"):
+        # The shipped catalog keys ARE the canonical slot names. A catalog that
+        # drifts ahead of settings.py ("medium" vs "default") makes
+        # _coerce_models_map raise at import and takes the whole plugin down.
+        self.assertEqual(list(cfg["models"]), list(mod.NAMES))
+        for name in ("low", "default", "high"):
             for key in ("label", "short", "best_for"):
                 self.assertEqual(mod.MODELS[name][key], cfg["models"][name][key])
             self.assertNotIn("model", cfg["models"][name])
@@ -107,7 +112,7 @@ class Defaults(unittest.TestCase):
                     {
                         "models": {
                             "low": {"model": ""},
-                            "medium": {"model": ""},
+                            "default": {"model": ""},
                             "high": {"model": ""},
                         }
                     }
@@ -128,7 +133,7 @@ class Defaults(unittest.TestCase):
                     {
                         "models": {
                             "low": {"model": "cheap", "provider": "p-low"},
-                            "medium": {"model": "work", "provider": "p-med"},
+                            "default": {"model": "work", "provider": "p-work"},
                             "high": {"model": "voice", "provider": "p-high"},
                         }
                     }
@@ -138,12 +143,53 @@ class Defaults(unittest.TestCase):
             with _clean_env(MODEL_ROUTER_CONFIG=str(cfg)):
                 mod = _load("mr_declared_overlay")
         self.assertEqual(mod.MODELS["low"]["model"], "cheap")
-        self.assertEqual(mod.MODELS["medium"]["model"], "work")
+        self.assertEqual(mod.MODELS["default"]["model"], "work")
+        self.assertEqual(mod.MODELS["default"]["provider"], "p-work")
         self.assertEqual(mod.MODELS["high"]["model"], "voice")
         self.assertEqual(mod.MODELS["high"]["provider"], "p-high")
         self.assertEqual(
             mod.MODELS["low"]["best_for"], catalog["models"]["low"]["best_for"]
         )
+
+
+class LegacyAlias(unittest.TestCase):
+    """A v0.8 config / env that says "medium" lands on the "default" slot."""
+
+    def test_medium_model_key_fills_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / "cfg.json"
+            cfg.write_text(
+                json.dumps(
+                    {
+                        "models": {
+                            "low": {"model": "test-low", "provider": "test"},
+                            "medium": {"model": "legacy-work", "provider": "test"},
+                            "high": {"model": "test-high", "provider": "test"},
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with _clean_env(MODEL_ROUTER_CONFIG=str(cfg)):
+                mod = _load("mr_legacy_models_key")
+        self.assertEqual(list(mod.MODELS), ["low", "default", "high"])
+        self.assertEqual(mod.MODELS["default"]["model"], "legacy-work")
+        self.assertEqual(mod.as_name("medium"), "default")
+        self.assertEqual(mod.as_name("Medium"), "default")
+        self.assertIsNone(mod.as_name("ultra"))
+
+    def test_medium_env_prefix_fills_default(self) -> None:
+        with _clean_env(MODEL_ROUTER_MEDIUM_MODEL="legacy-medium"):
+            mod = _load("mr_legacy_env")
+        self.assertEqual(mod.MODELS["default"]["model"], "legacy-medium")
+
+    def test_default_env_prefix_wins_over_legacy(self) -> None:
+        with _clean_env(
+            MODEL_ROUTER_MEDIUM_MODEL="legacy-medium",
+            MODEL_ROUTER_DEFAULT_MODEL="canonical",
+        ):
+            mod = _load("mr_default_env_wins")
+        self.assertEqual(mod.MODELS["default"]["model"], "canonical")
 
 
 class EnvOverlay(unittest.TestCase):
@@ -155,7 +201,7 @@ class EnvOverlay(unittest.TestCase):
                     {
                         "models": {
                             "low": {"model": "test-low", "provider": "test"},
-                            "medium": {"model": "test-medium", "provider": "test"},
+                            "default": {"model": "test-default", "provider": "test"},
                             "high": {"model": "some-voice", "provider": "other"},
                         }
                     }
@@ -182,7 +228,7 @@ class RejectFourth(unittest.TestCase):
                     {
                         "models": {
                             "low": {"model": "a"},
-                            "medium": {"model": "b"},
+                            "default": {"model": "b"},
                             "high": {"model": "c"},
                             "ultra": {"model": "d"},
                         }
@@ -209,7 +255,7 @@ class BestFor(unittest.TestCase):
                                 "provider": "test",
                                 "best_for": ["Only pings"],
                             },
-                            "medium": {"model": "test-medium", "provider": "test"},
+                            "default": {"model": "test-default", "provider": "test"},
                             "high": {
                                 "model": "test-high",
                                 "provider": "test",

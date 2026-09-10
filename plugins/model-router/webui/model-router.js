@@ -4,7 +4,7 @@
 
   const DEFAULT_MODELS = [
     { cmd: "/low", label: "Quick", short: "Quick", model: "", title: "Pin Quick" },
-    { cmd: "/medium", label: "Standard", short: "Standard", model: "", title: "Pin Standard" },
+    { cmd: "/default", label: "Standard", short: "Standard", model: "", title: "Pin Standard" },
     { cmd: "/high", label: "Expert", short: "Expert", model: "", title: "Pin Expert" },
   ];
   const cfg = window.__MODEL_ROUTER_CONFIG;
