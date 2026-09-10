@@ -42,6 +42,10 @@
         services.hermesPnP.internal.officialAgentSrc = hermes-agent.outPath;
         services.hermesPnP.internal.officialDesktopPackageFor =
           system: hermes-agent.packages.${system}.desktop;
+        # Same Python instance as hermesVenv (hermes-agent.nix python312).
+        # Host/composer nixpkgs is a different interpreter and is stripped.
+        services.hermesPnP.internal.officialPythonPackagesFor =
+          system: hermes-agent.inputs.nixpkgs.legacyPackages.${system}.python312Packages;
       };
     in
     {
