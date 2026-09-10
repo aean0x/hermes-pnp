@@ -14,6 +14,7 @@
   config,
   lib,
   pkgs,
+  options,
   ...
 }:
 
@@ -278,7 +279,7 @@ in
     internal.officialAgentPackageFor = mkOption {
       type = types.functionTo types.package;
       internal = true;
-      default = system: throw "hermesPnP package wrap requires nixosModules.default (official agent package not wired for ${system})";
+      default = system: throw "hermesPnP package wrap requires the hermes-pnp flake module (official agent package not wired for ${system})";
       defaultText = lib.literalExpression "system: throw \"…\"";
       description = "system → official hermes-agent package. Set by the composer flake.";
     };
@@ -293,7 +294,7 @@ in
     internal.officialPythonPackagesFor = mkOption {
       type = types.functionTo types.raw;
       internal = true;
-      default = system: throw "hermesPnP pythonExtras requires nixosModules.default (hermes-agent python312Packages not wired for ${system})";
+      default = system: throw "hermesPnP pythonExtras requires the hermes-pnp flake module (hermes-agent python312Packages not wired for ${system})";
       defaultText = lib.literalExpression "system: throw \"…\"";
       description = "system → hermes-agent flake python312Packages (same interpreter as hermesVenv).";
     };
@@ -311,11 +312,12 @@ in
     (mkIf pnp.enable (mkMerge [
       {
         services.hermes-agent.environment = lib.mapAttrs (_: mkDefault) hermesRuntimeEnv;
-
+      }
+      (mkIf (options.services ? hermes-webui && options.services.hermesPnP ? webui) {
         services.hermes-webui.extraEnvironment = mkIf pnp.webui.enable (
           lib.mapAttrs (_: mkDefault) hermesRuntimeEnv
         );
-      }
+      })
       (mkIf (
         pnp.packageFixes.silenceMarkers
         || pnp.packageFixes.missingPyModules

@@ -3,6 +3,10 @@
 # the shell profile: wrap HERMES_HOME + remote URL into the binary,
 # read the session token at start (never --set; that lands in the
 # store). Same contract as official Home Manager desktop.
+#
+# NixOS identity stays the hermes service user. desktop.users are
+# GUI logins added to that group. Do not flip services.hermes-agent.user
+# to the login. Personal/laptop identity is homeManagerModules.default.
 {
   config,
   lib,

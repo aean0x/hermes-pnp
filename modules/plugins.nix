@@ -1,5 +1,8 @@
-# Install catalog + extraPluginDirs to $stateDir/plugins/<name>
-# and symlink $stateDir/.hermes/plugins/<name> → ../../plugins/<name>.
+# Install catalog + extraPluginDirs.
+# NixOS: $stateDir/plugins/<name> and symlink
+# $stateDir/.hermes/plugins/<name> → ../../plugins/<name>.
+# Home Manager: $hermesHome/plugins/<name> (same dir as official
+# extraPlugins; only remove PnP-owned trees).
 {
   config,
   lib,
@@ -21,6 +24,7 @@ let
   extra = pnp.extraPluginDirs;
   catalog = import ../plugins/catalog.nix;
   install = pnp.pluginInstall;
+  isHomeManager = options ? home && options.home ? homeDirectory;
 
   gbrainOn = (options.services.hermesPnP ? gbrain) && pnp.gbrain.enable;
 
@@ -214,7 +218,8 @@ in
       ) "${resolvedSources.model-router}/webui";
 
       services.hermes-agent.settings.plugins.enabled = enabledNames;
-
+    })
+    (mkIf (!isHomeManager && (pnp.plugins != [ ] || extra != { } || gbrainOn)) {
       systemd.tmpfiles.rules = [
         "d ${materializeRoot} 2770 ${install.user} ${install.group} -"
         "d ${hermesHomePlugins} 2770 ${install.user} ${install.group} -"
@@ -261,6 +266,22 @@ in
           echo "$want" | ${pkgs.jq}/bin/jq -r '.[]' > "$dest/.enabled"
         '';
       };
+    })
+
+    (mkIf (isHomeManager && (pnp.plugins != [ ] || extra != { } || gbrainOn)) {
+      home.activation.hermesPnPPlugins = config.lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        set -euo pipefail
+        dest="${agent.hermesHome}/plugins"
+        $DRY_RUN_CMD mkdir -p "$dest"
+        ${lib.concatMapStrings (name: ''
+          $DRY_RUN_CMD chmod -R u+w "$dest/${name}" 2>/dev/null || true
+          $DRY_RUN_CMD rm -rf "$dest/${name}"
+          $DRY_RUN_CMD ${pkgs.rsync}/bin/rsync -a --delete --chmod=D0750,F0640 \
+            --exclude 'webui/' --exclude '__pycache__/' --exclude '*.pyc' \
+            ${resolvedSources.${name}}/ "$dest/${name}/"
+        '') pnpNames}
+        echo '${enabledPluginsJson}' | ${pkgs.jq}/bin/jq -r '.[]' | $DRY_RUN_CMD tee "$dest/.enabled" >/dev/null
+      '';
     })
 
     (mkIf pnp.enable {

@@ -1,8 +1,11 @@
 # Examples
 
-Copy a file into the consumer flake. These are NixOS **modules**, not
+Copy a file into the consumer flake. NixOS files are **modules**, not
 a host. Import `inputs.hermes-pnp.nixosModules.default` (or the
 à-la-carte module named in the file) and merge the snippet.
+
+`examples/home-manager.nix` is a Home Manager module. Import
+`inputs.hermes-pnp.homeManagerModules.default`.
 
 `nix flake check` evaluates every file here (dummy agent/webui
 packages).
@@ -19,6 +22,7 @@ packages).
 | [skills.nix](skills.nix) | Consumer skill trees beside the catalog |
 | [hmc.nix](hmc.nix) | Pin hermes-context-manager as extraPluginDirs |
 | [desktop.nix](desktop.nix) | Native Desktop: official `hermes-backend` + wrapped launcher |
+| [home-manager.nix](home-manager.nix) | Personal composer: login user, `~/.hermes`, official Desktop |
 
 Combine them: `container.nix` + `gbrain.nix` is a jailed gateway with
 GBrain. `composer.nix` + `mcp-proxy.nix` is the usual pairing plus

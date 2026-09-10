@@ -38,6 +38,12 @@
 - `hermesPnP.desktop.enable` is native-only: official
   `container.enable` must be false. It starts official
   `backend.mode = serve` and wraps Desktop onto that backend.
+  NixOS identity stays the hermes service user. Home Manager
+  identity is `homeManagerModules.default` (`docs/home-manager.md`).
+  PnP does not generalize `HERMES_DESKTOP_REMOTE_URL`.
+- Home Manager plugins materialize under `$hermesHome/plugins`.
+  Skills land in `$hermesHome/pnp-skills`. Leave `hermesHome` and
+  `workingDirectory` unset.
 - model-router keys are `low` / `default` / `high`. Commands `/low`
   `/default` `/high` `/auto` (`/medium` is the deprecated alias for
   `/default`). Auto turn-start classifier replies `low`, `default`, or

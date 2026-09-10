@@ -40,3 +40,10 @@ Token file: owner hermes, group hermes, mode 0440, one line, not a
 Nix path literal. Drop any hand-rolled `systemd.services.hermes-serve`.
 
 See `examples/desktop.nix`.
+
+Identity stays the hermes service user. This is not a Home Manager
+module. Personal/laptop identity: `docs/home-manager.md`.
+
+A hosted Desktop client that is not using this shortcut sets
+`HERMES_DESKTOP_REMOTE_URL` on the official module. PnP does not
+generalize that URL.
