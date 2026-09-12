@@ -52,6 +52,13 @@ _PATCH_FILE_RE = re.compile(
 )
 _FALSE = frozenset({"0", "false", "no", "off", ""})
 
+# write_file/patch land content via a same-directory atomic rename. Their temp
+# names (`.hermes-tmp.XXXXXX`, plus the webui `.name.hermes-tmp-<pid>` form) are
+# visible to post_tool_call but gone by flush time, and one dead pathspec makes
+# `git add` exit non-zero — which drops the whole batch and re-queues the dead
+# path forever, so every real change of the turn goes uncommitted.
+_TRANSIENT_MARKER = ".hermes-tmp"
+
 _lock = threading.Lock()
 _pulled: Set[str] = set()
 _before: Dict[str, frozenset[str]] = {}
@@ -268,6 +275,11 @@ def git_root(path: str) -> Optional[str]:
     return root
 
 
+def _transient(rel: str) -> bool:
+    """True for Hermes atomic-write temp names — dead by flush time."""
+    return _TRANSIENT_MARKER in rel.rsplit("/", 1)[-1]
+
+
 def _porcelain_paths(root: str) -> frozenset[str]:
     try:
         proc = _git(["status", "--porcelain", "-z"], cwd=root, timeout=5)
@@ -287,11 +299,14 @@ def _porcelain_paths(root: str) -> frozenset[str]:
         rel = entry[3:] if len(entry) > 3 else ""
         if not rel:
             continue
-        paths.add(rel)
+        # Atomic-write temps are never part of the turn's real delta.
+        if not _transient(rel):
+            paths.add(rel)
         # rename/copy: next -z field is the original path
         if entry[0] in {"R", "C"} or (len(entry) > 1 and entry[1] in {"R", "C"}):
             if i < len(parts) and parts[i]:
-                paths.add(parts[i])
+                if not _transient(parts[i]):
+                    paths.add(parts[i])
                 i += 1
     return frozenset(paths)
 
@@ -421,6 +436,42 @@ def _push(root: str, source: str, sha: str) -> str:
     return f"pushed {sha}"
 
 
+def _stageable(root: str, rels: Iterable[str]) -> list[str]:
+    """The subset of `rels` that `git add` accepts.
+
+    A stale path — a temp name already renamed away, or a file created and
+    deleted inside the same turn — makes `git add -- <path>` exit non-zero
+    ("pathspec did not match any files") and git then stages NOTHING, so the
+    whole turn's work is lost and the dead path is retried forever. Drop those.
+    A missing-but-tracked path is kept: that is a deletion, and `git add`
+    stages it.
+    """
+    present: list[str] = []
+    gone: list[str] = []
+    for rel in rels:
+        if not rel or _transient(rel):
+            continue
+        if os.path.lexists(os.path.join(root, rel)):
+            present.append(rel)
+        else:
+            gone.append(rel)
+    if gone:
+        try:
+            proc = _git(["ls-files", "-z", "--", *gone], cwd=root, timeout=5)
+        except (subprocess.TimeoutExpired, OSError):
+            log.debug("git-hook: ls-files failed for %s", gone)
+        else:
+            if proc.returncode == 0 and proc.stdout:
+                present.extend(
+                    p for p in proc.stdout.split("\0") if p and not _transient(p)
+                )
+    kept = sorted(set(present))
+    dropped = len(set(rels)) - len(kept)
+    if dropped:
+        log.debug("git-hook: %s skipped %d unstaged-able path(s)", root, dropped)
+    return kept
+
+
 def commit_and_push(root: str, paths: Set[str], source: str) -> str:
     """Stage only `paths`, commit, optionally push. Fail-open."""
     if not paths:
@@ -429,6 +480,9 @@ def commit_and_push(root: str, paths: Set[str], source: str) -> str:
         log.warning("git-hook: busy %s (merge/rebase in progress); will retry", root)
         return "busy"
     rels = sorted({p for p in paths if p and not p.startswith("/")})
+    # Never hand git a path that no longer resolves: one dead pathspec fails the
+    # entire add batch (git exits non-zero and stages nothing).
+    rels = _stageable(root, rels)
     if not rels:
         return "clean"
     try:
