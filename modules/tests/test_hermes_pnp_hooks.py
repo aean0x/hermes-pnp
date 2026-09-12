@@ -6,14 +6,7 @@ import os
 import unittest
 from unittest import mock
 
-from hermes_pnp_hooks import (
-    _ensure_nixos_path,
-    _wrap_doctor_config,
-    _wrap_environments_local,
-    _wrap_process_registry,
-    nix_hermes_bin,
-    vertex_model_id,
-)
+from hermes_pnp_hooks import _wrap_doctor_config, nix_hermes_bin, vertex_model_id
 
 
 class VertexModelIdTests(unittest.TestCase):
@@ -99,58 +92,3 @@ class DoctorConfigTests(unittest.TestCase):
         _wrap_doctor_config(Mod)
         self.assertIn("vertex", Mod._VENDOR_SLUG_PROVIDERS)
         self.assertIn("openrouter", Mod._VENDOR_SLUG_PROVIDERS)
-
-
-class EnsureNixosPathTests(unittest.TestCase):
-    def test_appends_existing_candidates(self) -> None:
-        def fake_isdir(path: str) -> bool:
-            return path in ("/run/current-system/sw/bin", "/etc/profiles/per-user/alice/bin")
-
-        with mock.patch.dict(os.environ, {"PATH": "/nix/store/a-pkg/bin", "USER": "alice", "HOME": "/home/alice"}):
-            with mock.patch("os.path.isdir", side_effect=fake_isdir):
-                _ensure_nixos_path()
-                path = os.environ["PATH"]
-                self.assertIn("/run/current-system/sw/bin", path)
-                self.assertIn("/etc/profiles/per-user/alice/bin", path)
-                self.assertTrue(path.startswith("/nix/store/a-pkg/bin:"))
-
-    def test_does_not_duplicate(self) -> None:
-        with mock.patch.dict(
-            os.environ,
-            {"PATH": "/run/current-system/sw/bin:/nix/store/a/bin", "USER": "bob", "HOME": "/home/bob"},
-        ):
-            with mock.patch("os.path.isdir", return_value=True):
-                _ensure_nixos_path()
-                parts = os.environ["PATH"].split(":")
-                self.assertEqual(parts.count("/run/current-system/sw/bin"), 1)
-
-
-class EnvironmentsLocalTests(unittest.TestCase):
-    def test_appends_nix_paths_to_sane_path(self) -> None:
-        class Mod:
-            _SANE_PATH = "/usr/bin:/bin"
-
-        _wrap_environments_local(Mod)
-        self.assertIn("/run/current-system/sw/bin", Mod._SANE_PATH)
-        self.assertIn("/usr/bin:/bin", Mod._SANE_PATH)
-
-
-class ProcessRegistryTests(unittest.TestCase):
-    def test_fallback_which_finds_systemd_run(self) -> None:
-        class Mod:
-            class shutil:
-                @staticmethod
-                def which(cmd: str, *args, **kwargs):
-                    return None
-
-        with mock.patch("os.path.isfile", return_value=True), mock.patch("os.access", return_value=True):
-            _wrap_process_registry(Mod)
-            self.assertEqual(
-                Mod.shutil.which("systemd-run"),
-                "/run/current-system/sw/bin/systemd-run",
-            )
-            self.assertEqual(
-                Mod.shutil.which("systemctl"),
-                "/run/current-system/sw/bin/systemctl",
-            )
-            self.assertIsNone(Mod.shutil.which("other-cmd"))

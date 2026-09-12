@@ -123,67 +123,6 @@ def _wrap_doctor_config(mod: Any) -> None:
     mod._VENDOR_SLUG_PROVIDERS = frozenset(current) | extra
 
 
-def _wrap_environments_local(mod: Any) -> None:
-    if getattr(mod, "_pnp_env_local_patched", False):
-        return
-    current = getattr(mod, "_SANE_PATH", None)
-    if isinstance(current, str):
-        nix_paths = "/run/wrappers/bin:/run/current-system/sw/bin"
-        if nix_paths not in current:
-            mod._SANE_PATH = f"{current}:{nix_paths}"
-    mod._pnp_env_local_patched = True
-
-
-def _wrap_process_registry(mod: Any) -> None:
-    if getattr(mod, "_pnp_process_registry_patched", False):
-        return
-    pr_shutil = getattr(mod, "shutil", None)
-    if pr_shutil is not None:
-        orig_which = pr_shutil.which
-
-        def _fallback_which(cmd: str, *args: Any, **kwargs: Any) -> str | None:
-            found = orig_which(cmd, *args, **kwargs)
-            if found:
-                return found
-            if cmd in ("systemd-run", "systemctl"):
-                host_path = f"/run/current-system/sw/bin/{cmd}"
-                if os.path.isfile(host_path) and os.access(host_path, os.X_OK):
-                    return host_path
-            return None
-
-        pr_shutil.which = _fallback_which
-    mod._pnp_process_registry_patched = True
-
-
-def _ensure_nixos_path() -> None:
-    """Ensure standard NixOS system binary directories are on PATH.
-
-    Under systemd user services or minimal environments, PATH may contain
-    only nix store paths, omitting systemd-run, systemctl, and host
-    utilities in /run/current-system/sw/bin.
-    """
-    current = os.environ.get("PATH", "")
-    parts = [p for p in current.split(":") if p]
-    candidates = [
-        "/run/wrappers/bin",
-        "/run/current-system/sw/bin",
-    ]
-    user = os.environ.get("USER") or os.environ.get("LOGNAME")
-    if user:
-        candidates.append(f"/etc/profiles/per-user/{user}/bin")
-    home = os.environ.get("HOME")
-    if home:
-        candidates.append(f"{home}/.nix-profile/bin")
-
-    added = False
-    for c in candidates:
-        if os.path.isdir(c) and c not in parts:
-            parts.append(c)
-            added = True
-    if added:
-        os.environ["PATH"] = ":".join(parts)
-
-
 def _maybe_patch(name: str) -> None:
     if name == "hermes_cli.model_normalize":
         mod = sys.modules.get(name)
@@ -204,19 +143,9 @@ def _maybe_patch(name: str) -> None:
         cfg = sys.modules.get("hermes_cli.doctor_config")
         if cfg is not None:
             _wrap_doctor_config(cfg)
-    elif name == "tools.environments.local":
-        mod = sys.modules.get(name)
-        if mod is not None:
-            _wrap_environments_local(mod)
-    elif name == "tools.process_registry":
-        mod = sys.modules.get(name)
-        if mod is not None:
-            _wrap_process_registry(mod)
 
 
 def install() -> None:
-    _ensure_nixos_path()
-
     orig_import: Callable[..., Any] = builtins_import()
 
     def _import(
@@ -244,8 +173,6 @@ def install() -> None:
         "hermes_cli.doctor_platform",
         "hermes_cli.doctor_config",
         "hermes_cli.doctor",
-        "tools.environments.local",
-        "tools.process_registry",
     ):
         if loaded in sys.modules:
             _maybe_patch(loaded)
