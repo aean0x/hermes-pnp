@@ -137,21 +137,19 @@ def _wrap_environments_local(mod: Any) -> None:
 def _wrap_process_registry(mod: Any) -> None:
     if getattr(mod, "_pnp_process_registry_patched", False):
         return
-    pr_shutil = getattr(mod, "shutil", None)
-    if pr_shutil is not None:
-        orig_which = pr_shutil.which
+    orig_which = shutil.which
 
-        def _fallback_which(cmd: str, *args: Any, **kwargs: Any) -> str | None:
-            found = orig_which(cmd, *args, **kwargs)
-            if found:
-                return found
-            if cmd in ("systemd-run", "systemctl"):
-                host_path = f"/run/current-system/sw/bin/{cmd}"
-                if os.path.isfile(host_path) and os.access(host_path, os.X_OK):
-                    return host_path
-            return None
+    def _fallback_which(cmd: str, *args: Any, **kwargs: Any) -> str | None:
+        found = orig_which(cmd, *args, **kwargs)
+        if found:
+            return found
+        if cmd in ("systemd-run", "systemctl"):
+            host_path = f"/run/current-system/sw/bin/{cmd}"
+            if os.path.isfile(host_path) and os.access(host_path, os.X_OK):
+                return host_path
+        return None
 
-        pr_shutil.which = _fallback_which
+    shutil.which = _fallback_which
     mod._pnp_process_registry_patched = True
 
 
