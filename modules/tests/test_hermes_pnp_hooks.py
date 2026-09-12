@@ -138,19 +138,19 @@ class EnvironmentsLocalTests(unittest.TestCase):
 class ProcessRegistryTests(unittest.TestCase):
     def test_fallback_which_finds_systemd_run(self) -> None:
         class Mod:
-            pass
+            class shutil:
+                @staticmethod
+                def which(cmd: str, *args, **kwargs):
+                    return None
 
-        with mock.patch("shutil.which", return_value=None):
-            with mock.patch("os.path.isfile", return_value=True), mock.patch("os.access", return_value=True):
-                _wrap_process_registry(Mod)
-                import shutil
-
-                self.assertEqual(
-                    shutil.which("systemd-run"),
-                    "/run/current-system/sw/bin/systemd-run",
-                )
-                self.assertEqual(
-                    shutil.which("systemctl"),
-                    "/run/current-system/sw/bin/systemctl",
-                )
-                self.assertIsNone(shutil.which("other-cmd"))
+        with mock.patch("os.path.isfile", return_value=True), mock.patch("os.access", return_value=True):
+            _wrap_process_registry(Mod)
+            self.assertEqual(
+                Mod.shutil.which("systemd-run"),
+                "/run/current-system/sw/bin/systemd-run",
+            )
+            self.assertEqual(
+                Mod.shutil.which("systemctl"),
+                "/run/current-system/sw/bin/systemctl",
+            )
+            self.assertIsNone(Mod.shutil.which("other-cmd"))
