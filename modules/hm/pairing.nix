@@ -5,6 +5,7 @@
   config,
   lib,
   options,
+  pkgs,
   ...
 }:
 
@@ -84,6 +85,9 @@ in
       # Official HM splits the messaging gateway from enable.
       services.hermes-agent.gateway.enable = mkDefault true;
       services.hermes-agent.environmentFiles = pnp.environmentFiles;
+      services.hermes-agent.extraPackages = lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+        pkgs.systemd
+      ];
 
       # Leave hermesHome and workingDirectory unset so upstream
       # defaults apply (~/.hermes, $HOME).

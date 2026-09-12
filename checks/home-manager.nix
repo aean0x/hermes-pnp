@@ -101,6 +101,7 @@ in
     test "${toString (hmEval.options.services.hermes-agent ? user)}" = ""
     test "${toString (hmEval.options.services.hermesPnP ? pythonExtras)}" = "1"
     test "${toString (desktopCfg.services.hermes-agent.hermesHome == desktopCfg.home.homeDirectory + "/.hermes")}" = "1"
+    test "${toString (builtins.elem pkgs.systemd desktopCfg.services.hermes-agent.extraPackages)}" = "1"
     touch "$out"
   '';
 }

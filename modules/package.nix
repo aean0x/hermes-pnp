@@ -174,7 +174,9 @@ let
           for bin in hermes hermes-agent hermes-acp; do
             if [ -e "$out/bin/$bin" ]; then
               wrapProgram "$out/bin/$bin" \
-                --prefix PYTHONPATH : "${pythonpath}"
+                --prefix PYTHONPATH : "${pythonpath}" ${
+                  lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''--suffix PATH : "/run/wrappers/bin:/run/current-system/sw/bin"''
+                }
             fi
           done
         '';
