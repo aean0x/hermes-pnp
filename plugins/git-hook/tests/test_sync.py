@@ -211,6 +211,72 @@ class GitSync(unittest.TestCase):
         self.assertIn(str(work), sync._unpushed)
 
 
+class TransientPaths(unittest.TestCase):
+    """`.hermes-tmp.*` temps must never reach `git add` — one stale pathspec
+    fails the whole add batch and the real changes of the turn never commit."""
+
+    def setUp(self):
+        sync.reset_state()
+        self.td = tempfile.TemporaryDirectory()
+        self.root = _init_repo(Path(self.td.name) / "repo")
+        os.environ["PROJECTS_ROOT"] = str(self.td.name)
+        os.environ["GIT_HOOK_PUSH"] = "0"
+
+    def tearDown(self):
+        sync.reset_state()
+        os.environ.pop("PROJECTS_ROOT", None)
+        os.environ.pop("GIT_HOOK_PUSH", None)
+        self.td.cleanup()
+
+    def test_porcelain_hides_atomic_write_temps(self):
+        (self.root / ".hermes-tmp.ABC123").write_text("scratch\n")
+        (self.root / "real.txt").write_text("real\n")
+        paths = sync._porcelain_paths(str(self.root))
+        self.assertNotIn(".hermes-tmp.ABC123", paths)
+        self.assertIn("real.txt", paths)
+
+    def test_dead_temp_path_does_not_block_the_batch(self):
+        (self.root / "README").write_text("hello\nagain\n")
+        status = sync.commit_and_push(
+            str(self.root), {"README", ".hermes-tmp.ABC123"}, "test"
+        )
+        self.assertIn("committed", status)
+        log = _git(
+            ["log", "-1", "--name-only", "--pretty=format:"], cwd=self.root
+        ).stdout
+        self.assertIn("README", log)
+        self.assertNotIn(".hermes-tmp", log)
+
+    def test_temp_seen_by_hooks_never_enters_dirty(self):
+        target = self.root / "README"
+        sync.on_pre_tool_call("write_file", {"path": str(target)})
+        target.write_text("hello\nedited\n")
+        temp = self.root / ".hermes-tmp.lhjcKo"
+        temp.write_text("scratch\n")
+        sync.on_post_tool_call("write_file", {"path": str(target)}, status="ok")
+        temp.unlink()  # renamed over the target before the flush
+        self.assertEqual(sync._dirty.get(str(self.root)), {"README"})
+
+    def test_deleted_tracked_path_is_still_staged(self):
+        (self.root / "README").unlink()
+        status = sync.commit_and_push(str(self.root), {"README"}, "test")
+        self.assertIn("committed", status)
+        show = _git(["show", "--name-status", "--pretty=format:"], cwd=self.root).stdout
+        self.assertIn("D\tREADME", show)
+
+    def test_file_created_and_deleted_in_one_turn_is_dropped(self):
+        (self.root / "real.txt").write_text("real\n")
+        status = sync.commit_and_push(
+            str(self.root), {"real.txt", "transient-scratch.txt"}, "test"
+        )
+        self.assertIn("committed", status)
+        log = _git(
+            ["log", "-1", "--name-only", "--pretty=format:"], cwd=self.root
+        ).stdout
+        self.assertIn("real.txt", log)
+        self.assertNotIn("transient-scratch.txt", log)
+
+
 if __name__ == "__main__":
     if not shutil.which("git"):
         raise SystemExit("git required")
