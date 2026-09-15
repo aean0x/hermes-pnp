@@ -61,9 +61,47 @@ in
         (gbrain init / scripts/gbrain-setup.sh), not this option.
       '';
     };
+
+    embeddingModel = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "openrouter:voyageai/voyage-4";
+      description = ''
+        Embedding model for `gbrain serve` (`GBRAIN_EMBEDDING_MODEL`).
+        Overrides `embedding_model` in `~/.gbrain/config.json` for every
+        gbrain process on this host. Null leaves the file plane as the
+        single source of truth. Pair it with `embeddingDimensions`.
+
+        Re-pointing a brain that already holds vectors is a re-embed, not
+        a config flip: stored vectors stay in the old model's space until
+        `gbrain migrate embeddings --to <this model> --dim <N> --yes`
+        runs with the serve stopped. gbrain refuses that run when the env
+        and the target disagree, so declare the target here and migrate
+        to the same value in one stop-serve window.
+      '';
+    };
+
+    embeddingDimensions = mkOption {
+      type = types.nullOr types.positiveInt;
+      default = null;
+      example = 1024;
+      description = ''
+        Vector width for `gbrain.embeddingModel`
+        (`GBRAIN_EMBEDDING_DIMENSIONS`). Must be a width the target model
+        serves, and must equal the migration's `--dim`. Widths above 2000
+        exceed pgvector's HNSW cap and fall back to exact vector scans.
+        Requires `embeddingModel`.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.embeddingDimensions == null || cfg.embeddingModel != null;
+        message = "services.hermesPnP.gbrain.embeddingDimensions requires services.hermesPnP.gbrain.embeddingModel.";
+      }
+    ];
     # Typed mcpServers option; official merges it into settings.mcp_servers.
     # The bearer is an env ref: Hermes expands ${GBRAIN_TOKEN} from
     # $HERMES_HOME/.env at runtime (same pattern as mcp-proxy's

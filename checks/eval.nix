@@ -72,6 +72,15 @@ let
 
   gbrainConfig = eval [ ../examples/gbrain.nix ];
 
+  gbrainEmbeddingConfig = eval [
+    ../examples/gbrain.nix
+    {
+      services.hermesPnP.gbrain.model = "google:gemini-3.5-flash-lite";
+      services.hermesPnP.gbrain.embeddingModel = "openrouter:voyageai/voyage-4";
+      services.hermesPnP.gbrain.embeddingDimensions = 1024;
+    }
+  ];
+
   containerConfig = eval [ ../examples/container.nix ];
   containerResourcesConfig = eval [
     ../examples/container.nix
@@ -230,6 +239,13 @@ in
       toString (gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig ? StartLimitIntervalSec)
     }" = ""
     test "${toString (lib.elem "hermes-agent-setup.service" gbrainConfig.systemd.services.gbrain-mcp-http.after)}" = ""
+    # gbrain model surface: absent by default, rendered on the unit when set.
+    test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.environment ? GBRAIN_MODEL)}" = ""
+    test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.environment ? GBRAIN_EMBEDDING_MODEL)}" = ""
+    test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.environment ? GBRAIN_EMBEDDING_DIMENSIONS)}" = ""
+    test "${gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_MODEL}" = "google:gemini-3.5-flash-lite"
+    test "${gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_EMBEDDING_MODEL}" = "openrouter:voyageai/voyage-4"
+    test "${toString gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_EMBEDDING_DIMENSIONS}" = "1024"
     test "${
       toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_TRUST_FORWARDED_PROTO)
     }" = "1"

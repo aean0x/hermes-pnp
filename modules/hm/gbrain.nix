@@ -59,7 +59,10 @@ in
             "HOME=${userHome}"
             "PATH=${hostPath}"
           ]
-          ++ lib.optional (cfg.model != null) "GBRAIN_MODEL=${cfg.model}";
+          ++ lib.optional (cfg.model != null) "GBRAIN_MODEL=${cfg.model}"
+          ++ lib.optional (cfg.embeddingModel != null) "GBRAIN_EMBEDDING_MODEL=${cfg.embeddingModel}"
+          ++ lib.optional (cfg.embeddingDimensions != null)
+            "GBRAIN_EMBEDDING_DIMENSIONS=${toString cfg.embeddingDimensions}";
         WorkingDirectory = userHome;
         ExecStart = "${gbrainHttpScript}";
         Restart = "on-failure";
