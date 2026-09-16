@@ -14,6 +14,7 @@ let
     getExe
     literalExpression
     mkDefault
+    mkIf
     mkOption
     types
     ;
