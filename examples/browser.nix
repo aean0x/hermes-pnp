@@ -13,7 +13,12 @@
     enable = true;
     browser = {
       package = pkgs.brave;
-      # engine = "brave"; # only if mainProgram is wrong
+      # `engine` is the LOCAL binary name (defaults to
+      # package.meta.mainProgram, "brave" here). It reaches the agent as
+      # settings.browser.engine / AGENT_BROWSER_ENGINE only when
+      # agent-browser accepts the name (chrome, lightpanda); a fork name
+      # stays local and the agent runs its own default engine.
+      # engine = "vivaldi"; # only when the binary name differs
       cdpPort = 9222;
       # cdpAllowOrigins = [ "*" ]; # Chromium origins, not CIDR
       gate = {
