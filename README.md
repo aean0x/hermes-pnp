@@ -188,7 +188,10 @@ Official aux tasks use `models.auxiliary`, not a router tier.
 
 **tool-call-coherency** — unwrap double-nested `tool_call`, rewrite
 bare skill names, stop Grok/OpenRouter thrash on MCP and deferred
-tools.
+tools. Also repairs structurally broken bridge arguments (grouped or
+omitted closers) before the upstream repairer gives up and drops the
+call, and recalls a call name the model omitted from its argument
+signature.
 
 **secret-handoff** — `request_secret` asks via stock clarify, pastes
 through a direct CDP websocket, returns status only. Never lands on
