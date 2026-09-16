@@ -142,6 +142,13 @@ ${GBRAIN_TOKEN}` (env-ref, expanded by Hermes from `.env`). Then run
 `gbrain auth create hermes`, import/embed). Operator notes:
 [`docs/gbrain.md`](docs/gbrain.md).
 
+`gbrain.model`, `gbrain.embeddingModel` and `gbrain.embeddingDimensions`
+set `GBRAIN_MODEL` / `GBRAIN_EMBEDDING_MODEL` +
+`GBRAIN_EMBEDDING_DIMENSIONS` on the unit. Null (the default) leaves
+`~/.gbrain/config.json` as the source of truth. Re-pointing embeddings on
+a brain that already holds vectors is a re-embed with the serve stopped,
+not a switch: `gbrain migrate embeddings`.
+
 `gbrain.enable` also installs the two plugins (you can list them
 without the hook; they no-op if the env is unset):
 
