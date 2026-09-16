@@ -220,7 +220,9 @@ in
     test "${gbrainConfig.services.hermes-agent.mcpServers.gbrain.url}" = "http://127.0.0.1:3131/mcp"
     test "${toString (gbrainConfig.systemd.services ? gbrain-mcp-http)}" = "1"
     test "${toString (lib.hasInfix "gbrain-wire-config.py" gbrainConfig.system.activationScripts.hermes-gbrain.text)}" = ""
-    test "${gbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization}" = "Bearer \${GBRAIN_TOKEN}"
+    # Single quotes: ''${VAR} escapes interpolation in an indented string, and
+    # the shell must not expand either side of the comparison.
+    test '${gbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization}' = 'Bearer ''${GBRAIN_TOKEN}'
     test "${toString (lib.hasInfix "GBRAIN_TOKEN=" gbrainConfig.system.activationScripts.hermes-gbrain.text)}" = "1"
     test "${toString (lib.elem "hermes-agent-setup" gbrainConfig.system.activationScripts.hermes-gbrain.deps)}" = "1"
     test "${gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig.User}" = "${gbrainConfig.services.hermes-agent.user}"
@@ -432,7 +434,8 @@ in
     test "${toString (builtins.elem 6080 containerConfig.networking.firewall.allowedTCPPorts)}" = ""
     test "${toString (builtins.elem 4848 containerConfig.networking.firewall.allowedTCPPorts)}" = ""
     test "${containerConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_URL}" = "http://127.0.0.1:4848"
-    test "${containerGbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization}" = "Bearer \${GBRAIN_TOKEN}"
+    # Same escaping rule as the host gbrain assertion above.
+    test '${containerGbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization}' = 'Bearer ''${GBRAIN_TOKEN}'
     test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.after)}" = "1"
     test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.wants)}" = "1"
     test "${containerMcpConfig.services.hermesPnP.mcpProxy.clientAuth}" = "token"
