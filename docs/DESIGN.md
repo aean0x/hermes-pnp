@@ -193,7 +193,11 @@ the official option PnP set via `mkDefault`.
   `token` via `mkDefault`; à-la-carte stays `none`.
 - `services.hermesPnP.browser.enable` / `package` / `engine` / `cdpPort`
   / `cdpAllowOrigins` / `gate.*` — persistent CDP browser + browser-ui gate.
-  Seeds `BROWSER_CDP_URL` and `settings.browser.{cdp_url,engine}`. Extra
+  Seeds `BROWSER_CDP_URL` and `settings.browser.cdp_url`. `engine` is the
+  local binary name (`package.meta.mainProgram`); it is forwarded to the
+  agent as `settings.browser.engine` / `AGENT_BROWSER_ENGINE` only when
+  agent-browser accepts the name (`chrome`, `lightpanda`) — a fork name
+  (brave, chromium) would be rejected and dropped with a warning. Extra
   host mounts use official `container.extraVolumes`.
 - `services.hermesPnP.browser.profileImport` — build-time auth seed.
   Copies cookies / saved logins / preferences from a Chromium

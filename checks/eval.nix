@@ -113,6 +113,14 @@ let
 
   browserConfig = eval [ ../examples/browser.nix ];
 
+  # `engine` is the local binary name. Only names agent-browser accepts
+  # (chrome, lightpanda) reach the agent as settings.browser.engine /
+  # AGENT_BROWSER_ENGINE; a fork name would be rejected with a warning.
+  chromeEngineConfig = eval [
+    ../examples/browser.nix
+    { services.hermesPnP.browser.engine = "chrome"; }
+  ];
+
   # profileImport copies the fixture with builtins.path (flake-relative,
   # so this stays pure for `nix flake check`). The decoy Cache subtree
   # must be filtered out of the store copy.
@@ -294,7 +302,7 @@ in
     test "${toString (modulesConfig.services.hermes-agent.settings ? model_overrides)}" = ""
     test "${modulesConfig.services.hermes-agent.settings.context.engine}" = "model-router"
     test "${modulesConfig.services.hermes-agent.settings.browser.cdp_url}" = "http://127.0.0.1:9222"
-    test "${modulesConfig.services.hermes-agent.settings.browser.engine}" = "${modulesConfig.services.hermesPnP.browser.engine}"
+    test "${toString (modulesConfig.services.hermes-agent.settings.browser ? engine)}" = ""
     test "${toString (modulesConfig.systemd.services ? hermes-browser)}" = "1"
     test "${toString (modulesConfig.systemd.services ? hermes-browser-gate)}" = "1"
     test "${toString (profileImportConfig.systemd.services ? hermes-browser-profile-import)}" = "1"
@@ -308,7 +316,7 @@ in
     test "${toString (modulesConfig.systemd.services ? hermes-browser-env)}" = ""
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_URL}" = "http://127.0.0.1:4848"
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_PORT}" = "4848"
-    test "${modulesConfig.services.hermes-agent.environment.AGENT_BROWSER_ENGINE}" = "${modulesConfig.services.hermesPnP.browser.engine}"
+    test "${toString (modulesConfig.services.hermes-agent.environment ? AGENT_BROWSER_ENGINE)}" = ""
     test "${toString (modulesConfig.services.hermes-agent.extraPackages == [ ])}" = "1"
     test "${
       toString (
@@ -579,6 +587,10 @@ in
     test "${toString (lib.hasInfix "mcp-proxy-0." (toString mcpProxyConfig.systemd.services.mcp-proxy.serviceConfig.ExecStart))}" = ""
     test "${browserConfig.services.hermesPnP.browser.gate.publicUrl}" = "https://browser.example.com/"
     test "${toString (browserConfig.services.hermesPnP.browser.package == pkgs.brave)}" = "1"
+    test "${toString (browserConfig.services.hermes-agent.settings.browser ? engine)}" = ""
+    test "${toString (browserConfig.services.hermes-agent.environment ? AGENT_BROWSER_ENGINE)}" = ""
+    test "${chromeEngineConfig.services.hermes-agent.settings.browser.engine}" = "chrome"
+    test "${chromeEngineConfig.services.hermes-agent.environment.AGENT_BROWSER_ENGINE}" = "chrome"
     test "${toString (builtins.elem pkgs.sops toolboxConfig.services.hermesPnP.toolbox.extraPackages)}" = "1"
     test "${toString (builtins.elem pkgs.sops toolboxConfig.services.hermesPnP.toolbox.paths)}" = "1"
     test "${toString (builtins.elem pkgs.sops foldedPackagesConfig.services.hermes-agent.extraPackages)}" = "1"
