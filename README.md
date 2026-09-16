@@ -159,6 +159,32 @@ without the hook; they no-op if the env is unset):
 
 Never a second `gbrain serve`. Never `autopilot --install`.
 
+## Document index
+
+Optional. `docindex.enable` installs the `docindex` plugin, which makes
+the local document corpus (scanned post, letters, tax and insurance
+paperwork, project notes, the GBrain markdown mirror) searchable in one
+SQLite file: FTS5 plus sqlite-vec, no server, no daemon. Tools:
+`docindex_search`, `docindex_stats`, `docindex_show`, `docindex_index`,
+`docindex_verify`.
+
+`docindex.embeddingModel` / `embeddingDimensions` default to the
+`gbrain` values, so brain and corpus stay in one vector space: the
+engine reads `GBRAIN_EMBEDDING_MODEL` / `GBRAIN_EMBEDDING_DIMENSIONS`
+and falls back to `~/.gbrain/config.json`. Re-pointing either index is
+a re-embed, not a switch.
+
+The engine needs interpreters the agent runtime does not carry
+(`sqlite-vec`, tesseract, poppler), so `docindex.python` and
+`docindex.vecPython` name them and `docindex.libstdcpp` supplies the
+C++ runtime the extension module links against. `docindex.roots` lists
+what `docindex_index` may scan. `docindex.verifyTermsFile` points at
+document identifiers, which stay out of this repo.
+
+Each tool runs the engine as a subprocess: nothing loads the index into
+the agent's memory, and the database stays host-local
+(`docindex.dbPath`) because it holds raw text of scans.
+
 ## MCP proxy
 
 Loopback reverse proxy (`127.0.0.1:3140`). Hermes talks to
@@ -207,6 +233,11 @@ disk or in the tool result.
 **git-hook** — fetch/pull before reads; commit/push only the files
 this turn dirtied. `GIT_HOOK_COMMIT=0` / `GIT_HOOK_PUSH=0` to mute.
 HTTPS GitHub uses `GITHUB_TOKEN` via the credential helper.
+
+**docindex** — keyword + semantic search over the local document corpus,
+as five tools (`search`, `stats`, `show`, `index`, `verify`). Engine in
+`bin/`, interpreters and roots from `docindex.*`. Corpus and database
+stay host-local: see [Document index](#document-index).
 
 GBrain plugins live under [GBrain](#gbrain).
 

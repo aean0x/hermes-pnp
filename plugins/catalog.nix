@@ -5,6 +5,7 @@
   tool-call-coherency = ./tool-call-coherency;
   gbrain-retrieval-reflex = ./gbrain-retrieval-reflex;
   gbrain-memory-flush = ./gbrain-memory-flush;
+  docindex = ./docindex;
   secret-handoff = ./secret-handoff;
   git-hook = ./git-hook;
 }

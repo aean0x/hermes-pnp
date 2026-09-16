@@ -15,6 +15,7 @@
     ./toolbox-nixos.nix
     ./gbrain.nix
     ./gbrain-nixos.nix
+    ./docindex.nix
     ./hmc.nix
     ./hmc-nixos.nix
     ./webui

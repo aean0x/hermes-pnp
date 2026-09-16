@@ -1,0 +1,12 @@
+#!/bin/sh
+# docindex CLI wrapper - full-text search over local document corpora.
+# Usage: docindex search "query" | stats | show PATH [--page N] | scan ROOT | extract
+# DOCINDEX_PYTHON carries the OCR/PDF dependencies; the default is the box's
+# toolbox python. Relocatable: the engine beside this wrapper is what runs.
+PY="${DOCINDEX_PYTHON:-/data/toolbox/bin/python3}"
+if [ -n "${DOCINDEX_PATH_PREPEND:-}" ]; then
+  PATH="${DOCINDEX_PATH_PREPEND}:$PATH"
+fi
+export PATH
+HERE=$(cd "$(dirname "$0")" && pwd)
+exec "$PY" "$HERE/docindex.py" "$@"

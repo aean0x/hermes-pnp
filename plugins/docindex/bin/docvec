@@ -1,0 +1,12 @@
+#!/bin/sh
+# vector arm of the document index.
+# Usage: docvec embed | search "query" [--k N] [--mode hybrid|vector|keyword] | stats
+# The venv carries sqlite-vec, and its extension module needs the libstdc++
+# that the interpreter was built against: DOCINDEX_LIBSTDCPP points at it
+# (services.hermesPnP.docindex.libstdcpp supplies the Nix store path).
+PY="${DOCVEC_PYTHON:-/data/docindex/embed/venv/bin/python}"
+if [ -n "${DOCINDEX_LIBSTDCPP:-}" ]; then
+  export LD_LIBRARY_PATH="${DOCINDEX_LIBSTDCPP}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+HERE=$(cd "$(dirname "$0")" && pwd)
+exec "$PY" "$HERE/docvec.py" "$@"
