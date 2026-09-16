@@ -82,7 +82,7 @@ in
     };
 
     embeddingDimensions = mkOption {
-      type = types.nullOr types.positiveInt;
+      type = types.nullOr types.ints.positive;
       default = null;
       example = 1024;
       description = ''
