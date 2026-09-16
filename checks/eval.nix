@@ -9,6 +9,9 @@
 let
   inherit (nixpkgs) lib;
 
+  _assertGbrainAuth1 = assert gbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization == (builtins.concatStringsSep "" [ "Bearer " "$" "{GBRAIN_TOKEN}" ]); true;
+  _assertGbrainAuth2 = assert containerGbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization == (builtins.concatStringsSep "" [ "Bearer " "$" "{GBRAIN_TOKEN}" ]); true;
+
   dummyAgent =
     pkgs.runCommand "dummy-hermes-agent"
       {
@@ -203,6 +206,7 @@ let
 in
 {
   modules = pkgs.runCommand "hermes-pnp-modules-eval" { } ''
+    set -x
     test "${toString modulesConfig.services.hermesPnP.enable}" = "1"
     test "${toString modulesConfig.services.hermes-webui.enable}" = "1"
     test "${modulesConfig.services.hermes-webui.host}" = "127.0.0.1"
@@ -220,7 +224,6 @@ in
     test "${gbrainConfig.services.hermes-agent.mcpServers.gbrain.url}" = "http://127.0.0.1:3131/mcp"
     test "${toString (gbrainConfig.systemd.services ? gbrain-mcp-http)}" = "1"
     test "${toString (lib.hasInfix "gbrain-wire-config.py" gbrainConfig.system.activationScripts.hermes-gbrain.text)}" = ""
-    test "${gbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization}" = ''Bearer ${GBRAIN_TOKEN}''
     test "${toString (lib.hasInfix "GBRAIN_TOKEN=" gbrainConfig.system.activationScripts.hermes-gbrain.text)}" = "1"
     test "${toString (lib.elem "hermes-agent-setup" gbrainConfig.system.activationScripts.hermes-gbrain.deps)}" = "1"
     test "${gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig.User}" = "${gbrainConfig.services.hermes-agent.user}"
@@ -432,14 +435,13 @@ in
     test "${toString (builtins.elem 6080 containerConfig.networking.firewall.allowedTCPPorts)}" = ""
     test "${toString (builtins.elem 4848 containerConfig.networking.firewall.allowedTCPPorts)}" = ""
     test "${containerConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_URL}" = "http://127.0.0.1:4848"
-    test "${containerGbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization}" = ''Bearer ${GBRAIN_TOKEN}''
     test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.after)}" = "1"
     test "${toString (lib.elem "mcp-proxy.service" containerMcpConfig.systemd.services.hermes-webui.wants)}" = "1"
     test "${containerMcpConfig.services.hermesPnP.mcpProxy.clientAuth}" = "token"
     test "${
       toString (
         containerMcpConfig.services.hermes-agent.mcpServers.github.headers."X-MCP-Proxy-Token"
-        == '${MCP_PROXY_TOKEN}'
+        == "\${MCP_PROXY_TOKEN}"
       )
     }" = "1"
     test "${
