@@ -1,9 +1,4 @@
-# Everyday CLI buildEnv at $stateDir/toolbox/bin (/data/toolbox/bin in
-# the jail). Official extraPackages are folded into this env so one
-# list works native and in the jail. Native PATH is the hermes user's
-# profile + systemd unit path — not extraPackages (that would cycle).
-# Jail PATH is extraOptions --env. Browser aliases live in the browser
-# module.
+# Shared toolbox options and package derivations.
 {
   config,
   lib,
@@ -18,26 +13,21 @@ let
     filter
     getExe
     literalExpression
-    mkIf
+    mkDefault
     mkOption
     types
     ;
-
-  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv containerData containerHome;
 
   pnp = config.services.hermesPnP;
   agent = config.services.hermes-agent;
   cfg = pnp.toolbox;
 
-  # Official jail binds.
-  stateDir = agent.stateDir;
+  stateDir = agent.stateDir or "${config.home.homeDirectory or "/home/${agent.user or "hermes"}"}/.local/state/hermes-agent";
   home = "${stateDir}/home";
-  hermesHome = "${stateDir}/.hermes";
+  hermesHome = agent.hermesHome or "${stateDir}/.hermes";
 
   toolboxDir = "${stateDir}/toolbox/bin";
-  containerToolboxDir = "${containerData}/toolbox/bin";
-  skillsDir = "${stateDir}/skills";
-  pluginsDir = "${stateDir}/plugins";
+  containerToolboxDir = "/data/toolbox/bin";
 
   sysPathTail = [
     "/run/current-system/sw/bin"
@@ -50,13 +40,13 @@ let
   ];
 
   hostVenv = "${home}/.venv";
-  containerVenv = "${containerHome}/.venv";
+  containerVenv = "/data/home/.venv";
 
   containerPath = concatStringsSep ":" (
     [
       "${containerVenv}/bin"
-      "${containerHome}/.npm-global/bin"
-      "${containerHome}/.bun/bin"
+      "/data/home/.npm-global/bin"
+      "/data/home/.bun/bin"
       containerToolboxDir
     ]
     ++ sysPathTail
@@ -69,29 +59,19 @@ let
       "${home}/.bun/bin"
       "${home}/.npm-global/bin"
       "${home}/.local/bin"
-      "/etc/profiles/per-user/${agent.user}/bin"
+      "/etc/profiles/per-user/${agent.user or "hermes"}/bin"
     ]
     ++ sysPathTail
   );
 
-  containerProcessEnv = {
-    PATH = containerPath;
-    HERMES_PYTHON = "${containerVenv}/bin/python3";
-  };
-
-  # Keep both python and python3 names explicit.
   pythonEnv = pkgs.python3.withPackages cfg.pythonPackages;
 
-  # Symlink both names onto the system PATH for login shells.
   pythonBins = pkgs.runCommand "hermes-python" { } ''
     mkdir -p "$out/bin"
     ln -s ${pythonEnv}/bin/python3 "$out/bin/python3"
     ln -s ${pythonEnv}/bin/python3 "$out/bin/python"
   '';
 
-  # Hermes strips GITHUB_TOKEN / GH_TOKEN from terminal children
-  # (Copilot provider blocklist). Reuse the git helper — one token
-  # source. Standalone nixosModules.toolbox has no git option → raw gh.
   wrapGh =
     (options.services.hermesPnP ? git)
     && pnp.git.credentialHelper.enable;
@@ -158,42 +138,14 @@ let
     ghForToolbox
   ];
 
-  # Official extraPackages fold in. Do not put this env back onto
-  # extraPackages — that is a cycle. Drop raw pkgs.gh when wrapping
-  # so bin/gh does not collide.
-  extras = cfg.extraPackages ++ agent.extraPackages;
+  agentExtraPkgs = agent.extraPackages or [ ];
+  extras = cfg.extraPackages ++ agentExtraPkgs;
   toolboxPaths = defaultToolboxPackages ++ (if wrapGh then filter (p: p != pkgs.gh) extras else extras);
 
   hermesToolbox = pkgs.buildEnv {
     name = "hermes-toolbox";
     paths = toolboxPaths;
   };
-
-  # Official activation writes environment{} into .env. Strip jail PATH
-  # so a host hermes CLI does not inherit /data/toolbox.
-  dotenvSanitize = pkgs.writeShellScript "hermes-toolbox-dotenv-sanitize" ''
-    env_file=${hermesHome}/.env
-    if [ -f "$env_file" ]; then
-      sed -i '/^PATH=/d;/^HERMES_PYTHON=/d' "$env_file" 2>/dev/null || true
-      chown ${agent.user}:${agent.group} "$env_file" 2>/dev/null || true
-      chmod 640 "$env_file" 2>/dev/null || true
-    fi
-  '';
-
-  containerProfile = pkgs.writeText "hermes-home-profile" ''
-    export NPM_CONFIG_PREFIX="$HOME/.npm-global"
-    export PATH="${containerPath}"
-  '';
-
-  hostProfile = pkgs.writeText "hermes-host-profile" ''
-    if [ -d ${toolboxDir} ]; then
-      export PATH="${hostPath}:$PATH"
-    fi
-  '';
-
-  containerBashrc = pkgs.writeText "hermes-home-bashrc" ''
-    [ -f "$HOME/.profile" ] && . "$HOME/.profile"
-  '';
 in
 {
   imports = [ ./enable.nix ];
@@ -204,26 +156,27 @@ in
       default = true;
       description = ''
         Opinionated everyday CLI buildEnv (the "sauce"): a curated
-        ~40-package toolkit + python3 + login PATH. Browser-specific
-        aliases live in the browser module. Set false for a bare agent.
+        ~40-package toolkit + python3 + login PATH.
       '';
     };
 
     extraPackages = mkOption {
       type = types.listOf types.package;
       default = [ ];
-      description = ''
-        Append-only packages added to the toolbox set. Prefer official
-        services.hermes-agent.extraPackages — those are folded into
-        this env too (native PATH and the jail bind).
-      '';
+      description = "Append-only packages added to the toolbox set.";
     };
 
     paths = mkOption {
       type = types.listOf types.package;
       readOnly = true;
       visible = false;
-      description = "Resolved toolbox paths (defaults + extraPackages + official extraPackages).";
+      description = "Resolved toolbox paths.";
+    };
+
+    hermesToolbox = mkOption {
+      type = types.package;
+      readOnly = true;
+      description = "The resolved hermesToolbox buildEnv derivation.";
     };
 
     pythonPackages = mkOption {
@@ -240,18 +193,9 @@ in
           pillow
         ];
       defaultText = literalExpression "ps: with ps; [ requests pyyaml toml pip setuptools wheel numpy pillow ]";
-      description = ''
-        Python packages baked into the toolbox python3/python. Prefer nix-built
-        native packages here over `pip install` of manylinux wheels: wheels
-        dlopen libstdc++/libz from the host loader paths, which a nix container
-        does not provide, so they fail with "libstdc++.so.6 not found". Nix
-        builds link correctly and are visible in the writable ~/.venv because
-        it is created with --system-site-packages. pip then only adds
-        pure-Python extras.
-      '';
+      description = "Python packages baked into the toolbox python3/python.";
     };
 
-    # Resolved paths for other modules.
     toolboxDir = mkOption {
       type = types.str;
       readOnly = true;
@@ -279,76 +223,7 @@ in
         containerPath
         ;
       paths = toolboxPaths;
+      inherit hermesToolbox;
     };
-
-    # Host login PATH.
-    environment.etc."profile.d/hermes-agent-cli.sh" = {
-      text = ''
-        if [ -d ${toolboxDir} ]; then
-          export PATH="${hostPath}:$PATH"
-        fi
-      '';
-      mode = "0644";
-    };
-
-    # bash -l sees /run/current-system/sw/bin; ship python and python3 there.
-    environment.systemPackages = [ pythonBins ];
-
-    # Native PATH: official extraPackages stays the consumer list.
-    # Put the env on the user profile and the gateway unit instead.
-    users.users.${agent.user}.packages = mkIf agent.enable [ hermesToolbox ];
-    systemd.services.hermes-agent = mkIf agent.enable {
-      path = [ hermesToolbox ];
-    };
-
-    services.hermes-agent = {
-      # Jail PATH / HERMES_PYTHON stay on extraOptions --env, not .env.
-      container.extraOptions = mkIf agent.container.enable (mkDockerEnv containerProcessEnv);
-    };
-
-    system.activationScripts.hermes-toolbox = lib.stringAfter [ "hermes-agent-setup" ] ''
-      install -d -m 0755 -o ${agent.user} -g ${agent.group} ${stateDir}/toolbox
-      ln -sfn ${hermesToolbox}/bin ${toolboxDir}
-
-      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}
-      install -d -m 0750 -o ${agent.user} -g ${agent.group} ${home}/.npm-global
-      install -d -m 0755 -o ${agent.user} -g ${agent.group} ${home}/.local/bin
-
-      # Writable venv for pip. Toolbox python prefix is immutable and
-      # has ENABLE_USER_SITE=False, so PIP_USER cannot work.
-      # --system-site-packages is REQUIRED: without it the venv cannot see
-      # the nix-built pythonPackages (numpy, pillow, …) and every package
-      # must come from pip — native manylinux wheels then fail to dlopen
-      # libstdc++.so.6 because nix keeps it in the store, not in the
-      # loader's default paths.
-      venv=${hostVenv}
-      py=${pythonEnv}/bin/python3
-      current=$(${pkgs.coreutils}/bin/readlink -f "$venv/bin/python3" 2>/dev/null || true)
-      wanted=$(${pkgs.coreutils}/bin/readlink -f "$py")
-      has_sys_site=$(${pkgs.gnugrep}/bin/grep -c 'include-system-site-packages = true' "$venv/pyvenv.cfg" 2>/dev/null || true)
-      if [ "$current" != "$wanted" ] || [ "$has_sys_site" = "0" ]; then
-        rm -rf "$venv"
-        "$py" -m venv --system-site-packages "$venv"
-        chown -R ${agent.user}:${agent.group} "$venv"
-      fi
-
-      install -m 0644 -o ${agent.user} -g ${agent.group} ${containerProfile} ${home}/.profile
-      install -m 0644 -o ${agent.user} -g ${agent.group} ${containerBashrc} ${home}/.bashrc
-      install -m 0644 -o ${agent.user} -g ${agent.group} ${hostProfile} ${stateDir}/.profile
-
-      install -d -m 2770 -o ${agent.user} -g ${agent.group} ${skillsDir}
-      install -d -m 2770 -o ${agent.user} -g ${agent.group} ${pluginsDir}
-    '';
-
-    # After official .env merge.
-    system.activationScripts.hermes-toolbox-dotenv =
-      lib.stringAfter
-        [
-          "hermes-agent-setup"
-          "hermes-toolbox"
-        ]
-        ''
-          ${dotenvSanitize}
-        '';
   };
 }

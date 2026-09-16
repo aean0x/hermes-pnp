@@ -10,8 +10,8 @@
     ./plugins.nix
     ../skills.nix
     ./skills.nix
-    ../gbrain.nix
-    ./gbrain.nix
+    ../toolbox.nix
+    ./toolbox.nix
     ../hmc.nix
     ./hmc.nix
     ./pairing.nix
