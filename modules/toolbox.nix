@@ -23,12 +23,20 @@ let
   agent = config.services.hermes-agent;
   cfg = pnp.toolbox;
 
+  containerLib =
+    if builtins.pathExists ../lib then
+      import ../lib { inherit pkgs lib; }
+    else
+      { containerData = "/data"; containerHome = "/home/${agent.user or "hermes"}"; };
+
+  inherit (containerLib) mkDockerEnv containerData containerHome;
+
   stateDir = agent.stateDir or "${config.home.homeDirectory or "/home/${agent.user or "hermes"}"}/.local/state/hermes-agent";
   home = "${stateDir}/home";
   hermesHome = agent.hermesHome or "${stateDir}/.hermes";
 
   toolboxDir = "${stateDir}/toolbox/bin";
-  containerToolboxDir = "/data/toolbox/bin";
+  containerToolboxDir = "${containerData}/toolbox/bin";
 
   sysPathTail = [
     "/run/current-system/sw/bin"
@@ -41,13 +49,13 @@ let
   ];
 
   hostVenv = "${home}/.venv";
-  containerVenv = "/data/home/.venv";
+  containerVenv = "${containerHome}/.venv";
 
   containerPath = concatStringsSep ":" (
     [
       "${containerVenv}/bin"
-      "/data/home/.npm-global/bin"
-      "/data/home/.bun/bin"
+      "${containerHome}/.npm-global/bin"
+      "${containerHome}/.bun/bin"
       containerToolboxDir
     ]
     ++ sysPathTail

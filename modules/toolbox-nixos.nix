@@ -13,7 +13,7 @@ let
   agent = config.services.hermes-agent;
   cfg = pnp.toolbox;
 
-  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv;
+  inherit (import ../lib { inherit pkgs lib; }) mkDockerEnv containerHome;
 
   stateDir = agent.stateDir;
   home = "${stateDir}/home";
@@ -34,7 +34,7 @@ let
 
   containerProcessEnv = {
     PATH = containerPath;
-    HERMES_PYTHON = "/data/home/.venv/bin/python3";
+    HERMES_PYTHON = "${containerHome}/.venv/bin/python3";
   };
 
   dotenvSanitize = pkgs.writeShellScript "hermes-toolbox-dotenv-sanitize" ''
