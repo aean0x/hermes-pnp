@@ -12,6 +12,8 @@
     ./skills.nix
     ../toolbox.nix
     ./toolbox.nix
+    ../gbrain.nix
+    ./gbrain.nix
     ../hmc.nix
     ./hmc.nix
     ./pairing.nix

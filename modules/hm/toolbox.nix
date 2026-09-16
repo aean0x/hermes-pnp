@@ -11,6 +11,6 @@ let
 in
 {
   config = mkIf (cfg.enable && cfg.toolbox.enable) {
-    services.hermes-agent.extraPackages = [ cfg.hermesToolbox ];
+    services.hermes-agent.extraPackages = [ cfg.toolbox.hermesToolbox ];
   };
 }
