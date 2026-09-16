@@ -30,6 +30,19 @@ let
   bctr = cfg.container;
   profileImport = cfg.profileImport;
 
+  # agent-browser (the driver the browser tool shells out to) accepts only
+  # "chrome" and "lightpanda" besides auto (= no --engine flag). cfg.engine is
+  # the LOCAL binary name (package.meta.mainProgram), so a Chromium fork calls
+  # itself brave/chromium/vivaldi, names the agent rejects — it logs
+  # `Unknown browser engine ..., falling back to 'auto'` on every browser call
+  # and drops the setting. Forward the name to the agent only when it is one
+  # the agent understands; otherwise leave it unset so the agent keeps its
+  # default engine silently.
+  agentEngineOk = builtins.elem cfg.engine [
+    "chrome"
+    "lightpanda"
+  ];
+
   # Whitelist filter for the auth-state copy: only Local State plus
   # <profile>/{Cookies,Network/Cookies,Login Data,Preferences}. Cache,
   # GPUCache, Singleton* locks and sqlite -wal/-shm sidecars are never
@@ -123,6 +136,11 @@ in
         Binary name under package/bin and HERMES_BROWSER_ENGINE.
         Defaults to package.meta.mainProgram, so `package = pkgs.brave`
         is enough. Override only when the binary name differs.
+        Forwarded to the agent (settings.browser.engine /
+        AGENT_BROWSER_ENGINE) only when it is an engine name
+        agent-browser accepts (`chrome`, `lightpanda`); any other value
+        (brave, chromium, vivaldi) stays local — the agent then runs its
+        own default engine instead of a name it would reject.
       '';
     };
 
@@ -436,6 +454,8 @@ in
           HERMES_BROWSER_GATE_URL = gateUrl;
           HERMES_BROWSER_GATE_PORT = toString gatePort;
           HERMES_BROWSER_ENGINE = cfg.engine;
+        }
+        // optionalAttrs agentEngineOk {
           AGENT_BROWSER_ENGINE = cfg.engine;
         }
         // optionalAttrs (!agent.container.enable) {
@@ -443,6 +463,8 @@ in
         };
         settings.browser = {
           cdp_url = cdpUrl;
+        }
+        // optionalAttrs agentEngineOk {
           engine = cfg.engine;
         };
         container.extraOptions = mkIf agent.container.enable (

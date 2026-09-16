@@ -9,6 +9,9 @@
 let
   inherit (nixpkgs) lib;
 
+  _assertGbrainAuth1 = assert gbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization == (builtins.concatStringsSep "" [ "Bearer " "$" "{GBRAIN_TOKEN}" ]); true;
+  _assertGbrainAuth2 = assert containerGbrainConfig.services.hermes-agent.mcpServers.gbrain.headers.Authorization == (builtins.concatStringsSep "" [ "Bearer " "$" "{GBRAIN_TOKEN}" ]); true;
+
   dummyAgent =
     pkgs.runCommand "dummy-hermes-agent"
       {
@@ -72,6 +75,15 @@ let
 
   gbrainConfig = eval [ ../examples/gbrain.nix ];
 
+  gbrainEmbeddingConfig = eval [
+    ../examples/gbrain.nix
+    {
+      services.hermesPnP.gbrain.model = "google:gemini-3.5-flash-lite";
+      services.hermesPnP.gbrain.embeddingModel = "openrouter:voyageai/voyage-4";
+      services.hermesPnP.gbrain.embeddingDimensions = 1024;
+    }
+  ];
+
   containerConfig = eval [ ../examples/container.nix ];
   containerResourcesConfig = eval [
     ../examples/container.nix
@@ -100,6 +112,14 @@ let
   mcpProxyConfig = eval [ ../examples/mcp-proxy.nix ];
 
   browserConfig = eval [ ../examples/browser.nix ];
+
+  # `engine` is the local binary name. Only names agent-browser accepts
+  # (chrome, lightpanda) reach the agent as settings.browser.engine /
+  # AGENT_BROWSER_ENGINE; a fork name would be rejected with a warning.
+  chromeEngineConfig = eval [
+    ../examples/browser.nix
+    { services.hermesPnP.browser.engine = "chrome"; }
+  ];
 
   # profileImport copies the fixture with builtins.path (flake-relative,
   # so this stays pure for `nix flake check`). The decoy Cache subtree
@@ -203,6 +223,7 @@ let
 in
 {
   modules = pkgs.runCommand "hermes-pnp-modules-eval" { } ''
+    set -x
     test "${toString modulesConfig.services.hermesPnP.enable}" = "1"
     test "${toString modulesConfig.services.hermes-webui.enable}" = "1"
     test "${modulesConfig.services.hermes-webui.host}" = "127.0.0.1"
@@ -232,6 +253,13 @@ in
       toString (gbrainConfig.systemd.services.gbrain-mcp-http.serviceConfig ? StartLimitIntervalSec)
     }" = ""
     test "${toString (lib.elem "hermes-agent-setup.service" gbrainConfig.systemd.services.gbrain-mcp-http.after)}" = ""
+    # gbrain model surface: absent by default, rendered on the unit when set.
+    test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.environment ? GBRAIN_MODEL)}" = ""
+    test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.environment ? GBRAIN_EMBEDDING_MODEL)}" = ""
+    test "${toString (gbrainConfig.systemd.services.gbrain-mcp-http.environment ? GBRAIN_EMBEDDING_DIMENSIONS)}" = ""
+    test "${gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_MODEL}" = "google:gemini-3.5-flash-lite"
+    test "${gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_EMBEDDING_MODEL}" = "openrouter:voyageai/voyage-4"
+    test "${toString gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_EMBEDDING_DIMENSIONS}" = "1024"
     test "${
       toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_TRUST_FORWARDED_PROTO)
     }" = "1"
@@ -277,7 +305,7 @@ in
     test "${toString (modulesConfig.services.hermes-agent.settings ? model_overrides)}" = ""
     test "${modulesConfig.services.hermes-agent.settings.context.engine}" = "model-router"
     test "${modulesConfig.services.hermes-agent.settings.browser.cdp_url}" = "http://127.0.0.1:9222"
-    test "${modulesConfig.services.hermes-agent.settings.browser.engine}" = "${modulesConfig.services.hermesPnP.browser.engine}"
+    test "${toString (modulesConfig.services.hermes-agent.settings.browser ? engine)}" = ""
     test "${toString (modulesConfig.systemd.services ? hermes-browser)}" = "1"
     test "${toString (modulesConfig.systemd.services ? hermes-browser-gate)}" = "1"
     test "${toString (profileImportConfig.systemd.services ? hermes-browser-profile-import)}" = "1"
@@ -291,7 +319,7 @@ in
     test "${toString (modulesConfig.systemd.services ? hermes-browser-env)}" = ""
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_URL}" = "http://127.0.0.1:4848"
     test "${modulesConfig.services.hermes-agent.environment.HERMES_BROWSER_GATE_PORT}" = "4848"
-    test "${modulesConfig.services.hermes-agent.environment.AGENT_BROWSER_ENGINE}" = "${modulesConfig.services.hermesPnP.browser.engine}"
+    test "${toString (modulesConfig.services.hermes-agent.environment ? AGENT_BROWSER_ENGINE)}" = ""
     test "${toString (modulesConfig.services.hermes-agent.extraPackages == [ ])}" = "1"
     test "${
       toString (
@@ -564,6 +592,10 @@ in
     test "${toString (lib.hasInfix "mcp-proxy-0." (toString mcpProxyConfig.systemd.services.mcp-proxy.serviceConfig.ExecStart))}" = ""
     test "${browserConfig.services.hermesPnP.browser.gate.publicUrl}" = "https://browser.example.com/"
     test "${toString (browserConfig.services.hermesPnP.browser.package == pkgs.brave)}" = "1"
+    test "${toString (browserConfig.services.hermes-agent.settings.browser ? engine)}" = ""
+    test "${toString (browserConfig.services.hermes-agent.environment ? AGENT_BROWSER_ENGINE)}" = ""
+    test "${chromeEngineConfig.services.hermes-agent.settings.browser.engine}" = "chrome"
+    test "${chromeEngineConfig.services.hermes-agent.environment.AGENT_BROWSER_ENGINE}" = "chrome"
     test "${toString (builtins.elem pkgs.sops toolboxConfig.services.hermesPnP.toolbox.extraPackages)}" = "1"
     test "${toString (builtins.elem pkgs.sops toolboxConfig.services.hermesPnP.toolbox.paths)}" = "1"
     test "${toString (builtins.elem pkgs.sops foldedPackagesConfig.services.hermes-agent.extraPackages)}" = "1"

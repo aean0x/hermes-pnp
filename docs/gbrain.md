@@ -10,9 +10,18 @@ agent). Two steps:
    (env-ref, expanded by Hermes from `$HERMES_HOME/.env`), and installs
    `gbrain-retrieval-reflex` + `gbrain-memory-flush`.
    Optional `gbrain.model = "google:gemini-3.5-flash-lite"` sets
-   `GBRAIN_MODEL` on the unit (chat/expansion). Embeddings are
-   `gbrain init`, not this option. ZeroEntropy hosted API shut down
-   2026-09-04; new brains should init with Gemini or Voyage.
+   `GBRAIN_MODEL` on the unit (chat/expansion). Optional
+   `gbrain.embeddingModel` + `gbrain.embeddingDimensions` set
+   `GBRAIN_EMBEDDING_MODEL` / `GBRAIN_EMBEDDING_DIMENSIONS`, which
+   override `embedding_model` / `embedding_dimensions` in
+   `~/.gbrain/config.json` for every gbrain process on the host.
+   Re-pointing a brain that already holds vectors is a re-embed with the
+   serve stopped, not a switch: `gbrain migrate embeddings --to <model>
+   --dim <N> --yes`, with the same values as the options. Fresh brains
+   take `gbrain init` / `scripts/gbrain-setup.sh`. ZeroEntropy's hosted
+   API outlived its announced 2026-09-04 sunset date, but gbrain
+   deprecates the provider and schedules the recipe for removal.
+   Upstream: `docs/guides/embedding-migration.md`.
 2. `scripts/gbrain-setup.sh` (root; consumer `./deploy gbrain-setup`) —
    bun CLI, PGLite init, mint token (`gbrain auth create hermes`) into
    `~/.gbrain/hermes-mcp.token` + `GBRAIN_TOKEN` in `~/.hermes/.env`,

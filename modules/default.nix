@@ -12,6 +12,7 @@
     ./skills.nix
     ./skills-nixos.nix
     ./toolbox.nix
+    ./toolbox-nixos.nix
     ./gbrain.nix
     ./gbrain-nixos.nix
     ./hmc.nix

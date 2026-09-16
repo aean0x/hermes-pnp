@@ -40,9 +40,14 @@ in
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
-      environment = lib.optionalAttrs (cfg.model != null) {
-        GBRAIN_MODEL = cfg.model;
-      };
+      environment =
+        lib.optionalAttrs (cfg.model != null) { GBRAIN_MODEL = cfg.model; }
+        // lib.optionalAttrs (cfg.embeddingModel != null) {
+          GBRAIN_EMBEDDING_MODEL = cfg.embeddingModel;
+        }
+        // lib.optionalAttrs (cfg.embeddingDimensions != null) {
+          GBRAIN_EMBEDDING_DIMENSIONS = toString cfg.embeddingDimensions;
+        };
       unitConfig = {
         StartLimitIntervalSec = 120;
         StartLimitBurst = 5;
