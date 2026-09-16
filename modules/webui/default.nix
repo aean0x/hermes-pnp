@@ -50,8 +50,8 @@ in
   config = mkIf pairing {
     assertions = [
       {
-        assertion = !pnp.modelRouter.enable || extensionDir != null;
-        message = "hermes-webui needs modelRouter.enable (model-router plugin) for HERMES_WEBUI_EXTENSION_DIR.";
+        assertion = !pnp.modelPicker.enable || extensionDir != null;
+        message = "hermes-webui needs modelPicker.enable (model-picker plugin) for HERMES_WEBUI_EXTENSION_DIR.";
       }
     ];
 

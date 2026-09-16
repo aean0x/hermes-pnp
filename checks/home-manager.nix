@@ -5,6 +5,7 @@
   system,
   pkgs,
   hermes-agent,
+  pluginSources,
 }:
 
 let
@@ -59,6 +60,8 @@ let
     home-manager.lib.homeManagerConfiguration {
       inherit pkgs;
       modules = [
+      # Production wiring: plugins that live in their own repos.
+      { services.hermesPnP.internal.pluginSources = pluginSources; }
         self.homeManagerModules.default
         {
           home = {
@@ -93,7 +96,7 @@ in
     test "${toString (desktopCfg.systemd.user.services ? hermes-backend)}" = "1"
     test "${toString (desktopCfg.systemd.user.services ? hermes-agent)}" = "1"
     test "${toString desktopCfg.services.hermes-agent.gateway.enable}" = "1"
-    test "${toString (builtins.elem "model-router" desktopCfg.services.hermes-agent.settings.plugins.enabled)}" = "1"
+    test "${toString (builtins.elem "model-picker" desktopCfg.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${toString (builtins.elem "tool-call-coherency" desktopCfg.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${lib.concatStringsSep "," desktopCfg.services.hermes-agent.settings.skills.external_dirs}" = "/home/aean/.hermes/pnp-skills"
     test "${toString (desktopCfg.home.activation ? hermesPnPPlugins)}" = "1"

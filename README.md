@@ -30,7 +30,7 @@ sandboxing, and the add-ons that should have been one enable.
     # models.low.best_for = [ "Short acknowledgements" ]; # classifier matrix; plugin defaults otherwise
 
     plugins = [
-      "model-router"
+      "model-picker"
       "tool-call-coherency"
       "secret-handoff"
       "git-hook"
@@ -108,7 +108,7 @@ Paired automatically on `127.0.0.1:8787` (no WAN bind). Same
 user/group/package/env files as the agent, `hermesHome` pointed at
 `${stateDir}/.hermes`, forwarded-proto / trusted-proxy set for a
 loopback Caddy. When `container.enable` is on, WebUI is its own OCI
-jail — terminals it spawns see only the binds you add. model-router
+jail — terminals it spawns see only the binds you add. model-picker
 ships a WebUI extension (`/low` `/default` `/high` `/auto`). Caddy and
 the public hostname are consumer work. Set `webui.enable = false` for
 gateway-only.
@@ -210,7 +210,7 @@ Materialize to `$stateDir/plugins/<name>`, discovered via
 installed through official `extraPlugins`. `extraPluginDirs` is
 `attrsOf path` for your own trees (`extraPlugins` is a renamed alias).
 
-**model-router** (v0.9.1) — per-turn low / default / high, labelled
+**model-picker** (v0.9.1) — per-turn low / default / high, labelled
 Quick / Standard / Expert. Auto classifies all three; `high` is only
 money / irreversible / security. Pins: `/low` `/default` `/high`
 `/auto` (`/medium` is the deprecated alias for `/default`). Writes
@@ -251,5 +251,5 @@ When that helper is on, toolbox `gh` wraps `git credential fill` into
 **Secrets.** One rendered env file on `environmentFiles`. 
 
 Credits:
-[open-world-project/model-router](https://github.com/open-world-project/model-router)
+[open-world-project/model-picker](https://github.com/open-world-project/model-picker)
 for the cheap/work/voice idea.

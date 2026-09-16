@@ -15,7 +15,7 @@
   (`extraPlugins` is a renamed alias). Official
   `services.hermes-agent.extraPlugins` (`listOf package`) stays
   distinct and is unioned into `settings.plugins.enabled`.
-- Composer on: default plugins are model-router, tool-call-coherency,
+- Composer on: default plugins are model-picker, tool-call-coherency,
   secret-handoff (`mkDefault`). Composer off: `plugins` default is `[]`.
 - `gbrain.enable` appends the two gbrain plugins if missing, without
   writing back into the `plugins` option. Listing those plugins does
@@ -44,7 +44,7 @@
 - Home Manager plugins materialize under `$hermesHome/plugins`.
   Skills land in `$hermesHome/pnp-skills`. Leave `hermesHome` and
   `workingDirectory` unset.
-- model-router keys are `low` / `default` / `high`. Commands `/low`
+- model-picker keys are `low` / `default` / `high`. Commands `/low`
   `/default` `/high` `/auto` (`/medium` is the deprecated alias for
   `/default`). Auto turn-start classifier replies `low`, `default`, or
   `high` (`high` is money / irreversible / security). Escalation 4 on
@@ -74,7 +74,7 @@
   a JSON-RPC error. Identical arguments are held for 60s, then a new
   attempt is forwarded — not a process-lifetime lockout.
 - `nix flake check` stays eval-cheap (dummy agent/webui packages).
-- Composer off + `plugins = [ "model-router" ]` still materializes the
+- Composer off + `plugins = [ "model-picker" ]` still materializes the
   plugin and does not seed official settings.
 - First-party plugins materialize to `$stateDir/plugins/<name>` with a
   relative symlink under `$stateDir/.hermes/plugins/`.

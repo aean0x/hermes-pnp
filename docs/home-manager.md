@@ -72,7 +72,7 @@ path literal (`--set` would copy it into the store).
 ## Carry vs leave
 
 **Carry:** packageFixes, plugin/skill materialize under `$hermesHome`,
-model-router JSON, `mcpServers` env-refs, Desktop wrap (official),
+model-picker JSON, `mcpServers` env-refs, Desktop wrap (official),
 `hmc.enable`, `gbrain.enable` (user unit, `HOME` is the login home).
 
 **Leave on NixOS:** OCI jails, WebUI/browser containers, docker,

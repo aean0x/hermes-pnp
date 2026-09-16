@@ -1,6 +1,6 @@
 # Seed services.hermes-agent.settings from hermesPnP.models.
 # Always-on slots: models.default + models.auxiliary.
-# modelRouter.enable adds models.low + models.high and the plugin.
+# modelPicker.enable adds models.low + models.high and the plugin.
 # services.hermesPnP.model.default ("low" | "default" | "high"; default
 # "default") picks which tier seeds settings.model.default when the
 # router is on. "medium" is a deprecated alias for "default".
@@ -33,12 +33,21 @@ let
   pnp = config.services.hermesPnP;
   inherit (pnp) models;
 
-  # Labels and best_for default from the plugin JSON. Model id and
-  # provider are Nix options (composer OOBE below) — not catalog IDs.
+  # Labels and best_for default from the plugin's own catalog JSON. Model id
+  # and provider are Nix options (composer OOBE below) — not catalog IDs.
+  # The plugin lives in its own repo now: the flake pins it as an input and
+  # injects the tree as internal.pluginSources.model-picker. Without that
+  # source the tier labels/best_for fall back to null, which just means the
+  # consumer must set them itself.
+  pickerSource = pnp.internal.pluginSources.model-picker or null;
+
   pluginModels =
-    (builtins.fromJSON (
-      builtins.readFile ../plugins/model-router/config.default.json
-    )).models;
+    if pickerSource == null then
+      { }
+    else
+      (builtins.fromJSON (
+        builtins.readFile (pickerSource + "/config.default.json")
+      )).models;
 
   mkModelFields =
     defaults:
@@ -91,7 +100,7 @@ let
         default = defaults.best_for;
         description = ''
           Classifier descriptors for this router tier. Sole source of
-          the model-router triage prompt. Plugin lists are the defaults;
+          the model-picker triage prompt. Plugin lists are the defaults;
           override here to steer routing without editing Python.
         '';
       };
@@ -175,10 +184,10 @@ let
       raw = pnp.model.default;
       name = if raw == "medium" then "default" else raw;
     in
-    if pnp.modelRouter.enable then name else "default";
+    if pnp.modelPicker.enable then name else "default";
 
   namedModels =
-    if pnp.modelRouter.enable then
+    if pnp.modelPicker.enable then
       [
         models.low
         models.default
@@ -188,8 +197,8 @@ let
       [ models.default ];
 
   workhorse = models.default;
-  fallbackSlot = if pnp.modelRouter.enable then models.high else models.default;
-  cronSlot = if pnp.modelRouter.enable then models.low else models.default;
+  fallbackSlot = if pnp.modelPicker.enable then models.high else models.default;
+  cronSlot = if pnp.modelPicker.enable then models.low else models.default;
 
   # Slot ratios collapse by model id: low and auxiliary share default's
   # model id, and `default` folds last, so its ratio is the one that lands.
@@ -219,13 +228,13 @@ in
     )
   ];
 
-  options.services.hermesPnP.modelRouter.enable = mkOption {
+  options.services.hermesPnP.modelPicker.enable = mkOption {
     type = types.bool;
     default = true;
     description = ''
-      Install the model-router plugin and seed low / default / high.
+      Install the model-picker plugin and seed low / default / high.
       false: do not materialize the plugin, do not set
-      context.engine = "model-router", and seed session / fallback /
+      context.engine = "model-picker", and seed session / fallback /
       delegation / cron from models.default only. models.default and
       models.auxiliary stay required either way.
     '';
@@ -242,7 +251,7 @@ in
       default = "default";
       description = ''
         Which named slot seeds settings.model.default when
-        modelRouter.enable is true. "medium" is accepted as "default".
+        modelPicker.enable is true. "medium" is accepted as "default".
         Ignored when the router is off (always models.default).
         fallback_model is models.high with the router, else
         models.default.
@@ -260,23 +269,29 @@ in
     low = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-flash";
-      inherit (pluginModels.low) best_for label short;
+      best_for = pluginModels.low.best_for or null;
+      label = pluginModels.low.label or null;
+      short = pluginModels.low.short or null;
       compression_ratio = 0.95;
-      description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
+      description = "Cheap helper. OOBE seed for unpinned cron and model-picker low.";
     };
 
     default = mkNamedModel {
       provider = "deepseek";
       model = "deepseek-flash";
-      inherit (pluginModels.default) best_for label short;
+      best_for = pluginModels.default.best_for or null;
+      label = pluginModels.default.label or null;
+      short = pluginModels.default.short or null;
       compression_ratio = 0.26;
-      description = "Workhorse. Session seed, delegation, and model-router default.";
+      description = "Workhorse. Session seed, delegation, and model-picker default.";
     };
 
     high = mkNamedModel {
       provider = "xai-oauth";
       model = "grok-4.6";
-      inherit (pluginModels.high) best_for label short;
+      best_for = pluginModels.high.best_for or null;
+      label = pluginModels.high.label or null;
+      short = pluginModels.high.short or null;
       compression_ratio = 0.28;
       description = ''
         Session identity + voice. OOBE seed for settings.fallback_model.
@@ -294,7 +309,7 @@ in
       reasoning_effort = "none";
       description = ''
         Official auxiliary tasks (title generation, compression, …).
-        Nix-only — not a model-router tier, no slash command.
+        Nix-only — not a model-picker tier, no slash command.
         reasoning_effort defaults to "none" (overridable).
         Provider/model default like low.
       '';
@@ -304,10 +319,10 @@ in
   config = mkIf pnp.enable {
     assertions = [
       {
-        assertion = pnp.modelRouter.enable || sessionTier == "default";
+        assertion = pnp.modelPicker.enable || sessionTier == "default";
         message = ''
           services.hermesPnP.model.default must be "default" when
-          modelRouter.enable is false (low/high are router-only).
+          modelPicker.enable is false (low/high are router-only).
         '';
       }
     ];
@@ -320,7 +335,7 @@ in
         # Override per name via models.<name>.context_length → model_overrides.
       };
       context = {
-        engine = if pnp.modelRouter.enable then "model-router" else "compressor";
+        engine = if pnp.modelPicker.enable then "model-picker" else "compressor";
       };
       compression = {
         model_thresholds = modelThresholds;
@@ -348,7 +363,7 @@ in
     // optionalAttrs (modelOverrides != { }) {
       model_overrides = modelOverrides;
     }
-    // optionalAttrs (pnp.modelRouter.enable && models.high.reasoning_effort != null) {
+    // optionalAttrs (pnp.modelPicker.enable && models.high.reasoning_effort != null) {
       agent.reasoning_effort = models.high.reasoning_effort;
     };
   };

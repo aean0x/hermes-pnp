@@ -22,14 +22,14 @@
       model = "grok-4.6";
     };
     # model.default = "default"; # tier seeding settings.model.default: low | default | high
-    # modelRouter.enable = true; # false: no plugin; only models.default + auxiliary
-    # models.auxiliary = { provider = "deepseek"; model = "deepseek-flash"; };
+# modelPicker.enable = true; # false: no plugin; only models.default + auxiliary
+# models.auxiliary = { provider = "deepseek"; model = "deepseek-flash"; };
     # models.high.reasoning_effort = "high"; # else Hermes session default
     # models.low.best_for = [ "Short acknowledgements" ];
     # workspace = "/var/lib/hermes"; # host path; remaps to /data in the jail
 
     plugins = [
-      "model-router"
+      "model-picker"
       "tool-call-coherency"
       "secret-handoff"
     ];
