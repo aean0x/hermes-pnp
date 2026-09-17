@@ -287,10 +287,10 @@ unset (Hermes session defaults) except auxiliary, which defaults to
 | auxiliary  | official aux tasks       | every seeded `settings.auxiliary.<slot>`      |
 
 ```nix
-models.low       = { provider = "deepseek";  model = "deepseek-v4-flash"; };
-models.default   = { provider = "deepseek";  model = "deepseek-v4-pro"; };
+models.low       = { provider = "deepseek";  model = "deepseek-flash"; };
+models.default   = { provider = "deepseek";  model = "deepseek-flash"; };
 models.high      = { provider = "xai-oauth"; model = "grok-4.6"; };
-models.auxiliary = { provider = "deepseek";  model = "deepseek-v4-flash"; }; # reasoning_effort = "none"
+models.auxiliary = { provider = "deepseek";  model = "deepseek-flash"; }; # reasoning_effort = "none"
 ```
 
 `services.hermesPnP.model.default` (enum `low` / `default` / `high`,

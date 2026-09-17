@@ -274,7 +274,7 @@ in
     test "$(${pkgs.jq}/bin/jq -r '.models.low.label' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "Quick"
     test "$(${pkgs.jq}/bin/jq -r '.models.default.label' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "Standard"
     test "$(${pkgs.jq}/bin/jq -r '.models.high.label' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "Expert"
-    test "$(${pkgs.jq}/bin/jq -r '.models.low.model' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "deepseek-v4-flash"
+    test "$(${pkgs.jq}/bin/jq -r '.models.low.model' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "deepseek-flash"
     test "$(${pkgs.jq}/bin/jq -e 'has("classify_high") | not' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "true"
     grep -q 'Pin Quick' ${modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.js
     grep -q 'Pin Expert' ${modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.js
@@ -298,7 +298,10 @@ in
     test "${toString (modulesConfig.services.hermesPnP.models.low.compression_ratio == 0.95)}" = "1"
     test "${toString (modulesConfig.services.hermesPnP.models.default.compression_ratio == 0.26)}" = "1"
     test "${toString (modulesConfig.services.hermesPnP.models.high.compression_ratio == 0.28)}" = "1"
-    test "${toString (modulesConfig.services.hermes-agent.settings.compression.model_thresholds.${modulesConfig.services.hermesPnP.models.low.model} == 0.95)}" = "1"
+    # One DeepSeek SKU: the low / default / auxiliary slots collapse onto a
+    # single model_thresholds key, and `default` folds last, so its ratio is
+    # the one the collapsed key carries.
+    test "${toString (modulesConfig.services.hermes-agent.settings.compression.model_thresholds.${modulesConfig.services.hermesPnP.models.low.model} == 0.26)}" = "1"
     test "${toString (modulesConfig.services.hermes-agent.settings.compression.model_thresholds.${modulesConfig.services.hermesPnP.models.default.model} == 0.26)}" = "1"
     test "${toString (modulesConfig.services.hermes-agent.settings.compression.model_thresholds.${modulesConfig.services.hermesPnP.models.high.model} == 0.28)}" = "1"
     test "${toString (modulesConfig.services.hermes-agent.settings.model ? context_length)}" = ""
@@ -506,10 +509,10 @@ in
     test "${toString (optionsEval.options.services.hermesPnP ? models)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? model)}" = "1"
     test "${optionsEval.config.services.hermesPnP.model.default}" = "default"
-    test "${optionsEval.config.services.hermesPnP.models.low.model}" = "deepseek-v4-flash"
-    test "${optionsEval.config.services.hermesPnP.models.default.model}" = "deepseek-v4-pro"
+    test "${optionsEval.config.services.hermesPnP.models.low.model}" = "deepseek-flash"
+    test "${optionsEval.config.services.hermesPnP.models.default.model}" = "deepseek-flash"
     test "${optionsEval.config.services.hermesPnP.models.high.model}" = "grok-4.6"
-    test "${optionsEval.config.services.hermesPnP.models.auxiliary.model}" = "deepseek-v4-flash"
+    test "${optionsEval.config.services.hermesPnP.models.auxiliary.model}" = "deepseek-flash"
     test "${optionsEval.config.services.hermesPnP.models.auxiliary.reasoning_effort}" = "none"
     test "${toString (optionsEval.config.services.hermesPnP.models.low.reasoning_effort == null)}" = "1"
     test "${toString (optionsEval.config.services.hermesPnP.models.high.reasoning_effort == null)}" = "1"

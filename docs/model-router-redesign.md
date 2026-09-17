@@ -70,9 +70,11 @@ Hermes resolves the window automatically. Set
 `models.<name>.context_length` only to override; that writes
 `model_overrides`, not a global `model.context_length`.
 
-A consumer `compression.threshold_tokens` still caps every model.
-Drop the consumer `model.context_length` and the old
-`model_thresholds."deepseek-v4"` once this lands.
+A consumer `compression.threshold_tokens` still caps every model. Deprecated
+ids are no longer seeded anywhere, but activation only deep-merges — it never
+deletes — so a key an older seed wrote (the V4
+`model_thresholds."deepseek-v4"` entries) survives in a live `config.yaml`.
+Remove those with a one-time operator edit, not an activation one-shot.
 
 ## Files
 
