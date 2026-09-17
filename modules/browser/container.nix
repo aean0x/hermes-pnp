@@ -87,6 +87,12 @@ let
   jail = oci.mkOciJail {
     name = "hermes-browser";
     description = "Hermes persistent browser (OCI, official-container-shaped)";
+    # Brave leaks; the host has 7.4 GiB RAM and 4 GiB of swap in use. An
+    # uncapped jail under swap pressure is what takes the host down, so bound
+    # it here rather than letting the host-wide OOM killer pick a victim.
+    memoryMax = "2G";
+    memoryHigh = "1500M";
+    oomScoreAdjust = 500;
     user = agent.user;
     cfg = bctr;
     network = oci.agentContainerNetwork options config;
