@@ -1,12 +1,15 @@
 name: git-hook
-version: 0.3.3
+version: 0.3.4
 description: >-
   Auto fetch/pull before reads, and commit+push only the files this turn
   changed, for any git worktree Hermes touches. Stale paths (atomic-write
   `.hermes-tmp.*` temps, files created and deleted inside one turn) are
   dropped before `git add` — one dead pathspec used to fail the whole batch
-  and leave every real change of the turn uncommitted. Failures surface
-  in-session (not log-only); busy/push-fail retries. Git subprocesses never run
+  and leave every real change of the turn uncommitted. The turn's dirty set
+  is value-carrying (status + size + mtime_ns), so an edit to a file that was
+  ALREADY dirty is a delta and gets committed instead of sitting uncommitted
+  forever. Failures surface in-session (not log-only); busy/push-fail retries.
+  Git subprocesses never run
   under the module lock, so one session's slow pull/porcelain cannot stall
   every session's post_tool_call hook (prevents "skipped after previous
   timeout" cascades). No tools, no scripts. Disable with GIT_HOOK_COMMIT=0.

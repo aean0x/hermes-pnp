@@ -23,6 +23,11 @@ def _git(args, cwd, check=True):
     )
 
 
+def _stamp(path: Path, ns: int) -> None:
+    """Pin mtime (ns) so signature tests do not depend on fs timestamp resolution."""
+    os.utime(path, ns=(ns, ns))
+
+
 def _init_repo(path: Path, *, name="dev", email="dev@example.com") -> Path:
     path.mkdir(parents=True, exist_ok=True)
     _git(["init", "-b", "main"], cwd=path)
@@ -144,6 +149,51 @@ class GitSync(unittest.TestCase):
         self.assertNotIn("wip.txt", log)
         status = _git(["status", "--porcelain"], cwd=work).stdout
         self.assertIn("wip.txt", status)
+
+    def test_edit_to_already_dirty_file_is_committed(self):
+        """A file already dirty at turn start still counts as this turn's delta.
+
+        Path-only snapshots missed it: the path sits in the dirty set before and
+        after the edit, so `delta` was empty, the edit never reached `_dirty`,
+        and the file stayed uncommittable for as long as it remained dirty.
+        """
+        _, work = self._clone_pair()
+        os.environ["GIT_HOOK_PUSH"] = "0"
+        (work / "wip.txt").write_text("someone else's pre-existing dirt\n")
+        target = work / "README"
+        target.write_text("before-before\n")
+        _stamp(target, 1_000_000_000_000_000_000)
+
+        sync.on_pre_tool_call("patch", {"path": str(target)})
+        # Same length on purpose: only the mtime term can flag this rewrite.
+        target.write_text("during-during\n")
+        _stamp(target, 1_700_000_000_000_000_000)
+        sync.on_post_tool_call("patch", {"path": str(target)}, status="ok")
+
+        self.assertEqual(sync._dirty.get(str(work)), {"README"})
+        result = sync.commit_and_push(
+            str(work), set(sync._dirty.get(str(work), set())), "test"
+        )
+        self.assertIn("committed", result)
+        log = _git(["log", "-1", "--name-only", "--pretty=format:"], cwd=work).stdout
+        self.assertIn("README", log)
+        self.assertNotIn("wip.txt", log)
+        self.assertIn("wip.txt", _git(["status", "--porcelain"], cwd=work).stdout)
+
+    def test_snapshot_signature_moves_when_already_dirty_file_is_rewritten(self):
+        _, work = self._clone_pair()
+        target = work / "README"
+        target.write_text("before-before\n")
+        _stamp(target, 1_000_000_000_000_000_000)
+        first = sync._porcelain_snapshot(str(work))
+
+        target.write_text("during-during\n")
+        _stamp(target, 1_700_000_000_000_000_000)
+        second = sync._porcelain_snapshot(str(work))
+
+        self.assertEqual(set(first), set(second))  # the path set never moved
+        self.assertNotEqual(first["README"], second["README"])
+        self.assertEqual(sync._porcelain_paths(str(work)), frozenset({"README"}))
 
     def test_read_then_flush_does_not_commit_unrelated(self):
         _, work = self._clone_pair()
