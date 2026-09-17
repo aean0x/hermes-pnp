@@ -11,11 +11,11 @@
 
     models.low = {
       provider = "deepseek";
-      model = "deepseek-v4-flash";
+      model = "deepseek-flash";
     };
     models.default = {
       provider = "deepseek";
-      model = "deepseek-v4-pro";
+      model = "deepseek-flash";
     };
     models.high = {
       provider = "xai-oauth";
@@ -23,7 +23,7 @@
     };
     # model.default = "default"; # tier seeding settings.model.default: low | default | high
     # modelRouter.enable = true; # false: no plugin; only models.default + auxiliary
-    # models.auxiliary = { provider = "deepseek"; model = "deepseek-v4-flash"; };
+    # models.auxiliary = { provider = "deepseek"; model = "deepseek-flash"; };
     # models.high.reasoning_effort = "high"; # else Hermes session default
     # models.low.best_for = [ "Short acknowledgements" ];
     # workspace = "/var/lib/hermes"; # host path; remaps to /data in the jail

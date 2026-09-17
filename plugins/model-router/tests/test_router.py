@@ -95,7 +95,7 @@ class HostStomp(unittest.TestCase):
 
     def test_repair_restores_snapshotted_host(self) -> None:
         agent = SimpleNamespace(
-            model="deepseek-v4-pro",
+            model="deepseek-flash",
             provider="deepseek",
             api_key="k1",
             base_url="https://api.deepseek.com",
@@ -116,7 +116,7 @@ class HostStomp(unittest.TestCase):
 
     def test_repair_keeps_key_when_snapshot_empty(self) -> None:
         agent = SimpleNamespace(
-            model="deepseek-v4-pro",
+            model="deepseek-flash",
             provider="deepseek",
             api_key="",
             base_url="https://api.deepseek.com",
@@ -136,7 +136,7 @@ class HostStomp(unittest.TestCase):
 
     def test_repair_ignores_matching_host(self) -> None:
         agent = SimpleNamespace(
-            model="deepseek-v4-pro",
+            model="deepseek-flash",
             provider="deepseek",
             base_url="https://api.deepseek.com",
             _client_kwargs={"base_url": "https://api.deepseek.com"},
@@ -146,7 +146,7 @@ class HostStomp(unittest.TestCase):
 
     def test_repair_skips_when_model_changed(self) -> None:
         agent = SimpleNamespace(
-            model="deepseek-v4-pro",
+            model="deepseek-flash",
             provider="deepseek",
             base_url="https://api.deepseek.com",
             _client_kwargs={"base_url": "https://api.deepseek.com"},

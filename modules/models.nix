@@ -191,6 +191,8 @@ let
   fallbackSlot = if pnp.modelRouter.enable then models.high else models.default;
   cronSlot = if pnp.modelRouter.enable then models.low else models.default;
 
+  # Slot ratios collapse by model id: low and auxiliary share default's
+  # model id, and `default` folds last, so its ratio is the one that lands.
   modelThresholds = foldl' (
     acc: m: acc // { "${m.model}" = m.compression_ratio; }
   ) { } namedModels;
@@ -257,7 +259,7 @@ in
   options.services.hermesPnP.models = {
     low = mkNamedModel {
       provider = "deepseek";
-      model = "deepseek-v4-flash";
+      model = "deepseek-flash";
       inherit (pluginModels.low) best_for label short;
       compression_ratio = 0.95;
       description = "Cheap helper. OOBE seed for unpinned cron and model-router low.";
@@ -265,7 +267,7 @@ in
 
     default = mkNamedModel {
       provider = "deepseek";
-      model = "deepseek-v4-pro";
+      model = "deepseek-flash";
       inherit (pluginModels.default) best_for label short;
       compression_ratio = 0.26;
       description = "Workhorse. Session seed, delegation, and model-router default.";
@@ -287,7 +289,7 @@ in
 
     auxiliary = mkNamedModel {
       provider = "deepseek";
-      model = "deepseek-v4-flash";
+      model = "deepseek-flash";
       compression_ratio = 0.95;
       reasoning_effort = "none";
       description = ''

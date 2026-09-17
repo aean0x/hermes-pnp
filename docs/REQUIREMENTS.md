@@ -4,8 +4,8 @@
   `high` (router + session seeds) and `auxiliary` (official aux slots
   only — not a router tier, no slash command). `medium` is the
   deprecated alias for `default`.
-- Defaults: low = deepseek / deepseek-v4-flash; default = deepseek /
-  deepseek-v4-pro; high = xai-oauth / grok-4.6; auxiliary = same as
+- Defaults: low = deepseek / deepseek-flash; default = deepseek /
+  deepseek-flash; high = xai-oauth / grok-4.6; auxiliary = same as
   low. Each has `reasoning_effort` (`nullOr str`); default unset
   except auxiliary = `"none"`.
 - No fourth **router** model. No `T1`/`T2`/`T3` in plugin.yaml, WebUI
