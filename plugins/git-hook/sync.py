@@ -17,9 +17,12 @@ import shutil
 import subprocess
 import threading
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Set
+from typing import Any, Dict, Iterable, Optional, Set, Tuple
 
 log = logging.getLogger("plugins.git_hook")
+
+# One dirty path's content signature: (XY status, st_size, st_mtime_ns).
+PathSig = Tuple[str, int, int]
 
 _WRITE_TOOLS = frozenset({"write_file", "patch", "skill_manage"})
 _PATH_KEYS = ("path", "file_path", "workdir")
@@ -61,7 +64,9 @@ _TRANSIENT_MARKER = ".hermes-tmp"
 
 _lock = threading.Lock()
 _pulled: Set[str] = set()
-_before: Dict[str, frozenset[str]] = {}
+# Per-root snapshot of the dirty set: rel path -> content signature (status,
+# size, mtime_ns). Value-carrying, not path-only — see _porcelain_snapshot.
+_before: Dict[str, "Dict[str, PathSig]"] = {}
 _dirty: Dict[str, Set[str]] = {}
 _unpushed: Set[str] = set()
 _root_cache: Dict[str, Optional[str]] = {}
@@ -280,35 +285,60 @@ def _transient(rel: str) -> bool:
     return _TRANSIENT_MARKER in rel.rsplit("/", 1)[-1]
 
 
-def _porcelain_paths(root: str) -> frozenset[str]:
+def _path_sig(root: str, rel: str, status: str) -> PathSig:
+    """Cheap content signature for one dirty path.
+
+    A path-only dirty set cannot see an edit to a file that is ALREADY dirty:
+    the path is present before and after, so it produces no delta, never enters
+    `_dirty`, and stays uncommittable for as long as it remains dirty. Folding
+    the XY status plus size/mtime in makes a rewrite of an already-dirty path a
+    delta again, without widening the per-turn contract to a whole-repo sweep.
+    """
+    try:
+        st = os.stat(os.path.join(root, rel))
+    except OSError:
+        # Deleted, or renamed away: the status alone identifies it.
+        return (status, -1, -1)
+    return (status, st.st_size, st.st_mtime_ns)
+
+
+def _porcelain_snapshot(root: str) -> Dict[str, PathSig]:
+    """Dirty paths of `root` mapped to their content signature."""
     try:
         proc = _git(["status", "--porcelain", "-z"], cwd=root, timeout=5)
     except (subprocess.TimeoutExpired, OSError):
-        return frozenset()
+        return {}
     if proc.returncode != 0 or not proc.stdout:
-        return frozenset()
+        return {}
     parts = proc.stdout.split("\0")
-    paths: Set[str] = set()
+    sigs: Dict[str, PathSig] = {}
     i = 0
     while i < len(parts):
         entry = parts[i]
         i += 1
-        if not entry:
+        if not entry or len(entry) <= 3:
             continue
         # "XY PATH" — status is 2 chars, then space, then path.
-        rel = entry[3:] if len(entry) > 3 else ""
+        status = entry[:2]
+        rel = entry[3:]
         if not rel:
             continue
         # Atomic-write temps are never part of the turn's real delta.
         if not _transient(rel):
-            paths.add(rel)
+            sigs[rel] = _path_sig(root, rel, status)
         # rename/copy: next -z field is the original path
         if entry[0] in {"R", "C"} or (len(entry) > 1 and entry[1] in {"R", "C"}):
             if i < len(parts) and parts[i]:
-                if not _transient(parts[i]):
-                    paths.add(parts[i])
+                source = parts[i]
+                if not _transient(source):
+                    sigs[source] = _path_sig(root, source, status)
                 i += 1
-    return frozenset(paths)
+    return sigs
+
+
+def _porcelain_paths(root: str) -> frozenset[str]:
+    """The dirty path set — callers that only ask "is this repo dirty?"."""
+    return frozenset(_porcelain_snapshot(root))
 
 
 def _busy(root: str) -> bool:
@@ -557,14 +587,14 @@ def on_pre_tool_call(
         with _lock:
             missing = root not in _before
         if missing:
-            snap = _porcelain_paths(root)
+            snap = _porcelain_snapshot(root)
             with _lock:
                 if root not in _before:
                     _before[root] = snap
         if do_pull:
             status = pull_if_clean(root)
             if status == "pulled":
-                snap = _porcelain_paths(root)
+                snap = _porcelain_snapshot(root)
                 with _lock:
                     _before[root] = snap
 
@@ -586,14 +616,18 @@ def on_post_tool_call(
     # module lock so a busy repo or another session's git op cannot hold this
     # callback hostage — see on_pre_tool_call. Delta bookkeeping is a short
     # locked section; the set ops are atomic under the GIL.
-    snapshots: dict[str, frozenset[str]] = {}
+    snapshots: dict[str, Dict[str, PathSig]] = {}
     for root in roots:
-        snapshots[root] = _porcelain_paths(root)
+        snapshots[root] = _porcelain_snapshot(root)
     with _lock:
         for root in roots:
-            before = _before.get(root, frozenset())
+            before = _before.get(root) or {}
             after = snapshots[root]
-            delta = set(after - before)
+            # A path is this turn's delta when it is new OR when its content
+            # signature moved. The second half is what makes an edit to an
+            # already-dirty file committable; pre-existing dirt nobody touched
+            # keeps an identical signature and is still left alone.
+            delta = {rel for rel, sig in after.items() if before.get(rel) != sig}
             if delta:
                 _dirty.setdefault(root, set()).update(delta)
             _before[root] = after
