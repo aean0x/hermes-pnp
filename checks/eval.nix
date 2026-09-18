@@ -456,7 +456,7 @@ in
     # control binds and carries the declared container.* values. Nothing
     # composer-side: the default (modulesConfig) declares none, so it renders
     # neither property.
-    test "${toString (hostBrowserResourcesConfig.services.hermesPnP.browser.container.enable)}" = ""
+    test "${toString hostBrowserResourcesConfig.services.hermesPnP.browser.container.enable}" = ""
     test "${hostBrowserResourcesConfig.systemd.services.hermes-browser.serviceConfig.MemoryMax}" = "2560m"
     test "${toString hostBrowserResourcesConfig.systemd.services.hermes-browser.serviceConfig.OOMScoreAdjust}" = "300"
     test "${toString (modulesConfig.systemd.services.hermes-browser.serviceConfig ? MemoryMax)}" = ""
