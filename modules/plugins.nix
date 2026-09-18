@@ -58,7 +58,12 @@ let
 
   unknown =
     let
-      known = (lib.attrNames catalog) ++ (lib.attrNames extra);
+      # A name is known when any source can resolve it: the in-repo catalog,
+      # a plugin pinned as a flake input, or extraPluginDirs.
+      known =
+        (lib.attrNames catalog)
+        ++ (lib.attrNames pnp.internal.pluginSources)
+        ++ (lib.attrNames extra);
     in
     lib.filter (n: !(lib.elem n known)) pnp.plugins;
 
