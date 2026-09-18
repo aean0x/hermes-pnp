@@ -288,7 +288,10 @@ in
         cookies, logs, gate). Defaults on when the official agent
         container is on. Network follows official container.network.
         Override memory / cpus / shmSize here — do not mkForce
-        extraOptions just to set RAM.
+        extraOptions just to set RAM. Off (`container.enable = false`)
+        the host-native engine unit carries memory / oomScoreAdj as its
+        own systemd MemoryMax / OOMScoreAdjust; memorySwap, cpus and
+        shmSize are jail-only.
       '';
     };
 
