@@ -43,19 +43,30 @@ in
         "network-online.target"
       ];
 
-      serviceConfig = {
-        Type = "simple";
-        User = agent.user;
-        Group = agent.group;
-        Restart = "on-failure";
-        RestartSec = 5;
-        MemoryMax = "1G";
-        OOMScoreAdjust = 500;
-        TimeoutStartSec = 90;
-        StandardOutput = "append:${logDir}/browser.stdout";
-        StandardError = "append:${logDir}/browser.stderr";
-        PrivateTmp = true;
-      } // hostHarden;
+      # This unit runs the engine itself, so systemd resource control binds
+      # here (unlike a jail unit, which only runs `docker start -a`). Take
+      # the consumer's declared browser.container.memory / oomScoreAdj.
+      # Unset means unbounded: RAM policy is consumer policy (AGENTS.md),
+      # never a composer default.
+      serviceConfig =
+        {
+          Type = "simple";
+          User = agent.user;
+          Group = agent.group;
+          Restart = "on-failure";
+          RestartSec = 5;
+          TimeoutStartSec = 90;
+          StandardOutput = "append:${logDir}/browser.stdout";
+          StandardError = "append:${logDir}/browser.stderr";
+          PrivateTmp = true;
+        }
+        // lib.optionalAttrs (bctr.memory != null) {
+          MemoryMax = bctr.memory;
+        }
+        // lib.optionalAttrs (bctr.oomScoreAdj != null) {
+          OOMScoreAdjust = bctr.oomScoreAdj;
+        }
+        // hostHarden;
 
       environment = {
         HOME = home;

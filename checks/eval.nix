@@ -119,6 +119,20 @@ let
     { services.hermesPnP.admin.enable = true; }
   ];
 
+  # Host-native browser: no jail, so the engine unit is the resource
+  # holder. The declared container.memory / oomScoreAdj must reach it.
+  hostBrowserResourcesConfig = eval [
+    ../examples/composer.nix
+    {
+      services.hermes-agent.container.enable = false;
+      services.hermesPnP.browser.container = {
+        enable = false;
+        memory = "2560m";
+        oomScoreAdj = 300;
+      };
+    }
+  ];
+
   containerGbrainConfig = eval [
     ../examples/container.nix
     ../examples/gbrain.nix
@@ -438,6 +452,15 @@ in
     test "${toString (containerResourcesConfig.systemd.services.hermes-browser.serviceConfig ? MemoryMax)}" = ""
     test "${toString (containerResourcesConfig.systemd.services.hermes-browser.serviceConfig ? MemoryHigh)}" = ""
     test "${toString (containerResourcesConfig.systemd.services.hermes-browser.serviceConfig ? OOMScoreAdjust)}" = ""
+    # Host-native branch: that unit runs the engine, so systemd resource
+    # control binds and carries the declared container.* values. Nothing
+    # composer-side: the default (modulesConfig) declares none, so it renders
+    # neither property.
+    test "${toString (hostBrowserResourcesConfig.services.hermesPnP.browser.container.enable)}" = ""
+    test "${hostBrowserResourcesConfig.systemd.services.hermes-browser.serviceConfig.MemoryMax}" = "2560m"
+    test "${toString hostBrowserResourcesConfig.systemd.services.hermes-browser.serviceConfig.OOMScoreAdjust}" = "300"
+    test "${toString (modulesConfig.systemd.services.hermes-browser.serviceConfig ? MemoryMax)}" = ""
+    test "${toString (modulesConfig.systemd.services.hermes-browser.serviceConfig ? OOMScoreAdjust)}" = ""
     test "${toString (lib.elem "--renderer-process-limit=5" containerConfig.services.hermesPnP.browser.extraArgs)}" = "1"
     test "${toString (containerConfig.systemd.sockets ? hermes-admin)}" = ""
     test "${toString (lib.hasInfix "/run/hermes-admin" containerConfig.systemd.services.hermes-webui.preStart)}" = ""
