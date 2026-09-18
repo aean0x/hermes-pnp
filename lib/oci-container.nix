@@ -261,9 +261,6 @@ rec {
       wantedBy ? [ "multi-user.target" ],
       network ? "host",
       publish ? [ ],
-      memoryMax ? null,
-      memoryHigh ? null,
-      oomScoreAdjust ? null,
     }:
     let
       entrypoint = mkSlimEntrypoint name;
@@ -344,15 +341,19 @@ rec {
           containerBinPkg
           pkgs.coreutils
         ];
+        # No MemoryMax / MemoryHigh / OOMScoreAdjust here. This unit only runs
+        # `docker start -a`, while the daemon creates the container's cgroup in
+        # its own hierarchy — systemd resource control would bound the docker
+        # CLI, not the jail. Bound the jail with the docker flags instead:
+        # cfg.memory / cfg.memorySwap / cfg.cpus / cfg.oomScoreAdj, which
+        # resourceFlags renders onto `docker create`.
         serviceConfig = {
           Type = "simple";
           Restart = "on-failure";
           RestartSec = 5;
           TimeoutStartSec = 180;
           TimeoutStopSec = 30;
-        } // lib.optionalAttrs (memoryMax != null) { MemoryMax = memoryMax; }
-          // lib.optionalAttrs (memoryHigh != null) { MemoryHigh = memoryHigh; }
-          // lib.optionalAttrs (oomScoreAdjust != null) { OOMScoreAdjust = oomScoreAdjust; };
+        };
       };
     };
 }

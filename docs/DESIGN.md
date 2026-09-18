@@ -399,6 +399,14 @@ use first-class `*.container.memory` / `cpus` / `shmSize` /
 `oomScoreAdj` / `memorySwap`. `extraOptions` is the escape hatch.
 Do not `mkForce` extraOptions just to set RAM.
 
+Those options render docker flags (`--memory`, `--memory-swap`,
+`--cpus`, `--oom-score-adj`) onto the jail's **own** cgroup, which the
+daemon creates. A `mkOciJail` unit therefore carries no `MemoryMax` /
+`MemoryHigh` / `OOMScoreAdjust`: the unit only runs `docker start -a`,
+so systemd resource control would bound the docker CLI and read like
+protection without being any. RAM caps are consumer policy (see
+AGENTS.md), not a composer default.
+
 Official `services.hermes-webui` has no `container.*`. The composer
 adds `hermesPnP.webui.container` and `hermesPnP.browser.container`.
 Both default on when official `services.hermes-agent.container.enable`
