@@ -84,6 +84,26 @@ let
     }
   ];
 
+  docindexConfig = eval [
+    ../examples/docindex.nix
+    {
+      services.hermesPnP.docindex.roots = {
+        "/data/workspace/onedrive" = [ ];
+        "/data/.hermes/projects" = [ "node_modules" ];
+      };
+    }
+  ];
+
+  # Vector space must follow gbrain when docindex pins nothing.
+  docindexInheritConfig = eval [
+    ../examples/gbrain.nix
+    {
+      services.hermesPnP.gbrain.embeddingModel = "openrouter:voyageai/voyage-4";
+      services.hermesPnP.gbrain.embeddingDimensions = 1024;
+      services.hermesPnP.docindex.enable = true;
+    }
+  ];
+
   containerConfig = eval [ ../examples/container.nix ];
   containerResourcesConfig = eval [
     ../examples/container.nix
@@ -260,6 +280,20 @@ in
     test "${gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_MODEL}" = "google:gemini-3.5-flash-lite"
     test "${gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_EMBEDDING_MODEL}" = "openrouter:voyageai/voyage-4"
     test "${toString gbrainEmbeddingConfig.systemd.services.gbrain-mcp-http.environment.GBRAIN_EMBEDDING_DIMENSIONS}" = "1024"
+    # docindex surface: inert unless enabled, knobs render, plugin is injected,
+    # and the vector space follows gbrain when this module pins nothing.
+    test "${toString (gbrainConfig.services.hermes-agent.environment ? DOCINDEX_DB)}" = ""
+    test "${toString (builtins.elem "docindex" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = ""
+    test "${docindexConfig.services.hermes-agent.environment.DOCINDEX_DB}" = "/data/docindex/index.db"
+    test "${docindexConfig.services.hermes-agent.environment.DOCINDEX_PYTHON}" = "/data/toolbox/bin/python3"
+    test "${docindexConfig.services.hermes-agent.environment.DOCVEC_PYTHON}" = "/data/docindex/embed/venv/bin/python"
+    test "${toString docindexConfig.services.hermes-agent.environment.DOCINDEX_WORKERS}" = "2"
+    test "${toString (lib.hasInfix ''"node_modules"'' docindexConfig.services.hermes-agent.environment.DOCINDEX_ROOTS)}" = "1"
+    test "${toString (lib.hasInfix ''/data/workspace/onedrive'' docindexConfig.services.hermes-agent.environment.DOCINDEX_ROOTS)}" = "1"
+    test "${toString (docindexConfig.services.hermes-agent.environment ? GBRAIN_EMBEDDING_MODEL)}" = ""
+    test "${toString (builtins.elem "docindex" docindexConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
+    test "${docindexInheritConfig.services.hermes-agent.environment.GBRAIN_EMBEDDING_MODEL}" = "openrouter:voyageai/voyage-4"
+    test "${toString docindexInheritConfig.services.hermes-agent.environment.GBRAIN_EMBEDDING_DIMENSIONS}" = "1024"
     test "${
       toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_TRUST_FORWARDED_PROTO)
     }" = "1"

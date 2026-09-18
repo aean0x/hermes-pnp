@@ -24,6 +24,7 @@ let
   extra = pnp.extraPluginDirs;
   catalog = import ../plugins/catalog.nix;
   gbrainOn = (options.services.hermesPnP ? gbrain) && pnp.gbrain.enable;
+  docindexOn = (options.services.hermesPnP ? docindex) && pnp.docindex.enable;
 
   gbrainPlugins = [
     "gbrain-retrieval-reflex"
@@ -42,6 +43,7 @@ let
     (lib.filter (n: n != "model-router") pnp.plugins)
     ++ lib.optional routerOn "model-router"
     ++ lib.optionals gbrainOn gbrainPlugins
+    ++ lib.optional docindexOn "docindex"
     ++ lib.attrNames extra
   );
 
@@ -213,7 +215,7 @@ in
   };
 
   config = lib.mkMerge [
-    (mkIf (pnp.plugins != [ ] || extra != { } || gbrainOn) {
+    (mkIf (pnp.plugins != [ ] || extra != { } || gbrainOn || docindexOn) {
       assertions = [
         {
           assertion = unknown == [ ];
