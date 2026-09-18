@@ -2,8 +2,10 @@
 
 Status: implemented in model-picker v0.7.0; classifier prior and
 slash-at-start pins in v0.8.0; 3-way Auto is always-on as of v0.8.2
-(`classify_high` removed). Public split is `low` / `default` / `high`
-(`medium` is the deprecated alias for `default`).
+(`classify_high` removed); v0.11.1 is current, the plugin is developed at
+`aean0x/hermes-model-picker` and pinned here as a flake input. This file
+is the redesign rationale, not current usage. Public split is `low` /
+`default` / `high` (`medium` is the deprecated alias for `default`).
 Model id / provider are Nix `hermesPnP.models` options. Official
 `settings.auxiliary` stays Nix-only (`models.auxiliary`).
 

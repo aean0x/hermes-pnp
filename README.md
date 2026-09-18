@@ -206,11 +206,13 @@ tool traces.
 ## Plugins
 
 Materialize to `$stateDir/plugins/<name>`, discovered via
-`$stateDir/.hermes/plugins/<name>`. First-party plugins are not
-installed through official `extraPlugins`. `extraPluginDirs` is
+`$stateDir/.hermes/plugins/<name>`. Sources are this repo's
+`plugins/catalog.nix`, the plugin repos pinned as flake inputs in
+`internal.pluginSources` (`flake.nix`), and `extraPluginDirs`, which is
 `attrsOf path` for your own trees (`extraPlugins` is a renamed alias).
+First-party plugins are not installed through official `extraPlugins`.
 
-**model-picker** (v0.9.1) — per-turn low / default / high, labelled
+**model-picker** (v0.11.1) — per-turn low / default / high, labelled
 Quick / Standard / Expert. Auto classifies all three; `high` is only
 money / irreversible / security. Pins: `/low` `/default` `/high`
 `/auto` (`/medium` is the deprecated alias for `/default`). Writes

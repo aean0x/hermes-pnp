@@ -342,15 +342,19 @@ Client rebuilds that pair the live provider with the previous API host
 
 ## Plugins
 
-Catalog is the SoT (`plugins/catalog.nix`). Add a plugin: drop
-`plugins/<name>/`, add one catalog line. Skills follow the same
-pattern (`skills/catalog.nix`: `browser`, `retrieval-reflex`,
+Catalog is the SoT (`plugins/catalog.nix`). A plugin enters one of two
+ways: drop a tree in `plugins/<name>/` and add one catalog line, or pin
+the upstream repo as a flake input and list it in
+`internal.pluginSources`. Skills follow the same pattern
+(`skills/catalog.nix`: `browser`, `retrieval-reflex`,
 `gbrain-http-auth`; consumer trees via `skills.extraSkills`).
 
-First-party: `model-picker`, `tool-call-coherency`,
-`gbrain-retrieval-reflex`, `gbrain-memory-flush`, `secret-handoff`,
-`git-hook` (ff-only pull on first read of a clean worktree; end of
-turn commits this turn's porcelain delta and pushes).
+Flake-input first-party, each pinned to a release commit:
+`model-picker`, `secret-handoff`, `git-hook`,
+`gbrain-retrieval-reflex`. Vendored first-party:
+`tool-call-coherency`, `gbrain-memory-flush`, `docindex`. `git-hook`
+ff-only pulls on the first read of a clean worktree; end of turn it
+commits this turn's porcelain delta and pushes.
 
 - Empty `plugins` and no `extraPluginDirs` → no plugin files.
 - Materialize to `$stateDir/plugins/<name>`.

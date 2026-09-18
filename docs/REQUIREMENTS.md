@@ -48,7 +48,7 @@
   `/default` `/high` `/auto` (`/medium` is the deprecated alias for
   `/default`). Auto turn-start classifier replies `low`, `default`, or
   `high` (`high` is money / irreversible / security). Escalation 4 on
-  low, 3 on default, cap high. Plugin v0.9.1. Auto always classifies
+  low, 3 on default, cap high. Plugin v0.11.1. Auto always classifies
   low/default/high (no classify_high flag). A bare `default` is
   ordinary English and must not pin; use `/default` or `pin default`.
   Model id and provider are Nix options (`hermesPnP.models.*`), written
