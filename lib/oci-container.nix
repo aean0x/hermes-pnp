@@ -261,6 +261,9 @@ rec {
       wantedBy ? [ "multi-user.target" ],
       network ? "host",
       publish ? [ ],
+      memoryMax ? null,
+      memoryHigh ? null,
+      oomScoreAdjust ? null,
     }:
     let
       entrypoint = mkSlimEntrypoint name;
@@ -347,7 +350,9 @@ rec {
           RestartSec = 5;
           TimeoutStartSec = 180;
           TimeoutStopSec = 30;
-        };
+        } // lib.optionalAttrs (memoryMax != null) { MemoryMax = memoryMax; }
+          // lib.optionalAttrs (memoryHigh != null) { MemoryHigh = memoryHigh; }
+          // lib.optionalAttrs (oomScoreAdjust != null) { OOMScoreAdjust = oomScoreAdjust; };
       };
     };
 }
