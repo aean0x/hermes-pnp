@@ -3,6 +3,9 @@
 # $stateDir/.hermes/plugins/<name> → ../../plugins/<name>.
 # Home Manager: $hermesHome/plugins/<name> (same dir as official
 # extraPlugins; only remove PnP-owned trees).
+#
+# Sources: this repo's ./plugins catalog, plus internal.pluginSources
+# (plugins pinned as flake inputs, e.g. model-picker), plus extraPluginDirs.
 {
   config,
   lib,
@@ -33,15 +36,15 @@ let
 
   officialExtraPluginNames = map lib.getName (agent.extraPlugins or [ ]);
 
-  routerOn = pnp.modelRouter.enable;
+  pickerOn = pnp.modelPicker.enable;
 
   # Materialize only PnP trees. Official extraPlugins already land as
   # nix-managed-* under $HERMES_HOME/plugins.
-  # model-router is gated by modelRouter.enable (same pattern as gbrain):
+  # model-picker is gated by modelPicker.enable (same pattern as gbrain):
   # enable=true injects it; enable=false strips it even if listed.
   pnpNames = lib.unique (
-    (lib.filter (n: n != "model-router") pnp.plugins)
-    ++ lib.optional routerOn "model-router"
+    (lib.filter (n: n != "model-picker") pnp.plugins)
+    ++ lib.optional pickerOn "model-picker"
     ++ lib.optionals gbrainOn gbrainPlugins
     ++ lib.optional docindexOn "docindex"
     ++ lib.attrNames extra
@@ -55,13 +58,18 @@ let
 
   unknown =
     let
-      known = (lib.attrNames catalog) ++ (lib.attrNames extra);
+      # A name is known when any source can resolve it: the in-repo catalog,
+      # a plugin pinned as a flake input, or extraPluginDirs.
+      known =
+        (lib.attrNames catalog)
+        ++ (lib.attrNames pnp.internal.pluginSources)
+        ++ (lib.attrNames extra);
     in
     lib.filter (n: !(lib.elem n known)) pnp.plugins;
 
-  sources = catalog // extra;
+  sources = catalog // pnp.internal.pluginSources // extra;
 
-  routerOrder = [
+  pickerOrder = [
     "low"
     "default"
     "high"
@@ -69,12 +77,19 @@ let
 
   # Plugin-only keys (escalate_*, tails) live in the JSON catalog.
   # Slot identity (model, provider, label, short, best_for) is Nix.
-  pluginDefaults = builtins.fromJSON (
-    builtins.readFile ../plugins/model-router/config.default.json
-  );
+  pickerSrc = sources.model-picker or null;
 
-  modelRouterConfig = pluginDefaults // {
-    models = lib.genAttrs routerOrder (
+  pickerDefaults =
+    if pickerSrc == null then
+      null
+    else
+      builtins.fromJSON (builtins.readFile (pickerSrc + "/config.default.json"));
+
+  pluginDefaults =
+    if pickerDefaults == null then { models = lib.genAttrs pickerOrder (_: { }); } else pickerDefaults;
+
+  modelPickerConfig = pluginDefaults // {
+    models = lib.genAttrs pickerOrder (
       name:
       pluginDefaults.models.${name}
       // {
@@ -89,7 +104,7 @@ let
     );
   };
 
-  modelRouterWebui = {
+  modelPickerWebui = {
     models =
       (map (name: {
         cmd = "/${name}";
@@ -97,7 +112,7 @@ let
         short = pnp.models.${name}.short;
         model = pnp.models.${name}.model;
         title = "Pin ${pnp.models.${name}.label}";
-      }) routerOrder)
+      }) pickerOrder)
       ++ [
         {
           cmd = "/auto";
@@ -109,26 +124,24 @@ let
       ];
   };
 
-  modelRouterSrc = sources.model-router or null;
-
-  modelRouterPlugin =
-    if modelRouterSrc == null then
+  modelPickerPlugin =
+    if pickerSrc == null then
       null
     else
-      pkgs.runCommand "model-router-plugin" { } ''
-        cp -a ${modelRouterSrc}/. "$out/"
+      pkgs.runCommand "model-picker-plugin" { } ''
+        cp -a ${pickerSrc}/. "$out/"
         chmod -R u+w "$out"
-        printf '%s\n' ${lib.escapeShellArg (builtins.toJSON modelRouterConfig)} \
+        printf '%s\n' ${lib.escapeShellArg (builtins.toJSON modelPickerConfig)} \
           > "$out/config.json"
         printf '%s\n' ${
-          lib.escapeShellArg ("window.__MODEL_ROUTER_CONFIG = " + builtins.toJSON modelRouterWebui + ";")
+          lib.escapeShellArg ("window.__MODEL_PICKER_CONFIG = " + builtins.toJSON modelPickerWebui + ";")
         } > "$out/webui/config.js"
       '';
 
   resolvedSources =
     sources
-    // lib.optionalAttrs (modelRouterPlugin != null) {
-      model-router = modelRouterPlugin;
+    // lib.optionalAttrs (modelPickerPlugin != null) {
+      model-picker = modelPickerPlugin;
     };
 
 in
@@ -148,10 +161,14 @@ in
       default = [ ];
       description = ''
         Catalog names to materialize. Composer on defaults to
-        model-router, tool-call-coherency, secret-handoff (mkDefault).
+        model-picker, tool-call-coherency, secret-handoff (mkDefault).
+
+        Names come from three places: this repo's ./plugins catalog, the
+        flake's plugin inputs (injected as internal.pluginSources), and
+        extraPluginDirs.
       '';
       example = [
-        "model-router"
+        "model-picker"
         "tool-call-coherency"
         "secret-handoff"
         # "gbrain-retrieval-reflex"
@@ -195,8 +212,21 @@ in
         type = types.nullOr types.path;
         default = null;
         internal = true;
-        description = "Bundled model-router WebUI dir. Set when that plugin is enabled.";
+        description = "Bundled model-picker WebUI dir. Set when that plugin is enabled.";
       };
+    };
+
+    internal.pluginSources = mkOption {
+      type = types.attrsOf types.path;
+      default = { };
+      internal = true;
+      description = ''
+        Plugin name → source tree for plugins that live in their own repo.
+        The flake pins them as inputs and sets this; the in-repo
+        ./plugins/catalog.nix covers the rest and extraPluginDirs adds
+        local trees. An empty set is valid — it only means no plugin comes
+        from outside this repo.
+      '';
     };
 
     internal.pnpPluginNames = mkOption {
@@ -224,8 +254,8 @@ in
       ];
 
       services.hermesPnP.pluginInstall.webuiExtensionDir = lib.mkIf (
-        routerOn && lib.elem "model-router" enabledNames && resolvedSources ? model-router
-      ) "${resolvedSources.model-router}/webui";
+        pickerOn && lib.elem "model-picker" enabledNames && resolvedSources ? model-picker
+      ) "${resolvedSources.model-picker}/webui";
 
       services.hermes-agent.settings.plugins.enabled = enabledNames;
       services.hermesPnP.internal.pnpPluginNames = pnpNames;
@@ -234,7 +264,7 @@ in
 
     (mkIf pnp.enable {
       services.hermesPnP.plugins = mkDefault (
-        lib.optional routerOn "model-router"
+        lib.optional pickerOn "model-picker"
         ++ [
           "tool-call-coherency"
           "secret-handoff"

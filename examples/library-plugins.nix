@@ -10,7 +10,7 @@
   services.hermesPnP = {
     enable = false;
     plugins = [
-      "model-router"
+      "model-picker"
       "tool-call-coherency"
       "secret-handoff"
     ];

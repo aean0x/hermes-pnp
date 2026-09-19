@@ -1,9 +1,11 @@
 # Model-Router Redesign — cache-aware escalation
 
-Status: implemented in model-router v0.7.0; classifier prior and
+Status: implemented in model-picker v0.7.0; classifier prior and
 slash-at-start pins in v0.8.0; 3-way Auto is always-on as of v0.8.2
-(`classify_high` removed). Public split is `low` / `default` / `high`
-(`medium` is the deprecated alias for `default`).
+(`classify_high` removed); v0.11.1 is current, the plugin is developed at
+`aean0x/hermes-model-picker` and pinned here as a flake input. This file
+is the redesign rationale, not current usage. Public split is `low` /
+`default` / `high` (`medium` is the deprecated alias for `default`).
 Model id / provider are Nix `hermesPnP.models` options. Official
 `settings.auxiliary` stays Nix-only (`models.auxiliary`).
 
@@ -45,7 +47,7 @@ cost spike when the router climbs to `high`. This redesign makes the climb to
 - On call, the handler stashes the handoff on the live agent's
   `context_compressor` and switches to the next tier.
 - `engine.py` registers a `ContextCompressor` subclass (`ModelRouterContextEngine`,
-  `name = "model-router"`) whose `select_context` — fired per provider request,
+  `name = "model-picker"`) whose `select_context` — fired per provider request,
   mid-tool-loop included — swaps the outgoing message list to
   **system prompt + handoff summary + recent verbatim tail (~20–30k tokens)**.
   Persisted history is never mutated; the swap is request-scoped, so prompt
@@ -78,11 +80,11 @@ Remove those with a one-time operator edit, not an activation one-shot.
 
 ## Files
 
-- `plugins/model-router/engine.py` — `ModelRouterContextEngine` (`select_context`).
-- `plugins/model-router/__init__.py` — 3-way classifier, checkpoint,
+- `plugins/model-picker/engine.py` — `ModelRouterContextEngine` (`select_context`).
+- `plugins/model-picker/__init__.py` — 3-way classifier, checkpoint,
   `escalate_model` tool, `_resolve_tier_runtime`, engine registration.
-- `plugins/model-router/settings.py` — classifier prompt from `best_for`, handoff config.
-- `plugins/model-router/config.default.json` — labels, `best_for`, `handoff_tail_chars`,
+- `plugins/model-picker/settings.py` — classifier prompt from `best_for`, handoff config.
+- `plugins/model-picker/config.default.json` — labels, `best_for`, `handoff_tail_chars`,
   `classifier_context_chars`, escalate_*. No model IDs.
-- `plugins/model-router/plugin.yaml` — `provides_tools: [escalate_model]`.
+- `plugins/model-picker/plugin.yaml` — `provides_tools: [escalate_model]`.
 - `modules/models.nix` — `compression_ratio` / `context_length` on each named model; seeds `model_thresholds` + optional `model_overrides`.

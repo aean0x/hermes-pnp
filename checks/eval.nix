@@ -4,6 +4,7 @@
   nixpkgs,
   system,
   pkgs,
+  pluginSources,
 }:
 
 let
@@ -47,6 +48,8 @@ let
   '';
 
   baseModules = [
+    # Production wiring: the flake injects the plugins that live in their own repos.
+    { services.hermesPnP.internal.pluginSources = pluginSources; }
     self.nixosModules.default
     {
       nixpkgs.hostPlatform = system;
@@ -218,7 +221,9 @@ let
   optionsEval = evalSystem [ ];
 
   pluginRouterDefaults =
-    (builtins.fromJSON (builtins.readFile ../plugins/model-router/config.default.json)).models;
+    (builtins.fromJSON (
+      builtins.readFile (pluginSources.model-picker + "/config.default.json")
+    )).models;
 
   bestForConfig = eval [
     ../examples/composer.nix
@@ -317,7 +322,7 @@ in
     test "${
       toString (modulesConfig.services.hermes-webui.extraEnvironment ? HERMES_WEBUI_EXTENSION_DIR)
     }" = "1"
-    test "${toString (builtins.elem "model-router" modulesConfig.services.hermesPnP.plugins)}" = "1"
+    test "${toString (builtins.elem "model-picker" modulesConfig.services.hermesPnP.plugins)}" = "1"
     test "${toString (lib.hasInfix ''label = "Low"'' (builtins.readFile ../modules/plugins.nix))}" = ""
     test "$(${pkgs.jq}/bin/jq -r '.models.low.label' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "Quick"
     test "$(${pkgs.jq}/bin/jq -r '.models.default.label' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "Standard"
@@ -326,10 +331,10 @@ in
     test "$(${pkgs.jq}/bin/jq -e 'has("classify_high") | not' ${dirOf modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.json)" = "true"
     grep -q 'Pin Quick' ${modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.js
     grep -q 'Pin Expert' ${modulesConfig.services.hermesPnP.pluginInstall.webuiExtensionDir}/config.js
-    test "${toString (builtins.elem "model-router" gbrainConfig.services.hermesPnP.plugins)}" = "1"
+    test "${toString (builtins.elem "model-picker" gbrainConfig.services.hermesPnP.plugins)}" = "1"
     test "${toString (builtins.elem "gbrain-retrieval-reflex" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${toString (builtins.elem "gbrain-memory-flush" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
-    test "${toString (builtins.elem "model-router" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
+    test "${toString (builtins.elem "model-picker" gbrainConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${modulesConfig.services.hermes-agent.settings.model.default}" = "${modulesConfig.services.hermesPnP.models.default.model}"
     test "${modulesConfig.services.hermes-agent.settings.model.provider}" = "${modulesConfig.services.hermesPnP.models.default.provider}"
     test "${defaultTierLowConfig.services.hermes-agent.settings.model.default}" = "${defaultTierLowConfig.services.hermesPnP.models.low.model}"
@@ -354,7 +359,7 @@ in
     test "${toString (modulesConfig.services.hermes-agent.settings.compression.model_thresholds.${modulesConfig.services.hermesPnP.models.high.model} == 0.28)}" = "1"
     test "${toString (modulesConfig.services.hermes-agent.settings.model ? context_length)}" = ""
     test "${toString (modulesConfig.services.hermes-agent.settings ? model_overrides)}" = ""
-    test "${modulesConfig.services.hermes-agent.settings.context.engine}" = "model-router"
+    test "${modulesConfig.services.hermes-agent.settings.context.engine}" = "model-picker"
     test "${modulesConfig.services.hermes-agent.settings.browser.cdp_url}" = "http://127.0.0.1:9222"
     test "${toString (modulesConfig.services.hermes-agent.settings.browser ? engine)}" = ""
     test "${toString (modulesConfig.systemd.services ? hermes-browser)}" = "1"
@@ -560,7 +565,7 @@ in
     test "${toString dropInConfig.services.hermesPnP.enable}" = ""
     test "${toString dropInConfig.services.hermesPnP.git.credentialHelper.enable}" = ""
     test "${toString dropInConfig.services.hermes-webui.enable}" = ""
-    test "${toString (builtins.elem "model-router" dropInConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
+    test "${toString (builtins.elem "model-picker" dropInConfig.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${dropInConfig.services.hermes-agent.settings.model.default}" = "xai/grok-4"
     test "${dropAux.model or ""}" = ""
     touch "$out"
@@ -569,7 +574,7 @@ in
   options = pkgs.runCommand "hermes-pnp-options-assert" { } ''
     test "${pluginsOpt.type.name}" = "listOf"
     test "${toString (pluginsOpt ? enable)}" = ""
-    test "${toString (pluginsOpt ? modelRouter)}" = ""
+    test "${toString (pluginsOpt ? modelPicker)}" = ""
     test "${toString (optionsEval.options.services.hermesPnP ? models)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? model)}" = "1"
     test "${optionsEval.config.services.hermesPnP.model.default}" = "default"
@@ -596,7 +601,7 @@ in
     test "${toString (lib.elem "Monetary transactions or money-moving in excess of $20" optionsEval.config.services.hermesPnP.models.high.best_for)}" = "1"
     test "${toString (pluginRouterDefaults.low ? model)}" = ""
     test "${toString (pluginRouterDefaults.low ? provider)}" = ""
-    test "${toString (lib.hasInfix "classify_high" (builtins.readFile ../plugins/model-router/settings.py))}" = ""
+    test "${toString (lib.hasInfix "classify_high" (builtins.readFile (pluginSources.model-picker + "/settings.py")))}" = ""
     test "${toString (optionsEval.options.services.hermesPnP ? extraPlugins)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? extraPluginDirs)}" = "1"
     test "${toString (optionsEval.options.services.hermesPnP ? pluginInstall)}" = "1"
@@ -681,7 +686,7 @@ in
     test "${toString (lib.hasInfix "--network host" officialContainerOnly.systemd.services.hermes-webui.preStart)}" = "1"
     test "${toString (builtins.elem "hello" extraPluginUnion.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${toString (builtins.elem "nix-managed-hello" extraPluginUnion.services.hermes-agent.settings.plugins.enabled)}" = "1"
-    test "${toString (builtins.elem "model-router" extraPluginUnion.services.hermes-agent.settings.plugins.enabled)}" = "1"
+    test "${toString (builtins.elem "model-picker" extraPluginUnion.services.hermes-agent.settings.plugins.enabled)}" = "1"
     test "${toString (skillsConfig.services.hermesPnP.skills.extraSkills ? site-runbook)}" = "1"
     test "${toString (hmcConfig.services.hermesPnP.hmc.compressPercent == 0.30)}" = "1"
     test "${toString hmcConfig.services.hermesPnP.hmc.enable}" = ""

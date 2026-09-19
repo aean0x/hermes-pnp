@@ -8,6 +8,26 @@
       url = "github:nesquena/hermes-webui";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # In-house plugins, developed in their own repos and pinned here. Bump with
+    # `nix flake update hermes-<name>`. Non-flake inputs: plain source trees,
+    # the same shape the catalog used to vendor under ./plugins/<name>.
+    hermes-git-hook = {
+      url = "github:aean0x/hermes-git-hook";
+      flake = false;
+    };
+    hermes-secret-handoff = {
+      url = "github:aean0x/hermes-secret-handoff";
+      flake = false;
+    };
+    hermes-gbrain-retrieval-reflex = {
+      url = "github:aean0x/hermes-gbrain-retrieval-reflex";
+      flake = false;
+    };
+    hermes-model-picker = {
+      url = "github:aean0x/hermes-model-picker";
+      flake = false;
+    };
   };
 
   outputs =
@@ -16,6 +36,10 @@
       nixpkgs,
       hermes-agent,
       hermes-webui,
+      hermes-git-hook,
+      hermes-secret-handoff,
+      hermes-gbrain-retrieval-reflex,
+      hermes-model-picker,
     }:
     let
       inherit (nixpkgs) lib;
@@ -25,6 +49,15 @@
       ];
       forAllSystems = lib.genAttrs systems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
+
+      # Plugin name → source tree. Keys are plugin names (what
+      # services.hermesPnP.plugins takes), values are the pinned inputs.
+      externalPlugins = {
+        git-hook = hermes-git-hook;
+        secret-handoff = hermes-secret-handoff;
+        gbrain-retrieval-reflex = hermes-gbrain-retrieval-reflex;
+        model-picker = hermes-model-picker;
+      };
 
       overlay = final: _prev: {
         mcp-proxy = final.callPackage ./pkgs/mcp-proxy { };
@@ -46,6 +79,7 @@
         # Host/composer nixpkgs is a different interpreter and is stripped.
         services.hermesPnP.internal.officialPythonPackagesFor =
           system: hermes-agent.inputs.nixpkgs.legacyPackages.${system}.python312Packages;
+        services.hermesPnP.internal.pluginSources = externalPlugins;
       };
 
       homeComposer = {
@@ -58,6 +92,7 @@
         services.hermesPnP.internal.officialAgentSrc = hermes-agent.outPath;
         services.hermesPnP.internal.officialPythonPackagesFor =
           system: hermes-agent.inputs.nixpkgs.legacyPackages.${system}.python312Packages;
+        services.hermesPnP.internal.pluginSources = externalPlugins;
       };
     in
     {
@@ -66,7 +101,7 @@
         forPkgs = pkgs: import ./lib { inherit pkgs lib; };
       };
 
-      plugins = import ./plugins/catalog.nix;
+      plugins = import ./plugins/catalog.nix // externalPlugins;
       skills = import ./skills/catalog.nix;
 
       nixosModules.default = composer;
@@ -101,6 +136,7 @@
         import ./checks {
           inherit self nixpkgs system hermes-agent;
           pkgs = pkgsFor system;
+          pluginSources = externalPlugins;
         }
       );
 

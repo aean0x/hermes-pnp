@@ -159,7 +159,7 @@ the official option PnP set via `mkDefault`.
   `environmentFiles`. Key list: `docs/hermes.env.example`.
 - `services.hermesPnP.models.{low,default,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Router tiers also have `best_for` (classifier matrix; plugin JSON defaults). Auxiliary is Nix-only; effort unset except auxiliary (`"none"`).
 - `services.hermesPnP.plugins` — `listOf str`. Composer on defaults
-  via `mkDefault` to model-router, tool-call-coherency, secret-handoff.
+  via `mkDefault` to model-picker, tool-call-coherency, secret-handoff.
 - `services.hermesPnP.extraPluginDirs` — `attrsOf path` beside the catalog
   (`extraPlugins` is a renamed alias). Distinct from official
   `services.hermes-agent.extraPlugins`.
@@ -302,7 +302,7 @@ default `"default"`; `"medium"` is a deprecated alias) picks which tier seeds
 When `hermesPnP.enable` (`modules/models.nix`):
 
 - `settings.model.{provider,default}` ← `models.${model.default}` (default tier `default`). No global `context_length`.
-- `settings.context.engine` ← `model-router` (handoff compaction on escalate)
+- `settings.context.engine` ← `model-picker` (handoff compaction on escalate)
 - `settings.compression.model_thresholds.<model>` ← each name's `compression_ratio`
 - `settings.model_overrides` ← only when `models.<name>.context_length` is set
 - `settings.fallback_model.{provider,model}` ← high
@@ -323,7 +323,7 @@ vision, tts, moa, or goal_judge.
 wins via `recursiveUpdate`. Consumers assign official
 `services.hermes-agent.settings.*` after importing PnP.
 
-When `model-router` is in `plugins`, the installer writes `config.json`
+When `model-picker` is in `plugins`, the installer writes `config.json`
 + `webui/config.js` from the same `models` block, including each
 tier's `best_for` list (classifier matrix; a short prefer-low steer
 block is generated with it).
@@ -342,15 +342,19 @@ Client rebuilds that pair the live provider with the previous API host
 
 ## Plugins
 
-Catalog is the SoT (`plugins/catalog.nix`). Add a plugin: drop
-`plugins/<name>/`, add one catalog line. Skills follow the same
-pattern (`skills/catalog.nix`: `browser`, `retrieval-reflex`,
+Catalog is the SoT (`plugins/catalog.nix`). A plugin enters one of two
+ways: drop a tree in `plugins/<name>/` and add one catalog line, or pin
+the upstream repo as a flake input and list it in
+`internal.pluginSources`. Skills follow the same pattern
+(`skills/catalog.nix`: `browser`, `retrieval-reflex`,
 `gbrain-http-auth`; consumer trees via `skills.extraSkills`).
 
-First-party: `model-router`, `tool-call-coherency`,
-`gbrain-retrieval-reflex`, `gbrain-memory-flush`, `secret-handoff`,
-`git-hook` (ff-only pull on first read of a clean worktree; end of
-turn commits this turn's porcelain delta and pushes).
+Flake-input first-party, each pinned to a release commit:
+`model-picker`, `secret-handoff`, `git-hook`,
+`gbrain-retrieval-reflex`. Vendored first-party:
+`tool-call-coherency`, `gbrain-memory-flush`, `docindex`. `git-hook`
+ff-only pulls on the first read of a clean worktree; end of turn it
+commits this turn's porcelain delta and pushes.
 
 - Empty `plugins` and no `extraPluginDirs` → no plugin files.
 - Materialize to `$stateDir/plugins/<name>`.
@@ -602,7 +606,7 @@ this host). Jail entrypoint `umask 0077`; host unit `UMask=0077`.
 - `checks.${system}.modules` — composer on, dummy packages
 - `checks.${system}.drop-in` — composer off, official-only options
 - `checks.${system}.options` — user-facing option paths; no
-  `plugins.enable` / `plugins.modelRouter`; composer seeds
+  `plugins.enable` / `plugins.modelPicker`; composer seeds
   `settings.auxiliary.triage_specifier.model` from `models.auxiliary` and
   `settings.model.default` from `models.${model.default}` (default `default`)
 - `checks.${system}.examples` — NixOS files in `examples/`

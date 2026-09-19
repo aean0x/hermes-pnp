@@ -45,6 +45,70 @@
         "type": "github"
       }
     },
+    "hermes-gbrain-retrieval-reflex": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789718786,
+        "narHash": "sha256-TNq8B0axs+o5dzX9XTKCLO6LTwHCUj3ObAb+6XZYYyE=",
+        "owner": "aean0x",
+        "repo": "hermes-gbrain-retrieval-reflex",
+        "rev": "d54ae4b80463ce7ec9d6a7919cbe4cce13bd89d4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aean0x",
+        "repo": "hermes-gbrain-retrieval-reflex",
+        "type": "github"
+      }
+    },
+    "hermes-git-hook": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789642685,
+        "narHash": "sha256-1NbNFtInSytVu7XCaA9X9f/eNJ1OvTjeG5Qm3chDjZg=",
+        "owner": "aean0x",
+        "repo": "hermes-git-hook",
+        "rev": "6d5607ced4f38660541281a43431954dfb2fdfb8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aean0x",
+        "repo": "hermes-git-hook",
+        "type": "github"
+      }
+    },
+    "hermes-model-picker": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789718879,
+        "narHash": "sha256-R61S9zuqaPggwQX2mzrib3kZD0L3SxB6KmRnkjW6Oe8=",
+        "owner": "aean0x",
+        "repo": "hermes-model-picker",
+        "rev": "04a23c809d550ecb0a69749927b803e9250da656",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aean0x",
+        "repo": "hermes-model-picker",
+        "type": "github"
+      }
+    },
+    "hermes-secret-handoff": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789718782,
+        "narHash": "sha256-yRfsgN60IeJVZNSOidHKadXGBNk6NW60klX7qLsv/AA=",
+        "owner": "aean0x",
+        "repo": "hermes-secret-handoff",
+        "rev": "2c7810b8795dfeb7d3fee53ca564fe06ae415a4e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aean0x",
+        "repo": "hermes-secret-handoff",
+        "type": "github"
+      }
+    },
     "hermes-webui": {
       "inputs": {
         "nixpkgs": [
@@ -192,6 +256,10 @@
     "root": {
       "inputs": {
         "hermes-agent": "hermes-agent",
+        "hermes-gbrain-retrieval-reflex": "hermes-gbrain-retrieval-reflex",
+        "hermes-git-hook": "hermes-git-hook",
+        "hermes-model-picker": "hermes-model-picker",
+        "hermes-secret-handoff": "hermes-secret-handoff",
         "hermes-webui": "hermes-webui",
         "nixpkgs": "nixpkgs_2"
       }
