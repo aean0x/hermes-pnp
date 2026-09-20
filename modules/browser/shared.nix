@@ -151,6 +151,12 @@ let
     done
   '';
 
+  # One switch, one occurrence: duplicate --disable-features occurrences are not
+  # merged reliably, so every feature to disable belongs in the single list in
+  # chromiumExec below. BackForwardCache is here because it keeps a whole
+  # document alive per tab that the agent has already moved on from. Comment
+  # lines stay outside the backslash-continued command: a '#' inside the
+  # continuation ends it and the next flag would run as its own command.
   chromiumExec = ''
     export FONTCONFIG_FILE=${fontconfigFile}
     ${browserBin} \
@@ -166,7 +172,7 @@ let
       --disable-gpu \
       --password-store=basic \
       --window-size=1400,900 \
-      --disable-features=TranslateUI \
+      --disable-features=TranslateUI,BackForwardCache \
       ${lib.concatStringsSep " " cfg.extraArgs}
   '';
 in
