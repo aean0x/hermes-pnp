@@ -4,4 +4,5 @@
   tool-call-coherency = ./tool-call-coherency;
   gbrain-memory-flush = ./gbrain-memory-flush;
   docindex = ./docindex;
+  browser-lease = ./browser-lease;
 }
