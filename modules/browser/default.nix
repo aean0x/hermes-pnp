@@ -307,7 +307,10 @@ in
       type = types.nullOr types.ints.positive;
       default = 5;
       description = ''
-        Cap live page targets via --renderer-process-limit. Null
+        Cap concurrent renderer processes via
+        --renderer-process-limit. That flag bounds renderer processes,
+        not page targets: Chromium reuses an existing renderer past the
+        limit, so several tabs can still share one process. Null
         disables. Agent browsers do not need a human tab pile.
       '';
     };
