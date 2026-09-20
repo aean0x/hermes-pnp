@@ -1,7 +1,8 @@
 # Allowlisted host helper. Jails cannot sudo (no-new-privileges)
 # and must not get the docker socket. A unix socket owned by the
 # hermes group is the only extra privilege: status / restart /
-# reset-failed of named units. Nothing else.
+# reset-failed of named units, plus read-only container stats for
+# those same names. Nothing else.
 {
   config,
   lib,
@@ -27,11 +28,22 @@ let
 
   unitPattern = lib.concatStringsSep "|" cfg.units;
 
+  # Container stats come from the backend CLI, addressed by the unit name: the
+  # jail names in this repo are the container names (hermes-agent,
+  # hermes-webui, hermes-browser).
+  containerCmd =
+    if pnp.container.backend == "podman" then
+      "${pkgs.podman}/bin/podman"
+    else
+      "${pkgs.docker}/bin/docker";
+  containerPkg = if pnp.container.backend == "podman" then pkgs.podman else pkgs.docker;
+
   server = pkgs.writeShellApplication {
     name = "hermes-admin-server";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.systemd
+      containerPkg
     ];
     text = ''
       set -euo pipefail
@@ -40,14 +52,21 @@ let
 
       IFS= read -r line || exit 0
       # One line, two tokens, allowlist only. Never eval.
-      if [[ ! "$line" =~ ^(status|restart|reset-failed)[[:space:]]+(${unitPattern})(\.service)?$ ]]; then
+      if [[ ! "$line" =~ ^(status|restart|reset-failed|stats)[[:space:]]+(${unitPattern})(\.service)?$ ]]; then
         echo "denied" >&2
         exit 1
       fi
       verb="''${BASH_REMATCH[1]}"
       unit="''${BASH_REMATCH[2]}"
 
-      if [[ "$verb" == "restart" ]]; then
+      if [[ "$verb" == "stats" ]]; then
+        # Read-only, one container, fixed format: the unit name is matched
+        # against the allowlist above, so no caller-supplied name reaches
+        # the backend, and no other subcommand is reachable.
+        ${containerCmd} stats --no-stream \
+          --format '{{.Name}} mem={{.MemUsage}} ({{.MemPerc}}) cpu={{.CPUPerc}}' \
+          "$unit"
+      elif [[ "$verb" == "restart" ]]; then
         now=$(date +%s)
         stamp="$stampdir/last-$unit"
         if [[ -f "$stamp" ]]; then
@@ -73,7 +92,7 @@ let
       set -euo pipefail
       sock="''${HERMES_ADMIN_SOCKET:-${socketPath}}"
       usage() {
-        echo "usage: hermes-admin status|restart|reset-failed UNIT" >&2
+        echo "usage: hermes-admin status|restart|reset-failed|stats UNIT" >&2
         echo "units: ${lib.concatStringsSep " " cfg.units}" >&2
         exit 2
       }
@@ -90,8 +109,11 @@ in
   options.services.hermesPnP.admin = {
     enable = mkEnableOption ''
       Host unix-socket helper so the hermes user (host or jail) can
-      status/restart/reset-failed a fixed unit list. Not sudo. Not
-      the docker socket. Off by default.
+      status/restart/reset-failed a fixed unit list, plus read-only
+      container stats for those same units. The stats verb needs the
+      backend CLI on the host: it is a read-only `stats --no-stream`
+      call for one allowlisted name, still not the docker socket and
+      still not sudo. Off by default.
     '';
 
     units = mkOption {
