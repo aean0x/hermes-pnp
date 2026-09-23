@@ -11,14 +11,16 @@ Models frequently:
    (``{"calls": [{"arguments": {…}, {"name": "mcp__…"}]}``). Upstream
    ``_repair_tool_call_arguments`` gives up on every one of these and substitutes ``{}``,
    which drops the call and forces a full regeneration.
-5. Omit ``calls[i].name`` entirely, or split one call across two array entries
-   (``{"calls": [{"arguments": {…}}, {"name": "mcp__…"}]}``) — the *name* is the model's
-   one piece of boilerplate it skips; the arguments it gets right.
+5. Omit ``calls[i].name`` entirely, split one call across two array entries
+   (``{"calls": [{"arguments": {…}}, {"name": "mcp__…"}]}``), or hoist the name to the top
+   level beside the batch (``{"calls": [{"arguments": {…}}], "name": "mcp__…"}``) — the
+   *name* is the model's one piece of boilerplate it skips; the arguments it gets right.
 
 Upstream resolve_underlying_call hard-errors on (1) and (2). This plugin monkeypatches
 the resolver + session scope set so those become transparent redispatches, extends the
-argument repairer for (4), and restores a dropped name or a split entry for (5) from the
-argument signature. No capability expansion beyond tools already in the session.
+argument repairer for (4), and restores a dropped, split or hoisted name for (5) from the
+hoisted key or the argument signature. No capability expansion beyond tools already in the
+session.
 """
 from __future__ import annotations
 
@@ -215,15 +217,29 @@ def structural_repair(raw_args: Any) -> Optional[str]:
 
 # ------------------------------------------------------------------- (5) dropped call name
 
+def _schema_parameters(schema: Any) -> Optional[Dict[str, Any]]:
+    """``parameters`` object from either registry schema shape.
+
+    A schema the MCP client registers is a **flat** dict — ``{"name", "description",
+    "parameters"}`` — while bridge fixtures and provider-facing definitions wrap it as
+    ``{"type": "function", "function": {...}}``. Reading only the wrapper is what kept the
+    name recall below dead against every real MCP tool.
+    """
+    if not isinstance(schema, dict):
+        return None
+    fn = schema.get("function") if schema.get("type") == "function" else schema
+    params = (fn or {}).get("parameters") if isinstance(fn, dict) else None
+    return params if isinstance(params, dict) else None
+
+
 def _signature_matches(keys: frozenset, schema: Any) -> bool:
     """True when an argument-key set is exactly legal for ``schema``.
 
     Strict on purpose: every key must be a declared property and every required property
     must be present. A partial match is not evidence of intent.
     """
-    fn = (schema or {}).get("function") if isinstance(schema, dict) else None
-    params = (fn or {}).get("parameters") if isinstance(fn, dict) else None
-    if not isinstance(params, dict):
+    params = _schema_parameters(schema)
+    if params is None:
         return False
     props, required = params.get("properties"), params.get("required")
     if not isinstance(props, dict) or not isinstance(required, list) or not required:
@@ -301,6 +317,42 @@ def _merge_split_entry(calls: List[Any]) -> int:
     return 1
 
 
+_BRIDGE_NAMES = frozenset({"tool_call", "tool_describe", "tool_search"})
+
+
+def _bridge_names() -> frozenset:
+    """Bridge tool names — from the live module when this runs inside hermes-agent."""
+    try:
+        from tools.tool_search import BRIDGE_TOOL_NAMES
+
+        return frozenset(BRIDGE_TOOL_NAMES)
+    except Exception:
+        return _BRIDGE_NAMES
+
+
+def _hoist_top_level_name(args: Dict[str, Any], calls: List[Any]) -> int:
+    """Name a lone nameless entry from a ``name`` the model hoisted to the top level.
+
+    The emission this heals (real, one per retry until it heals): the *legacy* single
+    shape's ``name`` beside the *batch* shape's ``calls`` — ``{"calls": [{"arguments":
+    {…}}], "name": "mcp__…"}``. Only a single entry is healed; with two, the hoisted name
+    belongs to neither of them.
+    """
+    if len(calls) != 1 or not isinstance(calls[0], dict):
+        return 0
+    entry = calls[0]
+    if str(entry.get("name") or "").strip() or not isinstance(entry.get("arguments"), dict):
+        return 0
+    for key in ("name", "tool", "tool_name"):
+        name = args.get(key)
+        if not isinstance(name, str) or not name.strip() or name.strip() in _bridge_names():
+            continue
+        entry["name"] = name.strip()
+        log.warning("tool-call-coherency: hoisted top-level name into calls[0]: %r", entry["name"])
+        return 1
+    return 0
+
+
 def _note(stat: str, count: int, template: str = "") -> None:
     """Record one heal: always in the stats table, in the log only when a template is given.
 
@@ -322,7 +374,8 @@ def heal_bridge_entries(args: Dict[str, Any]) -> int:
         args["calls"] = calls
     if not isinstance(calls, list) or not calls:
         return 0
-    return _merge_split_entry(calls) + _fill_missing_names(calls)
+    return (_hoist_top_level_name(args, calls) + _merge_split_entry(calls)
+            + _fill_missing_names(calls))
 
 
 # ------------------------------------------------------------------------------ arg repair
@@ -336,6 +389,23 @@ def _parse_args_blob(raw: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return {}
     return raw if isinstance(raw, dict) else {}
+
+
+def _call_args(cleaned: Dict[str, Any]) -> Dict[str, Any]:
+    """Arguments for the mcp-prefix / core-via-bridge fallback branches.
+
+    The legacy single shape carries them at the top level; the batch shape carries them in
+    its lone ``calls`` entry. Returning ``{}`` for a batch shape (the old behaviour)
+    fabricated an argument-less call, so the deferred-schema probe rejected it with a
+    required-argument error that hid the real defect — a missing entry ``name``.
+    """
+    top = _parse_args_blob(cleaned["arguments"] if "arguments" in cleaned else cleaned.get("args"))
+    if top:
+        return top
+    calls = cleaned.get("calls")
+    if isinstance(calls, list) and len(calls) == 1 and isinstance(calls[0], dict):
+        return _parse_args_blob(calls[0].get("arguments"))
+    return top
 
 
 def _skill_roots() -> list[Path]:
@@ -502,9 +572,7 @@ def _install_patches() -> None:
         else:
             name = ""
 
-        raw_args = _parse_args_blob(
-            cleaned["arguments"] if "arguments" in cleaned else cleaned.get("args")
-        )
+        raw_args = _call_args(cleaned)
 
         # Skill-as-tool → skill_view
         if name and name not in bridge and _is_known_skill(name):
