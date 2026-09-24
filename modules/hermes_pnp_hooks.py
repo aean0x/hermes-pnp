@@ -251,15 +251,19 @@ def _wrap_context_from(mod: Any) -> None:
         answer = orig(archive)
         if answer is None:
             return None
-        failure = _archive_failure(archive)
-        run_at = _archive_run_time(archive)
-        if run_at is None:
-            # An error document with no run date cannot be dated or bounded: never an answer.
-            return None if failure else answer
-        age = _archive_age_seconds(run_at)
-        if failure and age > _failure_max_age_seconds():
-            return None  # stale failure - the walk continues to an older usable archive
-        return f"{_archive_label(run_at, age, failure)}\n{answer}"
+        try:
+            failure = _archive_failure(archive)
+            run_at = _archive_run_time(archive)
+            if run_at is None:
+                # An undated error document cannot be bounded or dated: never an answer.
+                return None if failure else answer
+            age = _archive_age_seconds(run_at)
+            if failure and age > _failure_max_age_seconds():
+                return None  # stale failure - the walk continues to an older usable archive
+            return f"{_archive_label(run_at, age, failure)}\n{answer}"
+        except Exception:
+            # Label or bound only; a failure here must never cost the run its upstream answer.
+            return answer
 
     mod._archive_answer = archive_answer
     mod._UPSTREAM_CONTEXT_INTRO = _UPSTREAM_CONTEXT_INTRO
