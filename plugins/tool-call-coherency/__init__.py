@@ -15,12 +15,17 @@ Models frequently:
    (``{"calls": [{"arguments": {…}}, {"name": "mcp__…"}]}``), or hoist the name to the top
    level beside the batch (``{"calls": [{"arguments": {…}}], "name": "mcp__…"}``) — the
    *name* is the model's one piece of boilerplate it skips; the arguments it gets right.
+6. Name the underlying Composio sub-tool in Composio's own key instead of ``name``
+   (``{"calls": [{"arguments": {…}, "tool_slug": "GMAIL_FETCH_EMAILS"}]}``), or write the
+   single-call shape one level too deep inside the entry's ``arguments``
+   (``{"calls": [{"arguments": {"arguments": {…}, "name": "mcp__composio__…"}}]}``). The
+   resolver sees no name, and the argument keys fit a *Composio sub-tool* the registry
+   never registers, so signature recall has nothing to match.
 
 Upstream resolve_underlying_call hard-errors on (1) and (2). This plugin monkeypatches
 the resolver + session scope set so those become transparent redispatches, extends the
-argument repairer for (4), and restores a dropped, split or hoisted name for (5) from the
-hoisted key or the argument signature. No capability expansion beyond tools already in the
-session.
+argument repairer for (4), and restores a dropped, split, hoisted or Composio-keyed name
+for (5) and (6). No capability expansion beyond tools already in the session.
 """
 from __future__ import annotations
 
@@ -249,6 +254,21 @@ def _signature_matches(keys: frozenset, schema: Any) -> bool:
     return all(isinstance(r, str) and r in keys for r in required)
 
 
+def _nonempty_str(value: Any) -> bool:
+    """True for a string that survives ``.strip()``."""
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _deferred_names() -> frozenset:
+    """Names the live registry exposes; empty when it cannot be read (offline tests)."""
+    try:
+        from tools.registry import registry
+
+        return frozenset(registry.get_all_tool_names() or ())
+    except Exception:
+        return frozenset()
+
+
 @lru_cache(maxsize=256)
 def _infer_deferred_name(key_tuple: Tuple[str, ...]) -> Optional[str]:
     """The one deferred (``mcp__*``) tool whose schema exactly fits ``key_tuple``, else None.
@@ -257,12 +277,11 @@ def _infer_deferred_name(key_tuple: Tuple[str, ...]) -> Optional[str]:
     deferred surface — a nameless *core*-tool call is a different failure mode, and the
     model reads the core tools off its own tool list.
     """
-    try:
-        from tools.registry import registry
-
-        names = registry.get_all_tool_names()
-    except Exception:
+    names = _deferred_names()
+    if not names:
         return None
+    from tools.registry import registry
+
     keys = frozenset(key_tuple)
     match: Optional[str] = None
     for name in names:
@@ -353,6 +372,98 @@ def _hoist_top_level_name(args: Dict[str, Any], calls: List[Any]) -> int:
     return 0
 
 
+# ------------------------------------------------------------ (6) Composio-keyed entry
+
+# Composio's own sub-tool key. Only COMPOSIO_MULTI_EXECUTE_TOOL takes a ``tool_slug`` with
+# the sub-tool's ``arguments`` (GET_TOOL_SCHEMAS takes plural ``tool_slugs``, the workbench
+# takes code, SEARCH_TOOLS takes queries), so a slug plus arguments names one tool.
+_COMPOSIO_BATCH_TOOL = "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL"
+
+
+def _composio_sub_call(entry: Any) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """``(tool_slug, arguments)`` when an entry states its tool only in Composio's key.
+
+    Two real emissions of the same mistake: the slug beside the arguments
+    (``{"arguments": {…}, "tool_slug": "GMAIL_FETCH_EMAILS"}``), and the slug with the
+    whole single-call shape nested one level down inside ``arguments``
+    (``{"arguments": {"arguments": {…}, "tool_slug": "OUTLOOK_GET_CALENDAR_VIEW"}}``).
+    Both are matched on an exact key set: a stray ``tool_slug`` is not evidence.
+    """
+    if not isinstance(entry, dict) or _nonempty_str(entry.get("name")):
+        return None
+    arguments = entry.get("arguments")
+    if not isinstance(arguments, dict) or not arguments:
+        return None
+    slug = entry.get("tool_slug")
+    if set(entry) == {"arguments", "tool_slug"} and _nonempty_str(slug):
+        return str(slug).strip(), arguments
+    if set(entry) == {"arguments"} and set(arguments) == {"arguments", "tool_slug"}:
+        inner, nested_slug = arguments.get("arguments"), arguments.get("tool_slug")
+        if _nonempty_str(nested_slug) and isinstance(inner, dict) and inner:
+            return str(nested_slug).strip(), inner
+    return None
+
+
+def _composio_tools(calls: List[Any]) -> Optional[List[Dict[str, Any]]]:
+    """The ``tools`` payload for a fully Composio-keyed batch, else None."""
+    tools: List[Dict[str, Any]] = []
+    for entry in calls:
+        pair = _composio_sub_call(entry)
+        if pair is None:
+            return None
+        tools.append({"tool_slug": pair[0], "arguments": pair[1]})
+    return tools
+
+
+def _wrap_composio_batch(args: Dict[str, Any], calls: List[Any]) -> int:
+    """Rebuild a name-less Composio batch as the one bridge call that carries ``tool_slug``.
+
+    Refuses on any entry it cannot name, on a batch that already names one, and when the
+    batch tool is not in this session: the heal never invents a capability.
+    """
+    if not calls or any(not isinstance(e, dict) or _nonempty_str(e.get("name")) for e in calls):
+        return 0
+    tools = _composio_tools(calls)
+    if tools is None or _COMPOSIO_BATCH_TOOL not in _deferred_names():
+        return 0
+    args["calls"] = [{
+        "name": _COMPOSIO_BATCH_TOOL,
+        "arguments": {"tools": tools, "sync_response_to_workbench": False},
+    }]
+    log.warning("tool-call-coherency: wrapped %d Composio sub-call(s) into %s",
+                len(tools), _COMPOSIO_BATCH_TOOL)
+    return 1
+
+
+def _hoist_nested_name(calls: List[Any]) -> int:
+    """Name an entry whose name *and* arguments were nested inside its own ``arguments``.
+
+    Real emission (inbox-triage, 2026-09-25): ``{"calls": [{"arguments": {"arguments": {…},
+    "name": "mcp__composio__COMPOSIO_SEARCH_TOOLS"}}]}`` — the legacy single shape written
+    one level too deep, so the entry carried no name and the call was dropped.
+    """
+    healed = 0
+    for entry in calls:
+        if not isinstance(entry, dict) or _nonempty_str(entry.get("name")):
+            continue
+        if set(entry) != {"arguments"}:
+            continue
+        inner = entry.get("arguments")
+        if not isinstance(inner, dict) or set(inner) != {"arguments", "name"}:
+            continue
+        name = str(inner.get("name") or "").strip()
+        inner_args = inner.get("arguments")
+        if not name or name in _bridge_names():
+            continue
+        if not isinstance(inner_args, dict) or not inner_args:
+            continue
+        entry["name"] = name
+        entry["arguments"] = inner_args
+        healed += 1
+        log.warning("tool-call-coherency: hoisted a name nested inside arguments: %r", name)
+    return healed
+
+
 def _note(stat: str, count: int, template: str = "") -> None:
     """Record one heal: always in the stats table, in the log only when a template is given.
 
@@ -375,6 +486,7 @@ def heal_bridge_entries(args: Dict[str, Any]) -> int:
     if not isinstance(calls, list) or not calls:
         return 0
     return (_hoist_top_level_name(args, calls) + _merge_split_entry(calls)
+            + _hoist_nested_name(calls) + _wrap_composio_batch(args, calls)
             + _fill_missing_names(calls))
 
 
