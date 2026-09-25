@@ -70,6 +70,42 @@ HOISTED_WORKBENCH = {"calls": [{"arguments": {
     "current_step": "PARSING_RESULTS", "thought": "Dump all Gmail, Outlook and calendar rows"}}],
     "name": "mcp__composio__COMPOSIO_REMOTE_WORKBENCH"}
 
+# (6) The 2026-09-24/25 emissions, verbatim in structure from state.db — the payload shape the
+# resolver saw. Mailbox, calendar id and query strings are replaced with placeholders.
+# msg 302769 tc0 (trello-reconcile 16:31:11Z): the sub-tool slug beside the arguments,
+# rejected with "tool_call calls[0] requires a 'name'".
+SLUG_ENTRY = {"calls": [{"arguments": {
+    "query": "in:anywhere newer_than:7d (invoice OR receipt)",
+    "max_results": 25, "include_payload": False, "verbose": False},
+    "tool_slug": "GMAIL_FETCH_EMAILS"}]}
+# msg 304327 tc1 (inbox-triage 04:02:18Z): name *and* arguments nested inside `arguments`.
+NESTED_NAME_ENTRY = {"calls": [{"arguments": {
+    "arguments": {"limit": 3, "queries": [{
+        "known_fields": "username: aean0x",
+        "use_case": "fetch recent posts from the authenticated X account timeline"}]},
+    "name": "mcp__composio__COMPOSIO_SEARCH_TOOLS"}}]}
+# msg 304312 tc1 (inbox-triage 04:00:55Z): two sub-calls, each nested the same way.
+NESTED_SLUG_BATCH = {"calls": [
+    {"arguments": {"arguments": {
+        "calendar_id": "AAMkAGI2AAAACOMPOSIOFIXTURECALENDARID0000",
+        "end_datetime": "2026-11-20T00:00:00+01:00", "orderby": "start/dateTime asc",
+        "select": ["id", "subject", "start", "end", "isAllDay", "isReminderOn",
+                   "reminderMinutesBeforeStart", "showAs"],
+        "start_datetime": "2026-10-25T00:00:00+02:00", "top": 100, "user_id": "user@example.com"},
+        "tool_slug": "OUTLOOK_GET_CALENDAR_VIEW"}},
+    {"arguments": {"arguments": {
+        "end_datetime": "2026-10-02T00:00:00+02:00", "orderby": "start/dateTime asc",
+        "select": ["id", "subject", "start", "end", "isAllDay", "isReminderOn",
+                   "reminderMinutesBeforeStart"],
+        "start_datetime": "2026-09-25T00:00:00+02:00", "top": 100, "user_id": "user@example.com"},
+        "tool_slug": "OUTLOOK_GET_CALENDAR_VIEW"}}]}
+SEARCH_TOOLS_FLAT = {
+    "name": "mcp__composio__COMPOSIO_SEARCH_TOOLS",
+    "description": "[authed via proxy] search Composio tools",
+    "parameters": {"type": "object", "properties": {
+        "queries": {"type": "array"}, "limit": {"type": "integer"}},
+        "required": ["queries"]}}
+
 
 def _schema_name(schema):
     """Tool name from either registry schema shape (flat MCP registration or wrapped)."""
@@ -345,6 +381,87 @@ class TestHoistedName(_RegistryCase):
         self.assertEqual(args["arguments"], {"code_to_execute": "print(1)"})
 
 
+class TestComposioKeyedEntry(_RegistryCase):
+    """(6) the Composio-keyed entry: the sub-tool name is in Composio's key, not ``name``.
+
+    The variants are the real state.db payloads above. Signature recall cannot name any of
+    them (the arguments fit a Composio *sub-tool* the registry never registers), so before
+    this heal each one was dropped with "calls[0] requires a 'name'".
+    """
+
+    def test_slug_beside_the_arguments_is_wrapped(self):
+        self._registry(MULTI_EXECUTE)
+        args = json.loads(json.dumps(SLUG_ENTRY))
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        entry = args["calls"][0]
+        self.assertEqual(entry["name"], "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL")
+        self.assertEqual(entry["arguments"]["tools"], [{
+            "tool_slug": "GMAIL_FETCH_EMAILS",
+            "arguments": SLUG_ENTRY["calls"][0]["arguments"]}])
+        self.assertIs(entry["arguments"]["sync_response_to_workbench"], False)
+
+    def test_two_nested_slug_entries_wrap_into_one_batch(self):
+        self._registry(MULTI_EXECUTE)
+        args = json.loads(json.dumps(NESTED_SLUG_BATCH))
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        self.assertEqual(len(args["calls"]), 1)
+        tools = args["calls"][0]["arguments"]["tools"]
+        self.assertEqual([t["tool_slug"] for t in tools],
+                         ["OUTLOOK_GET_CALENDAR_VIEW", "OUTLOOK_GET_CALENDAR_VIEW"])
+        self.assertEqual(tools[0]["arguments"], NESTED_SLUG_BATCH["calls"][0]["arguments"]["arguments"])
+        self.assertEqual(tools[1]["arguments"], NESTED_SLUG_BATCH["calls"][1]["arguments"]["arguments"])
+
+    def test_nested_name_is_hoisted_with_its_arguments(self):
+        self._registry(MULTI_EXECUTE, SEARCH_TOOLS_FLAT)
+        args = json.loads(json.dumps(NESTED_NAME_ENTRY))
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        self.assertEqual(args["calls"][0], {
+            "name": "mcp__composio__COMPOSIO_SEARCH_TOOLS",
+            "arguments": NESTED_NAME_ENTRY["calls"][0]["arguments"]["arguments"]})
+
+    def test_wrap_is_refused_when_the_batch_tool_is_absent(self):
+        """No COMPOSIO_MULTI_EXECUTE_TOOL in this session: the heal must not invent it."""
+        self._registry(SEARCH_TOOLS_FLAT, WORKBENCH_FLAT)
+        args = json.loads(json.dumps(SLUG_ENTRY))
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertNotIn("name", args["calls"][0])
+
+    def test_a_batch_that_already_names_an_entry_is_untouched(self):
+        self._registry(MULTI_EXECUTE, GET_PAGE)
+        nameless = {"arguments": {"zqx": 1}, "tool_slug": "SOME_UPSTREAM_TOOL"}
+        args = {"calls": [{"name": "mcp__gbrain__get_page", "arguments": {"slug": "a"}},
+                          json.loads(json.dumps(nameless))]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertEqual(args["calls"][1], nameless)
+
+    def test_a_stray_slug_is_not_evidence(self):
+        """The key set is exact: a slug beside anything else is not a Composio sub-call."""
+        self._registry(MULTI_EXECUTE)
+        args = {"calls": [{"arguments": {"zqx": 1}, "tool_slug": "X",
+                           "thought": "t"}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertNotIn("name", args["calls"][0])
+
+    def test_a_slug_without_arguments_is_refused(self):
+        self._registry(MULTI_EXECUTE)
+        args = {"calls": [{"arguments": {}, "tool_slug": "X"}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+
+    def test_a_nested_bridge_name_is_never_hoisted(self):
+        self._registry(MULTI_EXECUTE)
+        args = {"calls": [{"arguments": {"arguments": {"zqx": 1}, "name": "tool_call"}}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertNotIn("name", args["calls"][0])
+
+    def test_an_entry_that_names_itself_is_untouched(self):
+        """The legacy single shape written correctly stays exactly as it arrived."""
+        self._registry(MULTI_EXECUTE)
+        args = {"calls": [{"name": "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+                           "arguments": {"tools": [], "sync_response_to_workbench": False}}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertEqual(args["calls"][0]["arguments"], {"tools": [], "sync_response_to_workbench": False})
+
+
 class TestFallbackArgs(unittest.TestCase):
     """The mcp-prefix / core-via-bridge fallback must not fabricate an empty call."""
 
@@ -364,7 +481,7 @@ class TestFallbackArgs(unittest.TestCase):
 
 
 class TestEndToEndWorkbenchCall(unittest.TestCase):
-    """The real payload through the patched resolver and the deferred-schema probe.
+    """The real payloads through the patched resolver and the deferred-schema probe.
 
     Skips when the hermes package is unavailable (the flake check has no hermes).
     """
@@ -416,6 +533,33 @@ class TestEndToEndWorkbenchCall(unittest.TestCase):
             {"calls": [{"arguments": {"code_to_execute": "print(1)"}}]})
         self.assertIsNotNone(err)
         self.assertIn("requires a 'name'", err)
+
+    def test_composio_slug_payload_fails_untreated_and_dispatches_after_the_heal(self):
+        """The 09-24 trello-reconcile emission: byte-identical error before, dispatch after."""
+        ts, tsv = self._hermes_modules()
+        self._fake_registry(MULTI_EXECUTE)
+        entries, err = tsv.normalize_tool_call_entries(json.loads(json.dumps(SLUG_ENTRY)))
+        self.assertEqual(entries, [])
+        self.assertEqual(err, "tool_call calls[0] requires a 'name'")
+        name, resolved, err = ts.resolve_underlying_call(json.loads(json.dumps(SLUG_ENTRY)))
+        self.assertIsNone(err)
+        self.assertEqual(name, "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL")
+        self.assertEqual(resolved["tools"][0]["tool_slug"], "GMAIL_FETCH_EMAILS")
+        self.assertIsNone(tsv.validate_deferred_call_args(name, resolved))
+
+    def test_nested_composio_name_payload_dispatches_after_the_heal(self):
+        """The 09-25 inbox-triage emission: the name nested in `arguments` reaches the tool."""
+        ts, tsv = self._hermes_modules()
+        self._fake_registry(SEARCH_TOOLS_FLAT, MULTI_EXECUTE)
+        entries, err = tsv.normalize_tool_call_entries(json.loads(json.dumps(NESTED_NAME_ENTRY)))
+        self.assertEqual(entries, [])
+        self.assertEqual(err, "tool_call calls[0] requires a 'name'")
+        name, resolved, err = ts.resolve_underlying_call(json.loads(json.dumps(NESTED_NAME_ENTRY)))
+        self.assertIsNone(err)
+        self.assertEqual(name, "mcp__composio__COMPOSIO_SEARCH_TOOLS")
+        self.assertEqual(resolved["limit"],
+                         NESTED_NAME_ENTRY["calls"][0]["arguments"]["arguments"]["limit"])
+        self.assertIsNone(tsv.validate_deferred_call_args(name, resolved))
 
 
 if __name__ == "__main__":

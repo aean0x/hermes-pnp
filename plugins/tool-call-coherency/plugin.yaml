@@ -1,11 +1,12 @@
 name: tool-call-coherency
-version: 0.2.1
+version: 0.2.2
 description: >
   Auto-heal misrouted and malformed tool_call invocations: unwrap double-nested
   tool_call, allow core tools via the bridge, rewrite bare skill names to
   skill_view, repair structurally broken bridge arguments (grouped/omitted
   closers) before the upstream repairer drops the call, and recall a call name
-  the model omitted, split out or hoisted above the calls array — from real
+  the model omitted, split out, hoisted above the calls array, nested inside the
+  entry's arguments, or replaced by Composio's own tool_slug key — from real
   registry schemas (flat MCP shape) as well as wrapped ones. Fixes
   Grok/OpenRouter thrash on MCP (GBrain) and deferred tools plus cheap-model
   bridge emissions.
