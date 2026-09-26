@@ -12,7 +12,8 @@
 #
 # Model-router only switches model/provider. reasoning_effort is Hermes
 # session state except for official auxiliary slots, which seed from
-# models.auxiliary (default effort "none").
+# models.auxiliary (default effort "none"); the background_review slot is
+# the exception and seeds no effort — see auxiliarySlotFor below.
 {
   config,
   lib,
@@ -159,6 +160,24 @@ let
     };
 
   auxiliarySlot = mkSeed models.auxiliary;
+
+  # Hermes discards auxiliary.background_review.reasoning_effort whenever the review fork
+  # runs on the session's own model: the fork inherits the parent's reasoning_config so its
+  # request keeps the parent's prompt-cache prefix, and it logs a warning on every such
+  # review that the configured effort has no effect. Which model that fork gets is a
+  # runtime fact — the model-picker router raises and lowers the session model per turn —
+  # so no Nix-time "is the aux model the session model" test can decide whether the key
+  # would apply. Drop the effort for this one slot: a same-model review inherits the
+  # parent's effort (Hermes' intended behavior, prompt-cache parity included), a review the
+  # consumer routes elsewhere falls back to the provider's default, and no seed ever claims
+  # an effect it cannot have. A consumer that routes this slot itself sets
+  # settings.auxiliary.background_review.reasoning_effort after the PnP import.
+  auxiliarySlotFor =
+    slot:
+    if slot == "background_review" then
+      builtins.removeAttrs auxiliarySlot [ "reasoning_effort" ]
+    else
+      auxiliarySlot;
 
   # Official auxiliary tasks. Vision, tts, moa, and goal_judge stay unset.
   auxiliarySlots = [
@@ -310,8 +329,11 @@ in
       description = ''
         Official auxiliary tasks (title generation, compression, …).
         Nix-only — not a model-picker tier, no slash command.
-        reasoning_effort defaults to "none" (overridable).
-        Provider/model default like low.
+        reasoning_effort defaults to "none" (overridable). Provider/model
+        default like low. The background_review slot seeds provider/model
+        only: Hermes ignores that slot's effort while the review fork runs
+        on the session's own model and warns per review, so the fan-out
+        drops it (see auxiliarySlotFor in the config block).
       '';
     };
   };
@@ -358,7 +380,7 @@ in
       // optionalAttrs (cronSlot.reasoning_effort != null) {
         reasoning_effort = cronSlot.reasoning_effort;
       };
-      auxiliary = genAttrs auxiliarySlots (_: auxiliarySlot);
+      auxiliary = genAttrs auxiliarySlots auxiliarySlotFor;
     }
     // optionalAttrs (modelOverrides != { }) {
       model_overrides = modelOverrides;

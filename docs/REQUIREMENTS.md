@@ -7,7 +7,10 @@
 - Defaults: low = deepseek / deepseek-flash; default = deepseek /
   deepseek-flash; high = xai-oauth / grok-4.6; auxiliary = same as
   low. Each has `reasoning_effort` (`nullOr str`); default unset
-  except auxiliary = `"none"`.
+  except auxiliary = `"none"`. The `background_review` slot seeds
+  provider/model and no effort: Hermes ignores that slot's effort while
+  the review fork runs on the session's own model (prompt-cache parity)
+  and warns per review.
 - No fourth **router** model. No `T1`/`T2`/`T3` in plugin.yaml, WebUI
   labels, or slash commands. Model-router never writes
   `reasoning_effort` / `reasoning_config`.
@@ -25,7 +28,8 @@
   `"medium"` is a deprecated alias), `fallback_model` from high,
   `delegation` from default, `cron` from low, and listed auxiliary
   slots from `models.auxiliary` (including `reasoning_effort` when
-  that option is set). Do not seed vision / tts / moa / goal_judge.
+  that option is set, except `background_review`, which takes
+  provider/model only). Do not seed vision / tts / moa / goal_judge.
 - Users override seeds with `hermesPnP.models.*`, or official
   `services.hermes-agent.settings.*` assigned **after** the PnP import
   (`deepConfigType` last writer wins). Do not assign

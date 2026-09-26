@@ -26,7 +26,7 @@ sandboxing, and the add-ons that should have been one enable.
     models.low       = { provider = "deepseek";  model = "deepseek-flash"; }; # cheap helper, cron
     models.default   = { provider = "deepseek";  model = "deepseek-flash"; }; # workhorse, delegation
     models.high      = { provider = "xai-oauth"; model = "grok-4.6"; };          # session voice + fallback
-    # models.auxiliary = { provider = "deepseek"; model = "deepseek-flash"; }; # aux tasks; reasoning_effort = "none"
+    # models.auxiliary = { provider = "deepseek"; model = "deepseek-flash"; }; # aux tasks; reasoning_effort = "none" (background_review seeds no effort)
     # models.low.best_for = [ "Short acknowledgements" ]; # classifier matrix; plugin defaults otherwise
 
     plugins = [
