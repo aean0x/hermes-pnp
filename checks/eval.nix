@@ -345,6 +345,11 @@ in
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.background_review.model}" = "${modulesConfig.services.hermesPnP.models.auxiliary.model}"
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.curator.model}" = "${modulesConfig.services.hermesPnP.models.auxiliary.model}"
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.triage_specifier.reasoning_effort}" = "none"
+    # background_review seeds provider/model only: Hermes ignores that slot's effort while
+    # the review fork runs on the session's own model (prompt-cache parity) and warns per
+    # review, so the fan-out must not claim an effect it cannot have.
+    test "${toString ((modulesConfig.services.hermes-agent.settings.auxiliary.background_review or { }) ? reasoning_effort)}" = ""
+    test "${modulesConfig.services.hermes-agent.settings.auxiliary.background_review.provider}" = "${modulesConfig.services.hermesPnP.models.auxiliary.provider}"
     test "${toString ((modulesConfig.services.hermes-agent.settings.agent or {}).reasoning_effort or "")}" = ""
     test "${modulesConfig.services.hermes-agent.settings.delegation.model}" = "${modulesConfig.services.hermesPnP.models.default.model}"
     test "${modulesConfig.services.hermes-agent.settings.cron.model}" = "${modulesConfig.services.hermesPnP.models.low.model}"

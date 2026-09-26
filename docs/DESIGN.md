@@ -277,7 +277,15 @@ slots — not a router tier, no `/auxiliary`.
 Each named model has `reasoning_effort` (`nullOr str`). Default is
 unset (Hermes session defaults) except auxiliary, which defaults to
 `"none"`. Model-router never writes `reasoning_config` /
-`reasoning_effort`.
+`reasoning_effort`. The `background_review` slot is seeded with its
+provider/model and no effort: Hermes ignores that slot's effort while
+the review fork runs on the session's own model — the fork inherits the
+parent's reasoning config to keep the parent's prompt-cache prefix — and
+warns on every such review. The fork follows the session model at
+runtime (the router raises and lowers it per turn), so the fan-out drops
+the key instead of claiming an effect it cannot have; a consumer that
+routes the slot itself sets `settings.auxiliary.background_review.
+reasoning_effort` after the PnP import.
 
 | name       | role                     | seeds                                         |
 | ---------- | ------------------------ | --------------------------------------------- |
@@ -308,7 +316,7 @@ When `hermesPnP.enable` (`modules/models.nix`):
 - `settings.fallback_model.{provider,model}` ← high
 - `settings.delegation.{provider,model}` ← default
 - `settings.cron.{model,model_provider}` ← low
-- `settings.auxiliary.<slot>` ← `models.auxiliary` (provider, model, and `reasoning_effort` when set)
+- `settings.auxiliary.<slot>` ← `models.auxiliary` (provider, model, and `reasoning_effort` when set — `background_review` takes provider/model only, see above)
 - `settings.agent.reasoning_effort` ← high only when `models.high.reasoning_effort` is set
 - `delegation` / `cron` `reasoning_effort` ← default / low only when those options are set
 
