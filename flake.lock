@@ -48,11 +48,11 @@
     "hermes-gbrain-retrieval-reflex": {
       "flake": false,
       "locked": {
-        "lastModified": 1789718786,
-        "narHash": "sha256-TNq8B0axs+o5dzX9XTKCLO6LTwHCUj3ObAb+6XZYYyE=",
+        "lastModified": 1790569954,
+        "narHash": "sha256-cSQs/J2N5yx/CHnYPQKxIGEiW2PpVMYRMHDKjEFQs3o=",
         "owner": "aean0x",
         "repo": "hermes-gbrain-retrieval-reflex",
-        "rev": "d54ae4b80463ce7ec9d6a7919cbe4cce13bd89d4",
+        "rev": "52e31ab669a13d2d8d5eec4a3abd079eec0492a9",
         "type": "github"
       },
       "original": {
