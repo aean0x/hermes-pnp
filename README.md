@@ -228,6 +228,12 @@ omitted closers) before the upstream repairer gives up and drops the
 call, and recalls a call name the model omitted from its argument
 signature.
 
+**refusal-advice** — `transform_tool_result` message-only hook: appends
+the gate-clean alternative to an unattended approvals refusal (script
+FILE run as `python3 <path>`, or reword a payload whose quoted text
+tripped a raw-string pattern). Reaches jobs that preload no skill, which
+is where the refusals were concentrated.
+
 **secret-handoff** — `request_secret` asks via stock clarify, pastes
 through a direct CDP websocket, returns status only. Never lands on
 disk or in the tool result.

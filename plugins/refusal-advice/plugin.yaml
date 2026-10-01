@@ -1,0 +1,17 @@
+name: refusal-advice
+version: 0.1.0
+description: >-
+  Names the gate-clean shape on an unattended approvals refusal. The cron/-q
+  approvals gate renders every block from one template whose advice is only
+  "Find an alternative approach that avoids this command", so a job that preloads
+  nobody's skill (or whose carrier states a prohibition) gets no signal and repeats
+  the banned shape next turn. This hook appends the alternative that works headless
+  (write the logic to a script FILE and run `python3 <path>`) and, when the detector
+  matched raw text inside a quoted argument, tells the model to reword the payload.
+  Message-only: it changes nothing about what the gate blocks, rewrites no command
+  and runs no tool. Pure string work — safe on the caller thread with
+  plugins.hook_callback_timeout: 0.
+author: aean0x
+kind: standalone
+provides_hooks:
+  - transform_tool_result

@@ -17,5 +17,6 @@ pkgs.runCommand "hermes-pnp-plugin-tests"
     ( cd ${pluginSources.git-hook} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
     ( cd ${../plugins/tool-call-coherency} && PYTHONPATH=. python3 -m unittest discover -s tests -v )
     ( cd ${../plugins/browser-lease} && PYTHONPATH=. python3 -m unittest discover -s tests -t . -v )
+    ( cd ${../plugins/refusal-advice} && PYTHONPATH=. python3 -m unittest discover -s tests -t . -v )
     touch $out
   ''
