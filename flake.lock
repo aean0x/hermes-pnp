@@ -48,11 +48,11 @@
     "hermes-gbrain-retrieval-reflex": {
       "flake": false,
       "locked": {
-        "lastModified": 1790569954,
-        "narHash": "sha256-cSQs/J2N5yx/CHnYPQKxIGEiW2PpVMYRMHDKjEFQs3o=",
+        "lastModified": 1790875990,
+        "narHash": "sha256-6VR4PgDg412QdAvOJ37rE/x0tBBgig8WvQgIlMl5Bvo=",
         "owner": "aean0x",
         "repo": "hermes-gbrain-retrieval-reflex",
-        "rev": "52e31ab669a13d2d8d5eec4a3abd079eec0492a9",
+        "rev": "78516ca629588612ebfc0a7ca86944fbb63d7dd8",
         "type": "github"
       },
       "original": {
@@ -64,11 +64,11 @@
     "hermes-git-hook": {
       "flake": false,
       "locked": {
-        "lastModified": 1789642685,
-        "narHash": "sha256-1NbNFtInSytVu7XCaA9X9f/eNJ1OvTjeG5Qm3chDjZg=",
+        "lastModified": 1790880389,
+        "narHash": "sha256-+izpWQQ22KjGChXt70JMuGLj+ZF1mcDitSjzFBXWtJc=",
         "owner": "aean0x",
         "repo": "hermes-git-hook",
-        "rev": "6d5607ced4f38660541281a43431954dfb2fdfb8",
+        "rev": "66a6efcc1708e9d9d920a8f6c03031abb57e7594",
         "type": "github"
       },
       "original": {
@@ -80,11 +80,11 @@
     "hermes-model-picker": {
       "flake": false,
       "locked": {
-        "lastModified": 1789718879,
-        "narHash": "sha256-R61S9zuqaPggwQX2mzrib3kZD0L3SxB6KmRnkjW6Oe8=",
+        "lastModified": 1790875544,
+        "narHash": "sha256-0AqCXiA89mBs1ouraEV3dKXd3TJyKH1uDPTVd0wufak=",
         "owner": "aean0x",
         "repo": "hermes-model-picker",
-        "rev": "04a23c809d550ecb0a69749927b803e9250da656",
+        "rev": "040854d667ffd4166cbb0534587de3e244f5c41a",
         "type": "github"
       },
       "original": {
@@ -96,11 +96,11 @@
     "hermes-secret-handoff": {
       "flake": false,
       "locked": {
-        "lastModified": 1790743475,
-        "narHash": "sha256-Ge+hj3Fb3GgCxN97zd6rDf84UmnRCLDKrkJNv1DoV8U=",
+        "lastModified": 1790879769,
+        "narHash": "sha256-m73psL3fI9ZRG2GK8iNvjGVWT5V8dztlGBOaOH/plco=",
         "owner": "aean0x",
         "repo": "hermes-secret-handoff",
-        "rev": "80453ef13bd18efda62206681e58eb81432c20ae",
+        "rev": "e3da3e38f5b5ed116ee39ccdb92dc34038d79486",
         "type": "github"
       },
       "original": {
