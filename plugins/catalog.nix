@@ -5,4 +5,5 @@
   gbrain-memory-flush = ./gbrain-memory-flush;
   docindex = ./docindex;
   browser-lease = ./browser-lease;
+  refusal-advice = ./refusal-advice;
 }
