@@ -30,9 +30,8 @@ in
       printf '%s\n' ${lib.escapeShellArgs names} | $DRY_RUN_CMD tee ${lib.escapeShellArg "${dest}/.enabled"} >/dev/null
 
       ${lib.concatMapStrings (name: ''
-        # Catalog-delivered plugin: drop a tree this module materialized before,
-        # but never the catalog install — that one is a git clone, and it lives
-        # in this same directory on the Home Manager path.
+        # Catalog-delivered: this path IS the install root under Home Manager,
+        # so drop only what is not a catalog install (a git clone).
         if [ ! -d ${lib.escapeShellArg "${dest}/${name}/.git"} ]; then
           $DRY_RUN_CMD rm -rf ${lib.escapeShellArg "${dest}/${name}"}
         fi
