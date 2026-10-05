@@ -42,28 +42,38 @@ let
   # nix-managed-* under $HERMES_HOME/plugins.
   # model-picker is gated by modelPicker.enable (same pattern as gbrain):
   # enable=true injects it; enable=false strips it even if listed.
+  # Names delivered by the upstream Hermes plugin catalog. They stay enabled
+  # and are installed at runtime (`hermes plugins install <name>`), so the
+  # materialize steps must leave them alone.
+  catalogNames = pnp.catalogInstall;
+
   pnpNames = lib.unique (
-    (lib.filter (n: n != "model-picker") pnp.plugins)
+    (lib.filter (n: n != "model-picker" && !(lib.elem n catalogNames)) pnp.plugins)
     ++ lib.optional pickerOn "model-picker"
-    ++ lib.optionals gbrainOn gbrainPlugins
+    ++ lib.optionals gbrainOn (lib.filter (n: !(lib.elem n catalogNames)) gbrainPlugins)
     ++ lib.optional docindexOn "docindex"
-    ++ lib.attrNames extra
+    ++ lib.filter (n: !(lib.elem n catalogNames)) (lib.attrNames extra)
   );
 
   # plugins.enabled is an opt-in allow-list. Union PnP names with
   # official extraPlugins (path key + getName) so we do not hide them.
   enabledNames = lib.unique (
-    pnpNames ++ officialExtraPluginNames ++ map (n: "nix-managed-${n}") officialExtraPluginNames
+    pnpNames
+    ++ catalogNames
+    ++ officialExtraPluginNames
+    ++ map (n: "nix-managed-${n}") officialExtraPluginNames
   );
 
   unknown =
     let
       # A name is known when any source can resolve it: the in-repo catalog,
-      # a plugin pinned as a flake input, or extraPluginDirs.
+      # a plugin pinned as a flake input, extraPluginDirs, or the upstream
+      # Hermes plugin catalog (that is what catalogInstall names come from).
       known =
         (lib.attrNames catalog)
         ++ (lib.attrNames pnp.internal.pluginSources)
-        ++ (lib.attrNames extra);
+        ++ (lib.attrNames extra)
+        ++ catalogNames;
     in
     lib.filter (n: !(lib.elem n known)) pnp.plugins;
 
@@ -191,6 +201,25 @@ in
       '';
     };
 
+    catalogInstall = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = ''
+        Names installed from the upstream Hermes plugin catalog at runtime
+        (`hermes plugins install <name>`) instead of materialized from a Nix
+        source tree. They stay in `plugins.enabled`, and neither the NixOS
+        nor the Home Manager materialize step touches them.
+
+        Composer on defaults to the plugins that carry a catalog entry:
+        git-hook, secret-handoff, gbrain-retrieval-reflex.
+      '';
+      example = [
+        "git-hook"
+        "secret-handoff"
+        "gbrain-retrieval-reflex"
+      ];
+    };
+
     pluginInstall = {
       stateDir = mkOption {
         type = types.str;
@@ -245,7 +274,7 @@ in
   };
 
   config = lib.mkMerge [
-    (mkIf (pnp.plugins != [ ] || extra != { } || gbrainOn || docindexOn) {
+    (mkIf (pnp.plugins != [ ] || pnp.catalogInstall != [ ] || extra != { } || gbrainOn || docindexOn) {
       assertions = [
         {
           assertion = unknown == [ ];
@@ -264,12 +293,14 @@ in
 
     (mkIf pnp.enable {
       services.hermesPnP.plugins = mkDefault (
-        lib.optional pickerOn "model-picker"
-        ++ [
-          "tool-call-coherency"
-          "secret-handoff"
-        ]
+        lib.optional pickerOn "model-picker" ++ [ "tool-call-coherency" ]
       );
+      # Carry a catalog entry upstream, so the host installs them from there.
+      services.hermesPnP.catalogInstall = mkDefault [
+        "git-hook"
+        "secret-handoff"
+        "gbrain-retrieval-reflex"
+      ];
     })
   ];
 }

@@ -9,21 +9,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # In-house plugins, developed in their own repos and pinned here. Bump with
-    # `nix flake update hermes-<name>`. Non-flake inputs: plain source trees,
-    # the same shape the catalog used to vendor under ./plugins/<name>.
-    hermes-git-hook = {
-      url = "github:aean0x/hermes-git-hook";
-      flake = false;
-    };
-    hermes-secret-handoff = {
-      url = "github:aean0x/hermes-secret-handoff";
-      flake = false;
-    };
-    hermes-gbrain-retrieval-reflex = {
-      url = "github:aean0x/hermes-gbrain-retrieval-reflex";
-      flake = false;
-    };
+    # The first-party plugins that carry a catalog entry upstream reach a host
+    # through `hermes plugins install <name>`, so they are not pinned here:
+    # no input, no materialize step, one pin (the catalog entry). model-picker
+    # is not listed upstream and still arrives as a pinned source tree.
     hermes-model-picker = {
       url = "github:aean0x/hermes-model-picker";
       flake = false;
@@ -36,9 +25,6 @@
       nixpkgs,
       hermes-agent,
       hermes-webui,
-      hermes-git-hook,
-      hermes-secret-handoff,
-      hermes-gbrain-retrieval-reflex,
       hermes-model-picker,
     }:
     let
@@ -50,12 +36,9 @@
       forAllSystems = lib.genAttrs systems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
 
-      # Plugin name → source tree. Keys are plugin names (what
-      # services.hermesPnP.plugins takes), values are the pinned inputs.
+      # Plugin name → source tree for plugins the upstream catalog does not
+      # carry. Keys are plugin names (what services.hermesPnP.plugins takes).
       externalPlugins = {
-        git-hook = hermes-git-hook;
-        secret-handoff = hermes-secret-handoff;
-        gbrain-retrieval-reflex = hermes-gbrain-retrieval-reflex;
         model-picker = hermes-model-picker;
       };
 
