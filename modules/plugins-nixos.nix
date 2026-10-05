@@ -61,20 +61,17 @@ in
         printf '%s\n' ${lib.escapeShellArgs names} > ${lib.escapeShellArg "${dest}/.enabled"}
 
         ${lib.concatMapStrings (name: ''
-          # Catalog-delivered plugin: drop what this module used to materialize
-          # (a catalog install is a git clone, so it survives), then install it
-          # when it is missing. Best effort on purpose: a boot without network
-          # must not hold up hermes-agent.
-          if [ -L ${lib.escapeShellArg "${linkroot}/${name}"} ]; then
-            rm -f ${lib.escapeShellArg "${linkroot}/${name}"}
-          fi
-          if [ ! -d ${lib.escapeShellArg "${dest}/${name}/.git"} ]; then
-            rm -rf ${lib.escapeShellArg "${dest}/${name}"}
-          fi
-          if [ ! -e ${lib.escapeShellArg "${linkroot}/${name}"}/plugin.yaml ]; then
+          # Catalog-delivered plugin: the install must own the name, so the
+          # PnP roots hold nothing for it that is not a catalog install (a git
+          # clone). Replace anything else, then install it when absent. Best
+          # effort on purpose: a boot without network must not hold up
+          # hermes-agent.
+          if [ ! -d ${lib.escapeShellArg "${linkroot}/${name}/.git"} ]; then
+            rm -rf ${lib.escapeShellArg "${linkroot}/${name}"}
             timeout 300 ${hermesBin} plugins install ${lib.escapeShellArg name} --enable \
               </dev/null >/dev/null 2>&1 || true
           fi
+          rm -rf ${lib.escapeShellArg "${dest}/${name}"}
         '') catalogNames}
       '';
     };
