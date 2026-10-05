@@ -77,13 +77,20 @@ def transform(tool_name: str = "", result=None, **_kwargs):
     keeps the original on ``None``, and the first string return wins). Idempotent: a result
     that already carries the advice is not rewritten, so a second pass is a no-op.
     """
-    if not isinstance(result, str) or _MARKER not in result:
+    try:
+        if not isinstance(result, str) or _MARKER not in result:
+            return None
+        advice = advice_for(_description(result))
+        if advice in result:
+            return None
+        log.debug(
+            "refusal-advice: appended gate-clean alternative to a %s refusal",
+            tool_name or "tool",
+        )
+        return result + advice
+    except Exception:
+        log.exception("refusal-advice: transform failed; leaving the refusal untouched")
         return None
-    advice = advice_for(_description(result))
-    if advice in result:
-        return None
-    log.debug("refusal-advice: appended gate-clean alternative to a %s refusal", tool_name or "tool")
-    return result + advice
 
 
 def register(ctx) -> None:

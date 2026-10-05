@@ -1,5 +1,5 @@
 name: refusal-advice
-version: 0.1.0
+version: 0.1.1
 description: >-
   Names the gate-clean shape on an unattended approvals refusal. The cron/-q
   approvals gate renders every block from one template whose advice is only

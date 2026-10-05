@@ -236,38 +236,53 @@ STATE = _State()
 # ---------------------------------------------------------------------- hooks
 
 def pre_tool_call(tool_name: str = "", session_id: str = "", **_: Any):
-    """Take (or renew) the lease before a browser call; block if another session holds it."""
-    if not _is_browser_tool(tool_name):
+    """Take (or renew) the lease before a browser call; block if another session holds it.
+
+    Guarded like every other hook here: ``pre_tool_call`` fails CLOSED, so an
+    exception escaping this callback would block every tool call in the session,
+    not just browser ones. On error the call proceeds unleased.
+    """
+    try:
+        if not _is_browser_tool(tool_name):
+            return None
+        lease = STATE.for_session(session_id)
+        if lease is None:
+            return None
+        ok, holder = lease.acquire()
+        if ok:
+            return None
+        return {
+            "action": "block",
+            "message": (
+                f"browser-lease: the browser is checked out by {holder}. "
+                "Retry in a few seconds instead of opening a second tab set on the same engine."
+            ),
+        }
+    except Exception:
+        log.exception("browser-lease: pre_tool_call failed; not blocking the call")
         return None
-    lease = STATE.for_session(session_id)
-    if lease is None:
-        return None
-    ok, holder = lease.acquire()
-    if ok:
-        return None
-    return {
-        "action": "block",
-        "message": (
-            f"browser-lease: the browser is checked out by {holder}. "
-            "Retry in a few seconds instead of opening a second tab set on the same engine."
-        ),
-    }
 
 
 def post_tool_call(tool_name: str = "", session_id: str = "", **_: Any):
     """Renew after a browser call so a multi-call turn keeps the lease."""
-    if _is_browser_tool(tool_name):
-        lease = STATE.leases.get(session_id)
-        if lease is not None:
-            lease.touch()
+    try:
+        if _is_browser_tool(tool_name):
+            lease = STATE.leases.get(session_id)
+            if lease is not None:
+                lease.touch()
+    except Exception:
+        log.exception("browser-lease: post_tool_call failed")
     return None
 
 
 def post_llm_call(session_id: str = "", **_: Any):
     """Turn boundary: hand the engine back now rather than waiting out the watchdog."""
-    lease = STATE.leases.get(session_id)
-    if lease is not None:
-        lease.release()
+    try:
+        lease = STATE.leases.get(session_id)
+        if lease is not None:
+            lease.release()
+    except Exception:
+        log.exception("browser-lease: post_llm_call failed")
     return None
 
 

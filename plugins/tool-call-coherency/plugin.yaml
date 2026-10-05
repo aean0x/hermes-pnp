@@ -1,5 +1,5 @@
 name: tool-call-coherency
-version: 0.2.3
+version: 0.2.4
 description: >
   Auto-heal misrouted and malformed tool_call invocations: unwrap double-nested
   tool_call, allow core tools via the bridge, rewrite bare skill names to
@@ -13,4 +13,5 @@ description: >
   tools plus cheap-model bridge emissions.
 author: aean0x
 kind: standalone
-provides_hooks: []
+provides_hooks:
+  - on_session_end

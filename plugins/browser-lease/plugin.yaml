@@ -1,5 +1,5 @@
 name: browser-lease
-version: 0.1.0
+version: 0.1.1
 description: >-
   Serialise browser access across Hermes sessions: one session checks the shared
   CDP browser out for its turn. An advisory flock in the Hermes home (taken on
