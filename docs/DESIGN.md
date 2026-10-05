@@ -119,10 +119,17 @@ the official option PnP set via `mkDefault`.
 
 1. **One identity.** Gateway and WebUI share `user`, `group`, `package`,
    and the same store-safe env map.
-2. **Plugin dest.** Materialize to `$stateDir/plugins/<name>` and link
+2. **Plugin dest.** Two routes. Plugins with a catalog entry upstream
+   (`git-hook`, `secret-handoff`, `gbrain-retrieval-reflex`) list under
+   `catalogInstall` and are installed at runtime by
+   `hermes plugins install <name>`: the upstream catalog entry is the single
+   pin, so a host upgrade is `nix flake update`-free. Everything else is
+   materialized to `$stateDir/plugins/<name>` and linked
    `$stateDir/.hermes/plugins/<name>` → `../../plugins/<name>`. Official
    `extraPlugins` (`listOf package`) stays available for consumer
-   packages. PnP trees use `extraPluginDirs`.
+   packages. PnP trees use `extraPluginDirs`. The materialize step skips
+   `catalogInstall` names and removes any tree it materialized for them
+   before, so a host converges on either route without a manual cleanup.
 3. **WebUI bind.** `127.0.0.1:8787`, `hermesHome = ${stateDir}/.hermes`,
    same user as the agent. Opening the firewall or binding `0.0.0.0` is
    a consumer override of `services.hermes-webui.*`.
@@ -159,7 +166,11 @@ the official option PnP set via `mkDefault`.
   `environmentFiles`. Key list: `docs/hermes.env.example`.
 - `services.hermesPnP.models.{low,default,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Router tiers also have `best_for` (classifier matrix; plugin JSON defaults). Auxiliary is Nix-only; effort unset except auxiliary (`"none"`).
 - `services.hermesPnP.plugins` — `listOf str`. Composer on defaults
-  via `mkDefault` to model-picker, tool-call-coherency, secret-handoff.
+  via `mkDefault` to model-picker and tool-call-coherency.
+- `services.hermesPnP.catalogInstall` — `listOf str`. Names installed from
+  the upstream Hermes plugin catalog at runtime. They stay in
+  `plugins.enabled`; the materialize steps skip them. Composer on defaults to
+  git-hook, secret-handoff, gbrain-retrieval-reflex.
 - `services.hermesPnP.extraPluginDirs` — `attrsOf path` beside the catalog
   (`extraPlugins` is a renamed alias). Distinct from official
   `services.hermes-agent.extraPlugins`.

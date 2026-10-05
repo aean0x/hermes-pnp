@@ -12,10 +12,11 @@ let
   agent = config.services.hermes-agent;
   names = pnp.internal.pnpPluginNames;
   sources = pnp.internal.pnpPluginSources;
+  catalogNames = pnp.catalogInstall;
   dest = "${agent.hermesHome}/plugins";
 in
 {
-  config = lib.mkIf (names != [ ]) {
+  config = lib.mkIf (names != [ ] || catalogNames != [ ]) {
     home.activation.hermesPnPPlugins = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       set -euo pipefail
       $DRY_RUN_CMD mkdir -p ${lib.escapeShellArg dest}
@@ -27,6 +28,15 @@ in
           ${sources.${name}}/ ${lib.escapeShellArg "${dest}/${name}"}/
       '') names}
       printf '%s\n' ${lib.escapeShellArgs names} | $DRY_RUN_CMD tee ${lib.escapeShellArg "${dest}/.enabled"} >/dev/null
+
+      ${lib.concatMapStrings (name: ''
+        # Catalog-delivered plugin: drop a tree this module materialized before,
+        # but never the catalog install — that one is a git clone, and it lives
+        # in this same directory on the Home Manager path.
+        if [ ! -d ${lib.escapeShellArg "${dest}/${name}/.git"} ]; then
+          $DRY_RUN_CMD rm -rf ${lib.escapeShellArg "${dest}/${name}"}
+        fi
+      '') catalogNames}
     '';
   };
 }

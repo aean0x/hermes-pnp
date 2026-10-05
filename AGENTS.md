@@ -42,6 +42,8 @@ consumer.
   `nix-managed-*` trees). Do not install them via official
   `extraPlugins`. Consumer trees go on `extraPluginDirs`. Union
   official extraPlugins names into `settings.plugins.enabled`.
+  Plugins that carry a catalog entry upstream go on `catalogInstall`
+  instead: installed at runtime, never materialized.
 - Fold official `extraPackages` into the toolbox buildEnv. Do not put
   the env back on `extraPackages`.
 - WebUI/browser jails follow official `container.enable` / network,
