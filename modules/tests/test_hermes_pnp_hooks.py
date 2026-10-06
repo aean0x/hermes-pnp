@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from hermes_pnp_hooks import (
+    _SELF_CONTEXT_INTRO,
     _archive_failure,
     _archive_run_time,
     _maybe_patch,
@@ -204,4 +205,120 @@ class ContextFromArchiveTests(unittest.TestCase):
             _maybe_patch("cron.scheduler_prompt")
         self.assertTrue(getattr(mod, "_pnp_context_from_patched", False))
         self.assertIsNone(mod._archive_answer(doc))
+
+
+_UPSTREAM_BLOCK_INTRO = (
+    "The following is the most recent output from a preceding cron job. "
+    "Use it as context for your analysis."
+)
+
+
+def _context_block(heading: str, body: str) -> str:
+    """One injected block, in the shape the injector prepends."""
+    return f"## {heading}\n{_UPSTREAM_BLOCK_INTRO}\n\n```\n{body}\n```\n\n"
+
+
+class ContextFromInjectorTests(unittest.TestCase):
+    """Older build: the walk is inline, so the fix runs on the assembled prompt."""
+
+    NOW = datetime(2026, 9, 24, 20, 52, tzinfo=timezone.utc)
+
+    def setUp(self) -> None:
+        patcher = mock.patch("hermes_pnp_hooks._hermes_now", return_value=self.NOW)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        previous = os.environ.pop(_FAILURE_MAX_AGE_ENV, None)
+        if previous is not None:
+            self.addCleanup(os.environ.__setitem__, _FAILURE_MAX_AGE_ENV, previous)
+
+    def _patched(self):
+        calls = []
+
+        def orig(job, prompt):
+            calls.append((job, prompt))
+            return prompt, True
+
+        mod = SimpleNamespace(_inject_context_from=orig)
+        _wrap_context_from(mod)
+        return mod, calls
+
+    def _inject(self, prompt: str) -> str:
+        mod, calls = self._patched()
+        text, injected = mod._inject_context_from({"id": "cd39c17cc257"}, prompt)
+        self.assertEqual(calls[0][1], prompt)  # upstream saw the untouched prompt
+        self.assertTrue(injected)  # upstream's flag is preserved
+        return text
+
+    def test_stale_failure_block_is_removed(self) -> None:
+        doc = _run_doc("inbox-triage (FAILED)", "2026-09-12 19:01:10", "## Error\n\nboom\n")
+        prompt = _context_block("Output from job 'b240ff09bd0b'", doc) + "PROMPT"
+        self.assertEqual(self._inject(prompt), "PROMPT")
+
+    def test_undated_failure_block_is_removed(self) -> None:
+        doc = _run_doc("inbox-triage (FAILED)", "unknown", "## Error\n\nboom\n")
+        prompt = _context_block("Output from job 'b240ff09bd0b'", doc) + "PROMPT"
+        self.assertEqual(self._inject(prompt), "PROMPT")
+
+    def test_fresh_failure_block_is_kept_and_dated(self) -> None:
+        doc = _run_doc("inbox-triage (FAILED)", "2026-09-24 18:40:10", "## Error\n\nboom\n")
+        prompt = _context_block("Output from job 'b240ff09bd0b'", doc) + "PROMPT"
+        out = self._inject(prompt)
+        self.assertIn("[cron context_from: FAILED run of 2026-09-24 18:40 (2h ago)", out)
+        self.assertIn("not a report", out)
+        self.assertIn("## Error\n\nboom", out)
+        self.assertTrue(out.endswith("PROMPT"))
+
+    def test_plain_run_block_is_dated(self) -> None:
+        doc = _run_doc("inbox-triage", "2026-09-24 19:01:53", "## Response\n\nreal answer\n")
+        prompt = _context_block("Output from job 'b240ff09bd0b'", doc) + "PROMPT"
+        out = self._inject(prompt)
+        self.assertIn("[cron context_from: run of 2026-09-24 19:01 (1h ago)]", out)
+        self.assertIn("## Response\n\nreal answer", out)
+
+    def test_self_block_gets_the_self_intro(self) -> None:
+        doc = _run_doc("inbox-triage", "2026-09-24 19:01:53", "## Response\n\nreal answer\n")
+        out = self._inject(_context_block("Your previous run's output", doc) + "PROMPT")
+        self.assertIn(_SELF_CONTEXT_INTRO, out)
+
+    def test_block_without_a_job_heading_is_untouched(self) -> None:
+        prompt = "## Script Output\ncollected data\n\nPROMPT"
+        self.assertEqual(self._inject(prompt), prompt)
+
+    def test_wrapping_twice_labels_once(self) -> None:
+        doc = _run_doc("inbox-triage", "2026-09-24 19:01:53", "## Response\n\nreal answer\n")
+        prompt = _context_block("Output from job 'b240ff09bd0b'", doc) + "PROMPT"
+        mod, _ = self._patched()
+        _wrap_context_from(mod)
+        out = mod._inject_context_from({"id": "cd39c17cc257"}, prompt)[0]
+        self.assertEqual(out.count("[cron context_from:"), 1)
+
+    def test_rewrite_failure_falls_back_to_upstream_prompt(self) -> None:
+        doc = _run_doc("inbox-triage", "2026-09-24 19:01:53", "## Response\n\nreal answer\n")
+        prompt = _context_block("Output from job 'b240ff09bd0b'", doc) + "PROMPT"
+        mod, _ = self._patched()
+        with mock.patch(
+            "hermes_pnp_hooks._sanitize_context_blocks", side_effect=RuntimeError("boom")
+        ):
+            self.assertEqual(mod._inject_context_from({"id": "x"}, prompt), (prompt, True))
+
+    def test_archive_answer_shape_skips_the_injector_arm(self) -> None:
+        def orig_inject(job, prompt):
+            return prompt, False
+
+        mod = SimpleNamespace(
+            _archive_answer=lambda archive: "kept", _inject_context_from=orig_inject
+        )
+        _wrap_context_from(mod)
+        self.assertIs(mod._inject_context_from, orig_inject)
+        doc = _run_doc("inbox-triage (FAILED)", "2026-09-12 19:01:10", "## Error\n\nboom\n")
+        self.assertIsNone(mod._archive_answer(doc))
+
+    def test_maybe_patch_rewrites_a_loaded_injector_module(self) -> None:
+        doc = _run_doc("inbox-triage (FAILED)", "2026-09-12 19:01:10", "## Error\n\nboom\n")
+        stale = _context_block("Your previous run's output", doc) + "PROMPT"
+        mod = SimpleNamespace(_inject_context_from=lambda job, prompt: (stale, True))
+        with mock.patch.dict(sys.modules, {"cron.scheduler_prompt": mod}):
+            _maybe_patch("cron.scheduler_prompt")
+        self.assertTrue(getattr(mod, "_pnp_context_from_patched", False))
+        self.assertEqual(mod._inject_context_from({"id": "x"}, "PROMPT")[0], "PROMPT")
 
