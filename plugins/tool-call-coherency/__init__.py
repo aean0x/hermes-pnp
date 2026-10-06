@@ -15,6 +15,8 @@ Models frequently:
    (``{"calls": [{"arguments": {…}}, {"name": "mcp__…"}]}``), or hoist the name to the top
    level beside the batch (``{"calls": [{"arguments": {…}}], "name": "mcp__…"}``) — the
    *name* is the model's one piece of boilerplate it skips; the arguments it gets right.
+   Where several schemas fit the argument keys exactly the one that pins the most of them
+   wins (``put_page`` over ``capture`` for ``{slug, content}``); only a genuine tie refuses.
 6. Name the underlying Composio sub-tool in Composio's own key instead of ``name``
    (``{"calls": [{"arguments": {…}, "tool_slug": "GMAIL_FETCH_EMAILS"}]}``), or write the
    single-call shape one level too deep inside the entry's ``arguments``
@@ -237,21 +239,26 @@ def _schema_parameters(schema: Any) -> Optional[Dict[str, Any]]:
     return params if isinstance(params, dict) else None
 
 
-def _signature_matches(keys: frozenset, schema: Any) -> bool:
-    """True when an argument-key set is exactly legal for ``schema``.
+def _signature_score(keys: frozenset, schema: Any) -> Optional[int]:
+    """How specifically ``schema`` claims an argument-key set, or None when it does not fit.
 
-    Strict on purpose: every key must be a declared property and every required property
-    must be present. A partial match is not evidence of intent.
+    A fit is strict: every key must be a declared property and every required property must
+    be present. The score is the number of required properties the key set supplies, so of
+    two fits the one that pins more of the call wins — ``put_page`` (required
+    ``["slug", "content"]``) outranks ``capture`` (required ``["content"]``) on the same
+    ``{slug, content}`` payload. A partial match is not evidence of intent.
     """
     params = _schema_parameters(schema)
     if params is None:
-        return False
+        return None
     props, required = params.get("properties"), params.get("required")
     if not isinstance(props, dict) or not isinstance(required, list) or not required:
-        return False
+        return None
     if not keys <= set(props):
-        return False
-    return all(isinstance(r, str) and r in keys for r in required)
+        return None
+    if not all(isinstance(r, str) and r in keys for r in required):
+        return None
+    return len(required)
 
 
 def _nonempty_str(value: Any) -> bool:
@@ -271,11 +278,14 @@ def _deferred_names() -> frozenset:
 
 @lru_cache(maxsize=256)
 def _infer_deferred_name(key_tuple: Tuple[str, ...]) -> Optional[str]:
-    """The one deferred (``mcp__*``) tool whose schema exactly fits ``key_tuple``, else None.
+    """The deferred (``mcp__*``) tool that best fits ``key_tuple``, else None.
 
-    Ambiguity is not evidence: two candidates means no guess. Restricted to the bridge's
-    deferred surface — a nameless *core*-tool call is a different failure mode, and the
-    model reads the core tools off its own tool list.
+    One fit is recalled outright. Several fits are ranked by how specifically each claims
+    the key set (``_signature_score``): the strict winner is recalled, and a genuine tie is
+    refused — ambiguity is not evidence. Refusing the pair here dropped every nameless
+    ``{slug, content}`` gbrain write, because ``put_page`` and ``capture`` both fit it.
+    Restricted to the bridge's deferred surface — a nameless *core*-tool call is a different
+    failure mode, and the model reads the core tools off its own tool list.
     """
     names = _deferred_names()
     if not names:
@@ -283,19 +293,23 @@ def _infer_deferred_name(key_tuple: Tuple[str, ...]) -> Optional[str]:
     from tools.registry import registry
 
     keys = frozenset(key_tuple)
-    match: Optional[str] = None
+    best: Optional[str] = None
+    best_score = 0
+    tied = False
     for name in names:
         if not name.startswith("mcp__"):
             continue
         try:
-            if not _signature_matches(keys, registry.get_schema(name)):
-                continue
+            score = _signature_score(keys, registry.get_schema(name))
         except Exception:
             continue
-        if match is not None:
-            return None
-        match = name
-    return match
+        if score is None:
+            continue
+        if score > best_score:
+            best, best_score, tied = name, score, False
+        elif score == best_score:
+            tied = True
+    return None if tied else best
 
 
 def _infer_tool_name(arguments: Dict[str, Any]) -> Optional[str]:
