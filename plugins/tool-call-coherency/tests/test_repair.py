@@ -105,6 +105,24 @@ SEARCH_TOOLS_FLAT = {
     "parameters": {"type": "object", "properties": {
         "queries": {"type": "array"}, "limit": {"type": "integer"}},
         "required": ["queries"]}}
+# The two live gbrain tools that both accept a `{slug, content}` key set (flat, as the MCP
+# client registers them). Two exact signature fits meant the single-fit recall refused both,
+# so a nameless gbrain write was dropped with "calls[0] requires a 'name'" ~2.8x/day.
+PUT_PAGE_LIVE = {
+    "name": "mcp__gbrain__put_page",
+    "description": "[authed via proxy] write a page",
+    "parameters": {"type": "object", "properties": {
+        "slug": {"type": "string"}, "content": {"type": "string"},
+        "allow_empty": {"type": "boolean"}, "source_kind": {"type": "string"},
+        "source_uri": {"type": "string"}, "ingested_via": {"type": "string"}},
+        "required": ["slug", "content"]}}
+CAPTURE_LIVE = {
+    "name": "mcp__gbrain__capture",
+    "description": "[authed via proxy] capture a note",
+    "parameters": {"type": "object", "properties": {
+        "content": {"type": "string"}, "slug": {"type": "string"},
+        "type": {"type": "string"}},
+        "required": ["content"]}}
 
 
 def _schema_name(schema):
@@ -298,6 +316,53 @@ class TestDroppedNameRecall(_RegistryCase):
         args = {"calls": {"arguments": {"slug": "a", "content": "b"}}}
         self.assertEqual(tcc.heal_bridge_entries(args), 1)
         self.assertEqual(args["calls"][0]["name"], "mcp__gbrain__put_page")
+
+
+class TestSpecificityRanking(_RegistryCase):
+    """Several exact signature fits: recall the one that claims the most of the key set.
+
+    Live case: ``mcp__gbrain__put_page`` (required ``[slug, content]``) and
+    ``mcp__gbrain__capture`` (required ``[content]``) both accept a ``{slug, content}``
+    payload, so a single-fit recall refused both and dropped the write.
+    """
+
+    def test_the_more_specific_required_set_wins(self):
+        self._registry(PUT_PAGE_LIVE, CAPTURE_LIVE)
+        args = {"calls": [{"arguments": {"slug": "ops/x", "content": "---\ntitle: x"}}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        self.assertEqual(args["calls"][0]["name"], "mcp__gbrain__put_page")
+
+    def test_the_ranking_ignores_registry_order(self):
+        self._registry(CAPTURE_LIVE, PUT_PAGE_LIVE)
+        args = {"calls": [{"arguments": {"slug": "ops/x", "content": "---\n"}}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        self.assertEqual(args["calls"][0]["name"], "mcp__gbrain__put_page")
+
+    def test_a_capture_only_payload_still_recalls_capture(self):
+        """``{content, type}`` is illegal for put_page, so capture is the only fit."""
+        self._registry(PUT_PAGE_LIVE, CAPTURE_LIVE)
+        args = {"calls": [{"arguments": {"content": "note", "type": "idea"}}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        self.assertEqual(args["calls"][0]["name"], "mcp__gbrain__capture")
+
+    def test_equal_specificity_is_still_refused(self):
+        """The tie-break needs a strict winner; two schemas demanding the whole key set stay."""
+        self._registry(PUT_PAGE_LIVE, {"name": "mcp__other__write_page", "parameters": {
+            "type": "object", "properties": {"slug": {"type": "string"},
+                                             "content": {"type": "string"}},
+            "required": ["slug", "content"]}})
+        args = {"calls": [{"arguments": {"slug": "a", "content": "b"}}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertNotIn("name", args["calls"][0])
+
+    def test_a_nameless_entry_heals_beside_a_named_one(self):
+        """The batch emission: ``calls[0]`` nameless, ``calls[1]`` names itself."""
+        self._registry(PUT_PAGE_LIVE, CAPTURE_LIVE, GET_PAGE)
+        args = {"calls": [{"arguments": {"slug": "ops/x", "content": "---\n"}},
+                          {"name": "mcp__gbrain__get_page", "arguments": {"slug": "ops/x"}}]}
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        self.assertEqual(args["calls"][0]["name"], "mcp__gbrain__put_page")
+        self.assertEqual(args["calls"][1]["name"], "mcp__gbrain__get_page")
 
 
 class TestPatchInstall(unittest.TestCase):
@@ -559,6 +624,20 @@ class TestEndToEndWorkbenchCall(unittest.TestCase):
         self.assertEqual(name, "mcp__composio__COMPOSIO_SEARCH_TOOLS")
         self.assertEqual(resolved["limit"],
                          NESTED_NAME_ENTRY["calls"][0]["arguments"]["arguments"]["limit"])
+        self.assertIsNone(tsv.validate_deferred_call_args(name, resolved))
+
+    def test_ambiguous_gbrain_write_dispatches_after_the_heal(self):
+        """The residual class: a nameless `{slug, content}` write must reach put_page."""
+        ts, tsv = self._hermes_modules()
+        self._fake_registry(PUT_PAGE_LIVE, CAPTURE_LIVE)
+        payload = {"calls": [{"arguments": {"slug": "ops/x", "content": "---\ntitle: x"}}]}
+        entries, err = tsv.normalize_tool_call_entries(json.loads(json.dumps(payload)))
+        self.assertEqual(entries, [])
+        self.assertEqual(err, "tool_call calls[0] requires a 'name'")
+        name, resolved, err = ts.resolve_underlying_call(json.loads(json.dumps(payload)))
+        self.assertIsNone(err)
+        self.assertEqual(name, "mcp__gbrain__put_page")
+        self.assertEqual(resolved, {"slug": "ops/x", "content": "---\ntitle: x"})
         self.assertIsNone(tsv.validate_deferred_call_args(name, resolved))
 
 
