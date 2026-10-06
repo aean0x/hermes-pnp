@@ -10,11 +10,14 @@ Loaded via a site .pth on the pnp PYTHONPATH overlay:
   ``context_from`` job. Label each injected archive with its own run date and
   bound failure documents by age; without that a run that failed once is
   quoted as "the most recent output" for as long as every later run is silent.
+  Builds that split the walk into ``_archive_answer`` are patched there; builds
+  that inline it get the same contract applied to the assembled prompt.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 from collections.abc import Callable
@@ -239,13 +242,59 @@ def _archive_label(run_at: datetime, age_seconds: float, failure: bool) -> str:
     return f"[cron context_from: run of {stamp} ({_format_age(age_seconds)} ago)]"
 
 
+_CONTEXT_BLOCK_RE = re.compile(
+    r"(?m)^## (?P<heading>Output from job '[0-9a-f]{1,64}'|Your previous run's output)\n"
+    r"(?P<intro>The following is [^\n]*)\n\n```\n(?P<body>.*?)\n```\n\n",
+    re.DOTALL,
+)
+
+
+def _context_block_intro(heading: str) -> str:
+    """A self block is the job's own last run; anything else came from a preceding job."""
+    return _SELF_CONTEXT_INTRO if heading.startswith("Your previous run") else _UPSTREAM_CONTEXT_INTRO
+
+
+def _rewrite_context_block(match: Any) -> str:
+    body = match.group("body")
+    failure = _archive_failure(body)
+    run_at = _archive_run_time(body)
+    if run_at is None:
+        # An undated failure cannot be bounded or dated: drop it; anything else stays as is.
+        return "" if failure else match.group(0)
+    age = _archive_age_seconds(run_at)
+    if failure and age > _failure_max_age_seconds():
+        return ""  # stale failure: drop the block rather than quote it as the last run
+    heading = match.group("heading")
+    return (
+        f"## {heading}\n{_context_block_intro(heading)}\n\n```\n"
+        f"{_archive_label(run_at, age, failure)}\n{body}\n```\n\n"
+    )
+
+
+def _sanitize_context_blocks(prompt: str) -> str:
+    """Date every injected context block and drop a failure document past its bound."""
+    return _CONTEXT_BLOCK_RE.sub(_rewrite_context_block, prompt)
+
+
 def _wrap_context_from(mod: Any) -> None:
-    """Wrap ``_archive_answer`` so the injector dates its archives and skips stale failures."""
+    """Patch ``context_from`` archive handling for the shape this hermes-agent has.
+
+    Newer builds split the archive walk into ``_archive_answer``; older builds keep it
+    inline in ``_inject_context_from``. Both shapes get one contract: every injected
+    block carries its own run date, and a failure document is quoted only while fresh.
+    """
     if getattr(mod, "_pnp_context_from_patched", False):
         return
+    if not _wrap_context_from_archive_answer(mod):
+        _wrap_context_from_injector(mod)
+    mod._pnp_context_from_patched = True
+
+
+def _wrap_context_from_archive_answer(mod: Any) -> bool:
+    """Arm one: the module exposes ``_archive_answer``. False when it does not."""
     orig = getattr(mod, "_archive_answer", None)
     if not callable(orig):
-        return
+        return False
 
     def archive_answer(archive: str) -> Any:
         answer = orig(archive)
@@ -268,7 +317,30 @@ def _wrap_context_from(mod: Any) -> None:
     mod._archive_answer = archive_answer
     mod._UPSTREAM_CONTEXT_INTRO = _UPSTREAM_CONTEXT_INTRO
     mod._SELF_CONTEXT_INTRO = _SELF_CONTEXT_INTRO
-    mod._pnp_context_from_patched = True
+    return True
+
+
+def _wrap_context_from_injector(mod: Any) -> None:
+    """Arm two: the walk is inline, so the assembled prompt gets the fix instead.
+
+    This shape's extractor accepts a failure document whole (it carries no ``## Response``
+    heading), so the bound is applied after the walk: a failure block older than the bound
+    is removed from the prompt, and every surviving block is dated.
+    """
+    orig = getattr(mod, "_inject_context_from", None)
+    if not callable(orig):
+        return
+
+    def inject(job: dict[str, Any], prompt: str) -> Any:
+        result: Any = orig(job, prompt)
+        try:
+            text, injected = result
+            return _sanitize_context_blocks(text), injected
+        except Exception:
+            # Fail open to upstream's prompt: the block rewrite is cosmetic, never fatal.
+            return result
+
+    mod._inject_context_from = inject
 
 
 def _maybe_patch(name: str) -> None:
