@@ -151,3 +151,32 @@ index e977f0a..d91ea85 100644
  
  
  def sort_object_keys(value: Any) -> Any:
+diff --git a/hermes_context_manager/config.py b/hermes_context_manager/config.py
+index b4c93ab..f09c6e9 100644
+--- a/hermes_context_manager/config.py
++++ b/hermes_context_manager/config.py
+@@ -6,7 +6,23 @@ from dataclasses import dataclass, field, fields, is_dataclass
+ from pathlib import Path
+ from typing import Any, get_origin, get_type_hints
+ 
+-import yaml
++try:  # PyYAML: declared dependency, present in most Hermes environments.
++    import yaml
++except ImportError:  # pragma: no cover - Hermes ships ruamel.yaml, not PyYAML
++    # Hermes dropped PyYAML from its sealed venv (ruamel.yaml is the only
++    # YAML parser it ships from 2026.9.25 on).  Fall back to it rather than
++    # fail the whole plugin import: both loaders parse this config the same
++    # way (mappings, scalars, and lists only).
++    from ruamel.yaml import YAML as _RuamelYAML
++
++    class _SafeYamlShim:
++        """Minimal ``yaml.safe_load`` over ``ruamel.yaml``."""
++
++        @staticmethod
++        def safe_load(stream: Any) -> Any:
++            return _RuamelYAML(typ="safe").load(stream)
++
++    yaml = _SafeYamlShim()  # type: ignore[assignment]
+ 
+ 
+ @dataclass(slots=True)
