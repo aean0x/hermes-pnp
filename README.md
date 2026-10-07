@@ -208,9 +208,12 @@ tool traces.
 Materialize to `$stateDir/plugins/<name>`, discovered via
 `$stateDir/.hermes/plugins/<name>`. Sources are this repo's
 `plugins/catalog.nix`, the plugin repos pinned as flake inputs in
-`internal.pluginSources` (`flake.nix`), and `extraPluginDirs`, which is
-`attrsOf path` for your own trees (`extraPlugins` is a renamed alias).
-First-party plugins are not installed through official `extraPlugins`.
+`internal.pluginSources` (`flake.nix`), names on
+`services.hermesPnP.catalogInstall` (installed at runtime from their
+upstream catalog entry, nothing materialized), and `extraPluginDirs`,
+which is `attrsOf path` for your own trees (`extraPlugins` is a renamed
+alias). First-party plugins are not installed through official
+`extraPlugins`.
 
 **model-picker** (v0.11.1) — per-turn low / default / high, labelled
 Quick / Standard / Expert. Auto classifies all three; `high` is only
@@ -239,7 +242,10 @@ through a direct CDP websocket, returns status only. Never lands on
 disk or in the tool result.
 
 **git-hook** — fetch/pull before reads; commit/push only the files
-this turn dirtied. `GIT_HOOK_COMMIT=0` / `GIT_HOOK_PUSH=0` to mute.
+this turn dirtied. On a branch whose direct push the remote refuses on
+policy (branch protection, a PR-required ruleset) it stops committing
+there, drops its own commit and leaves the edit staged and dirty.
+`GIT_HOOK_COMMIT=0` / `GIT_HOOK_PUSH=0` to mute.
 HTTPS GitHub uses `GITHUB_TOKEN` via the credential helper.
 
 **docindex** — keyword + semantic search over the local document corpus,
