@@ -99,16 +99,22 @@ let
     cp -a ${hmcSrc}/. "$out/"
     chmod -R u+w "$out"
     rm -rf "$out/.github" "$out/tests" "$out/.gitignore"
-    # Local perf patch: memoize the short-circuit decision and the
-    # per-message token estimate so the per-turn materialize pass does
-    # not re-run a battery of multiline regexes over every historical
-    # tool output.  Steady-state pre_llm_call cost drops ~1.4s -> ~70ms
-    # on a 12.8k-message session; behavior (visible view, backups,
-    # token totals, savings accounting) is byte-identical, verified
-    # against the upstream test suite (254 pass) plus a real-session
-    # behavioral diff.  Consumer patch against upstream plugin code —
-    # upstream-worthy; revisit when the pin moves.
-    patch -p1 -d "$out" < ${../pkgs/hermes-context-manager-incremental.patch}
+    # Consumer patch against upstream plugin code (revisit when the pin
+    # moves).  Two independent changes:
+    #  * perf: memoize the short-circuit decision and the per-message
+    #    token estimate so the per-turn materialize pass does not re-run
+    #    a battery of multiline regexes over every historical tool
+    #    output.  Steady-state pre_llm_call cost drops ~1.4s -> ~70ms on
+    #    a 12.8k-message session; behavior (visible view, backups, token
+    #    totals, savings accounting) is byte-identical, verified against
+    #    the upstream test suite plus a real-session behavioral diff.
+    #  * dependency: config.py imports PyYAML, which the sealed venv no
+    #    longer ships (upstream dropped it for ruamel.yaml).  Without the
+    #    fallback the whole plugin fails to import and every hook is
+    #    silently absent.  Both branches verified against the upstream
+    #    suite: 254 run, 1 pre-existing failure, in the PyYAML and the
+    #    ruamel-only environment.
+    patch -p1 -d "$out" < ${../pkgs/hermes-context-manager.patch}
     cp ${hmcConfig} "$out/config.yaml"
   '';
 in
