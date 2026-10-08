@@ -361,19 +361,24 @@ Client rebuilds that pair the live provider with the previous API host
 
 ## Plugins
 
-Catalog is the SoT (`plugins/catalog.nix`). A plugin enters one of two
-ways: drop a tree in `plugins/<name>/` and add one catalog line, or pin
+Catalog is the SoT (`plugins/catalog.nix`). A plugin enters one of three
+ways: drop a tree in `plugins/<name>/` and add one catalog line, pin
 the upstream repo as a flake input and list it in
-`internal.pluginSources`. Skills follow the same pattern
+`internal.pluginSources`, or list it under `catalogInstall` and let the
+upstream catalog entry be the pin. Skills follow the same pattern
 (`skills/catalog.nix`: `browser`, `retrieval-reflex`,
 `gbrain-http-auth`; consumer trees via `skills.extraSkills`).
 
-Flake-input first-party, each pinned to a release commit:
-`model-picker`, `secret-handoff`, `git-hook`,
+Flake-input first-party, pinned to a release commit: `model-picker`.
+Catalog-delivered first-party, installed at runtime from their upstream
+catalog entry: `git-hook`, `secret-handoff`,
 `gbrain-retrieval-reflex`. Vendored first-party:
 `tool-call-coherency`, `gbrain-memory-flush`, `docindex`. `git-hook`
 ff-only pulls on the first read of a clean worktree; end of turn it
-commits this turn's porcelain delta and pushes.
+commits this turn's porcelain delta and pushes, except on a branch whose
+direct push the remote refuses on policy (branch protection, a
+PR-required ruleset): there it drops its own commit, leaves the edit
+staged and dirty and stops committing on that branch.
 
 - Empty `plugins` and no `extraPluginDirs` → no plugin files.
 - Materialize to `$stateDir/plugins/<name>`.
