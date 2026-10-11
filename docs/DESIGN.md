@@ -164,7 +164,7 @@ the official option PnP set via `mkDefault`.
 - `services.hermesPnP.enable` — composer on. Default `false`.
 - `services.hermesPnP.environmentFiles` — forwarded to official
   `environmentFiles`. Key list: `docs/hermes.env.example`.
-- `services.hermesPnP.models.{low,default,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Router tiers also have `best_for` (classifier matrix; plugin JSON defaults). Auxiliary is Nix-only; effort unset except auxiliary (`"none"`).
+- `services.hermesPnP.models.{low,default,high,auxiliary}` — `{ provider, model, reasoning_effort }`. Router tiers also have `best_for` (classifier matrix; plugin JSON defaults). Auxiliary is Nix-only; effort unset except auxiliary (`"none"`, dropped for the two slots named in `noEffortSlots`).
 - `services.hermesPnP.plugins` — `listOf str`. Composer on defaults
   via `mkDefault` to model-picker and tool-call-coherency.
 - `services.hermesPnP.catalogInstall` — `listOf str`. Names installed from
@@ -288,15 +288,34 @@ slots — not a router tier, no `/auxiliary`.
 Each named model has `reasoning_effort` (`nullOr str`). Default is
 unset (Hermes session defaults) except auxiliary, which defaults to
 `"none"`. Model-router never writes `reasoning_config` /
-`reasoning_effort`. The `background_review` slot is seeded with its
-provider/model and no effort: Hermes ignores that slot's effort while
-the review fork runs on the session's own model — the fork inherits the
-parent's reasoning config to keep the parent's prompt-cache prefix — and
-warns on every such review. The fork follows the session model at
-runtime (the router raises and lowers it per turn), so the fan-out drops
-the key instead of claiming an effect it cannot have; a consumer that
-routes the slot itself sets `settings.auxiliary.background_review.
-reasoning_effort` after the PnP import.
+`reasoning_effort`. Two auxiliary slots are seeded with their
+provider/model and no effort, each because a seeded effort there would not
+have the effect it claims:
+
+- `background_review` — Hermes ignores that slot's effort while the review
+  fork runs on the session's own model (the fork inherits the parent's
+  reasoning config to keep the parent's prompt-cache prefix) and warns on
+  every such review. The fork follows the session model at runtime (the
+  router raises and lowers it per turn), so the fan-out drops the key
+  instead of claiming an effect it cannot have.
+- `compression` — `"none"` certifies the route as Hermes' compression fast
+  lane (`_compression_fast_lane_controls` → extra_body
+  `reasoning: {enabled: false}` → the DeepSeek profile's
+  `thinking: {"type": "disabled"}`). On the non-thinking wire DeepSeek
+  `/v1` defaults to an 8192-token output ceiling, and the compressor sends
+  no `max_tokens` while demanding
+  `min(0.20 × middle_window, 10 000) + 4 000` = up to 14 000, so every
+  summary past a ~50k-token middle window aborts on `finish_reason=length`
+  and resends the whole context on the next turn (FA-027).
+
+The other seeded slots are unaffected: their calls pass their own
+`max_tokens` well under that ceiling (approval 16, memory_query_rewrite 96,
+profile_describer 400, title_generation 512, monitor 1024,
+kanban_decomposer 4000, triage_specifier 6000) or make no auxiliary LLM
+call at all (`skills_hub`, `web_extract`), so for them `"none"` only keeps
+the call cheap. A consumer that re-adds either key after the PnP import
+restores the old behavior — a per-review warning for `background_review`, a
+re-certified fast lane and the 8192 ceiling for `compression`.
 
 | name       | role                     | seeds                                         |
 | ---------- | ------------------------ | --------------------------------------------- |
@@ -327,7 +346,7 @@ When `hermesPnP.enable` (`modules/models.nix`):
 - `settings.fallback_model.{provider,model}` ← high
 - `settings.delegation.{provider,model}` ← default
 - `settings.cron.{model,model_provider}` ← low
-- `settings.auxiliary.<slot>` ← `models.auxiliary` (provider, model, and `reasoning_effort` when set — `background_review` takes provider/model only, see above)
+- `settings.auxiliary.<slot>` ← `models.auxiliary` (provider, model, and `reasoning_effort` when set — `background_review` and `compression` take provider/model only, see above)
 - `settings.agent.reasoning_effort` ← high only when `models.high.reasoning_effort` is set
 - `delegation` / `cron` `reasoning_effort` ← default / low only when those options are set
 

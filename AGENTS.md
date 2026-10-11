@@ -99,7 +99,8 @@ v0.9.1). Auto classifies all three (labels Quick / Standard / Expert);
 Slot `model` / `provider` / `label` / `short` / `best_for` are Nix
 options. Nix also has `models.auxiliary` (official aux slots; not a
 router tier, no slash command). `reasoning_effort` is unset except
-auxiliary (`"none"`). Router tiers have `compression_ratio`.
+auxiliary (`"none"`; dropped for `background_review` and `compression`,
+see `noEffortSlots`). Router tiers have `compression_ratio`.
 Model-router never writes reasoning. No T1/T2/T3, no `/auxiliary`.
 
 ## Checks
