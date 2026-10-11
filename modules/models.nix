@@ -12,8 +12,8 @@
 #
 # Model-router only switches model/provider. reasoning_effort is Hermes
 # session state except for official auxiliary slots, which seed from
-# models.auxiliary (default effort "none"); the background_review slot is
-# the exception and seeds no effort — see auxiliarySlotFor below.
+# models.auxiliary (default effort "none"); background_review and
+# compression seed no effort — see noEffortSlots below.
 {
   config,
   lib,
@@ -161,20 +161,44 @@ let
 
   auxiliarySlot = mkSeed models.auxiliary;
 
-  # Hermes discards auxiliary.background_review.reasoning_effort whenever the review fork
-  # runs on the session's own model: the fork inherits the parent's reasoning_config so its
-  # request keeps the parent's prompt-cache prefix, and it logs a warning on every such
-  # review that the configured effort has no effect. Which model that fork gets is a
-  # runtime fact — the model-picker router raises and lowers the session model per turn —
-  # so no Nix-time "is the aux model the session model" test can decide whether the key
-  # would apply. Drop the effort for this one slot: a same-model review inherits the
-  # parent's effort (Hermes' intended behavior, prompt-cache parity included), a review the
-  # consumer routes elsewhere falls back to the provider's default, and no seed ever claims
-  # an effect it cannot have. A consumer that routes this slot itself sets
-  # settings.auxiliary.background_review.reasoning_effort after the PnP import.
+  # Slots that seed provider/model only. Each entry carries its own reason: an
+  # effort here is never inert for these two.
+  #
+  # background_review — Hermes discards auxiliary.background_review.reasoning_effort
+  # whenever the review fork runs on the session's own model: the fork inherits the
+  # parent's reasoning_config so its request keeps the parent's prompt-cache prefix, and
+  # it logs a warning on every such review that the configured effort has no effect.
+  # Which model that fork gets is a runtime fact — the model-picker router raises and
+  # lowers the session model per turn — so no Nix-time "is the aux model the session
+  # model" test can decide whether the key would apply. A same-model review inherits the
+  # parent's effort (Hermes' intended behavior, prompt-cache parity included), a review
+  # the consumer routes elsewhere falls back to the provider's default, and no seed
+  # claims an effect it cannot have.
+  #
+  # compression — "none" here certifies the route as Hermes' compression fast lane:
+  # `_compression_fast_lane_controls` writes extra_body `reasoning: {enabled: false}` and
+  # the DeepSeek profile projects that to `thinking: {"type": "disabled"}`. On the
+  # non-thinking wire DeepSeek `/v1` falls back to an 8192-token output ceiling when the
+  # request carries no `max_tokens`, while the compressor deliberately sends no cap and
+  # demands `min(0.20 x middle_window, 10_000) + 4_000` = up to 14 000 tokens. Past a
+  # ~50k-token middle window every summary therefore ends on `finish_reason=length` and
+  # the compaction aborts, and each aborted attempt resends the whole context on the next
+  # turn (FA-027). Dropping the key leaves the route uncertified, the profile emits
+  # `thinking: {"type": "enabled"}`, and thinking-mode budgeting has no 8192 ceiling.
+  #
+  # Every other seeded slot passes its own max_tokens far below the non-thinking ceiling
+  # (approval 16, memory_query_rewrite 96, profile_describer 400, title_generation 512,
+  # monitor 1024, kanban_decomposer 4000, triage_specifier 6000) or holds no auxiliary
+  # LLM call at all (skills_hub, web_extract), so "none" only keeps those calls cheap.
+  #
+  # A consumer that re-adds either key after the PnP import restores the old behavior:
+  # for background_review that is a per-review warning, for compression it re-certifies
+  # the fast lane and the 8192 ceiling with it.
+  noEffortSlots = [ "background_review" "compression" ];
+
   auxiliarySlotFor =
     slot:
-    if slot == "background_review" then
+    if builtins.elem slot noEffortSlots then
       builtins.removeAttrs auxiliarySlot [ "reasoning_effort" ]
     else
       auxiliarySlot;
@@ -330,10 +354,13 @@ in
         Official auxiliary tasks (title generation, compression, …).
         Nix-only — not a model-picker tier, no slash command.
         reasoning_effort defaults to "none" (overridable). Provider/model
-        default like low. The background_review slot seeds provider/model
-        only: Hermes ignores that slot's effort while the review fork runs
-        on the session's own model and warns per review, so the fan-out
-        drops it (see auxiliarySlotFor in the config block).
+        default like low. Two slots seed provider/model only, each because a
+        seeded effort there would not have the effect it claims:
+        background_review (Hermes ignores it while the review fork runs on
+        the session's own model, and warns per review) and compression (a
+        seeded "none" certifies the DeepSeek fast lane, whose non-thinking
+        8192-token output default aborts every summary past a ~50k-token
+        middle window). See noEffortSlots in the config block.
       '';
     };
   };

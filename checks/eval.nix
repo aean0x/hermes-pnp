@@ -345,10 +345,31 @@ in
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.background_review.model}" = "${modulesConfig.services.hermesPnP.models.auxiliary.model}"
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.curator.model}" = "${modulesConfig.services.hermesPnP.models.auxiliary.model}"
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.triage_specifier.reasoning_effort}" = "none"
-    # background_review seeds provider/model only: Hermes ignores that slot's effort while
-    # the review fork runs on the session's own model (prompt-cache parity) and warns per
-    # review, so the fan-out must not claim an effect it cannot have.
+    # Exactly two slots seed provider/model only, and this is the guard against a third
+    # regression of either reason:
+    # - background_review: Hermes ignores that slot's effort while the review fork runs on
+    #   the session's own model (prompt-cache parity) and warns per review, so the fan-out
+    #   must not claim an effect it cannot have.
+    # - compression: a seeded effort is not inert. "none" certifies Hermes' compression
+    #   fast lane (`_compression_fast_lane_controls` → extra_body `reasoning: {enabled:
+    #   false}` → the DeepSeek profile emits `thinking: {"type": "disabled"}`); on the
+    #   non-thinking wire DeepSeek `/v1` defaults to an 8192-token output ceiling while the
+    #   compressor sends no `max_tokens` and demands up to 14 000, so every summary past a
+    #   ~50k-token middle window aborts on `finish_reason=length` and resends the whole
+    #   context next turn (FA-027).
+    test "${
+      builtins.concatStringsSep "," (
+        builtins.attrNames (
+          lib.filterAttrs (n: v: !(v ? reasoning_effort)) (
+            modulesConfig.services.hermes-agent.settings.auxiliary
+          )
+        )
+      )
+    }" = "background_review,compression"
     test "${toString ((modulesConfig.services.hermes-agent.settings.auxiliary.background_review or { }) ? reasoning_effort)}" = ""
+    test "${toString ((modulesConfig.services.hermes-agent.settings.auxiliary.compression or { }) ? reasoning_effort)}" = ""
+    test "${modulesConfig.services.hermes-agent.settings.auxiliary.compression.model}" = "${modulesConfig.services.hermesPnP.models.auxiliary.model}"
+    test "${modulesConfig.services.hermes-agent.settings.auxiliary.compression.provider}" = "${modulesConfig.services.hermesPnP.models.auxiliary.provider}"
     test "${modulesConfig.services.hermes-agent.settings.auxiliary.background_review.provider}" = "${modulesConfig.services.hermesPnP.models.auxiliary.provider}"
     test "${toString ((modulesConfig.services.hermes-agent.settings.agent or {}).reasoning_effort or "")}" = ""
     test "${modulesConfig.services.hermes-agent.settings.delegation.model}" = "${modulesConfig.services.hermesPnP.models.default.model}"
@@ -587,6 +608,10 @@ in
     test "${optionsEval.config.services.hermesPnP.models.default.model}" = "deepseek-flash"
     test "${optionsEval.config.services.hermesPnP.models.high.model}" = "grok-4.6"
     test "${optionsEval.config.services.hermesPnP.models.auxiliary.model}" = "deepseek-flash"
+    # The auxiliary model set still defaults to effort "none"; that default only reaches
+    # the slots whose calls can absorb it (their own max_tokens sit far below DeepSeek's
+    # non-thinking 8192 ceiling). The fan-out drops the key for background_review and
+    # compression — asserted on `settings.auxiliary` in the modules check above.
     test "${optionsEval.config.services.hermesPnP.models.auxiliary.reasoning_effort}" = "none"
     test "${toString (optionsEval.config.services.hermesPnP.models.low.reasoning_effort == null)}" = "1"
     test "${toString (optionsEval.config.services.hermesPnP.models.high.reasoning_effort == null)}" = "1"
