@@ -360,9 +360,7 @@ in
     test "${
       builtins.concatStringsSep "," (
         builtins.attrNames (
-          lib.filterAttrs (n: v: !(v ? reasoning_effort)) (
-            modulesConfig.services.hermes-agent.settings.auxiliary
-          )
+          lib.filterAttrs (n: v: !(v ? reasoning_effort)) modulesConfig.services.hermes-agent.settings.auxiliary
         )
       )
     }" = "background_review,compression"
