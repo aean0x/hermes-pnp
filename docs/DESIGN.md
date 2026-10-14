@@ -182,6 +182,13 @@ the official option PnP set via `mkDefault`.
   prefer official `services.hermes-agent.extraPackages`.
 - `services.hermesPnP.toolbox.hostPath` / `containerPath` /
   `toolboxDir` / `containerToolboxDir`.
+- The toolbox also carries the agent's browser driver: `agent-browser`
+  from the in-tree musl pin (`pkgs/agent-browser.nix`). The browser tool
+  and the vault supervisor exec that CLI. Never `pkgs.agent-browser` —
+  nixpkgs is 0.27, where streamed keyboard input is broken. An npm shim
+  in `~/.npm-global/bin` is not a driver: npm bakes the installing
+  namespace's absolute path (dangling in the jail) and npx re-points the
+  link at its own cache dir, which a prune empties.
 - `services.hermesPnP.workspace` — `nullOr str`, default `null`. One
   host path for gateway `terminal.cwd` and WebUI
   `HERMES_WEBUI_DEFAULT_WORKSPACE`. Remapped to `/data` (or

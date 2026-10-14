@@ -532,20 +532,20 @@ in
     test "${toString (lib.hasInfix "gateHome" (builtins.readFile ../modules/browser/shared.nix))}" = ""
     test "${toString (lib.hasInfix "disable-dev-shm-usage" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
     test "${toString (lib.hasInfix "nodejs" (builtins.readFile ../modules/browser/shared.nix))}" = "1"
+    # The agent's browser driver (the browser tool and the vault supervisor
+    # exec it) ships in the toolbox: the in-tree musl pin, never nixpkgs'
+    # stale agent-browser 0.27 — a `pkgs.agent-browser` reference loses the
+    # pin and fails the version assertion below.
     test "${
       toString (
-        lib.hasInfix "agent-browser-0.34" (
-          lib.concatMapStringsSep " " toString modulesConfig.environment.systemPackages
-        )
+        lib.any (p: lib.hasPrefix "agent-browser" (p.name or "")) modulesConfig.services.hermesPnP.toolbox.paths
       )
-    }" = ""
+    }" = "1"
     test "${
       toString (
-        lib.hasInfix "agent-browser-0.27" (
-          lib.concatMapStringsSep " " toString modulesConfig.environment.systemPackages
-        )
+        lib.any (p: (p.version or "") == "0.39.1") modulesConfig.services.hermesPnP.toolbox.paths
       )
-    }" = ""
+    }" = "1"
     test "${
       toString (
         lib.hasInfix "hermes-browser-gate" (

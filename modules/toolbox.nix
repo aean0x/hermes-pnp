@@ -110,6 +110,9 @@ let
     pkgs.pandoc
     pkgs.bun
     pkgs.nodejs
+    # The agent's browser driver: the browser tool and the vault supervisor
+    # exec it. In-tree musl pin — `pkgs.agent-browser` is nixpkgs' 0.27.
+    (pkgs.callPackage ../pkgs/agent-browser.nix { })
     pkgs.git
     pkgs.ripgrep
     pkgs.jq
