@@ -80,8 +80,8 @@ Composer turns on the official gateway and pairs everything else to
 it: same user, same `HERMES_HOME`, same secrets file. A `buildEnv`
 toolbox lands at `$stateDir/toolbox/bin` (`/data/toolbox/bin` in the
 jail) — python3 plus a curated everyday CLI (git, rg, jq, bun, node,
-ffmpeg, gh, age, …). Official `extraPackages` fold into that env
-(native profile + jail bind). Jail PATH is `--env`. `container.enable`
+agent-browser, ffmpeg, gh, age, …). Official `extraPackages` fold into
+that env (native profile + jail bind). Jail PATH is `--env`. `container.enable`
 is the recommended host: Ubuntu 24.04, `/nix/store:ro`, no view of
 `/etc/nixos`. Network follows official `container.network` when that
 option exists (else host). Extra binds stay on official
