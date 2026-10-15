@@ -614,15 +614,28 @@ def pending_rows(conn: sqlite3.Connection, limit: int | None = None,
     return conn.execute(sql, params).fetchall()
 
 
-def store_result(conn: sqlite3.Connection, res: dict) -> None:
-    conn.execute("DELETE FROM pages WHERE path=?", (res["path"],))
-    if res["pages"]:
-        conn.executemany("INSERT INTO pages(path, page, text) VALUES (?,?,?)",
-                         [(res["path"], n, t) for n, t in res["pages"]])
-    conn.execute(
+def flush_results(conn: sqlite3.Connection, results: list[dict]) -> None:
+    """Write a batch of extraction results in ONE transaction.
+
+    The pages table is FTS5 and its path column is UNINDEXED, so
+    ``DELETE FROM pages WHERE path=?`` cannot use an index: it SCANs the whole
+    table (~1 s at 50k rows, and it grows with the index). One delete per file
+    made the nightly refresh quadratic - a 20k-file night ran for hours and the
+    cron script cap killed it. Batching turns N table scans into one.
+    """
+    if not results:
+        return
+    ph = ",".join("?" * len(results))
+    conn.execute(f"DELETE FROM pages WHERE path IN ({ph})", [r["path"] for r in results])
+    for r in results:
+        if r["pages"]:
+            conn.executemany("INSERT INTO pages(path, page, text) VALUES (?,?,?)",
+                             [(r["path"], n, t) for n, t in r["pages"]])
+    now = time.time()
+    conn.executemany(
         "UPDATE files SET status=?, method=?, npages=?, nchars=?, error=?, updated=? WHERE path=?",
-        (res["status"], res["method"], res["npages"], res["nchars"], res["error"],
-         time.time(), res["path"]))
+        [(r["status"], r["method"], r["npages"], r["nchars"], r["error"], now, r["path"])
+         for r in results])
     conn.commit()
 
 
@@ -643,6 +656,14 @@ def prune_workdir(workdir: str) -> None:
             shutil.rmtree(child, ignore_errors=True)
 
 
+FLUSH_FILES = 200          # results per write batch
+FLUSH_BYTES = 8 << 20      # ...or this much page text, whichever comes first
+
+
+def _batch_bytes(results: list[dict]) -> int:
+    return sum(sum(len(t) for _, t in r["pages"]) for r in results)
+
+
 def cmd_extract(conn: sqlite3.Connection, workers: int, limit: int | None,
                 workdir: str, heartbeat=None, match: str | None = None) -> dict:
     prune_workdir(workdir)
@@ -650,10 +671,18 @@ def cmd_extract(conn: sqlite3.Connection, workers: int, limit: int | None,
     todo = [(p, k, workdir) for p, k in rows]
     done = {"ok": 0, "empty": 0, "failed": 0, "skipped": 0, "partial": 0}
     t0 = time.time()
+    batch: list[dict] = []
+
+    def keep(res: dict) -> None:
+        batch.append(res)
+        if len(batch) >= FLUSH_FILES or _batch_bytes(batch) >= FLUSH_BYTES:
+            flush_results(conn, batch)
+            batch.clear()
+
     if workers <= 1:
         for item in todo:
             res = extract_one(item)
-            store_result(conn, res)
+            keep(res)
             done[res["status"]] = done.get(res["status"], 0) + 1
             _progress(done, len(todo), t0, res)
     else:
@@ -661,9 +690,10 @@ def cmd_extract(conn: sqlite3.Connection, workers: int, limit: int | None,
             futs = {pool.submit(extract_one, item): item[0] for item in todo}
             for fut in as_completed(futs):
                 res = fut.result()
-                store_result(conn, res)
+                keep(res)
                 done[res["status"]] = done.get(res["status"], 0) + 1
                 _progress(done, len(todo), t0, res)
+    flush_results(conn, batch)
     return done
 
 
