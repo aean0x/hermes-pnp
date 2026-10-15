@@ -216,11 +216,10 @@ def _first_frame_png(img: str, workdir: Path) -> str | None:
 
     tesseract decodes through leptonica, which reads still images only: an
     animated WebP makes it exit 1 before it looks at one pixel. ffmpeg streams
-    frame 0 of that file in under a second and ~40 MiB, where ImageMagick loads
-    the whole animation (1.8 GiB for a 573-frame WebP, and its -limit knobs turn
-    that into a hard "cache resources exhausted" failure). The extract workers
-    run inside a 2 GiB memory cgroup with no swap, so ffmpeg is the decoder to
-    reach for here.
+    frame 0 of that file in 0.12 s at 37 MiB peak RSS; ImageMagick decodes the
+    whole animation instead and the 2 GiB worker cgroup's OOM killer reaps it
+    (measured on a 573-frame WebP: SIGKILL at 1.16 GiB, still climbing). ffmpeg
+    is the decoder to reach for here.
     """
     out = workdir / f"tx{os.getpid()}.png"
     try:
