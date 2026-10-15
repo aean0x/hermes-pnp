@@ -48,11 +48,11 @@
     "hermes-model-picker": {
       "flake": false,
       "locked": {
-        "lastModified": 1789718879,
-        "narHash": "sha256-R61S9zuqaPggwQX2mzrib3kZD0L3SxB6KmRnkjW6Oe8=",
+        "lastModified": 1790875544,
+        "narHash": "sha256-0AqCXiA89mBs1ouraEV3dKXd3TJyKH1uDPTVd0wufak=",
         "owner": "aean0x",
         "repo": "hermes-model-picker",
-        "rev": "04a23c809d550ecb0a69749927b803e9250da656",
+        "rev": "040854d667ffd4166cbb0534587de3e244f5c41a",
         "type": "github"
       },
       "original": {
