@@ -211,6 +211,48 @@ def _tesseract(img: str, workdir: Path) -> str:
     return res.stdout
 
 
+def _first_frame_png(img: str, workdir: Path) -> str | None:
+    """First frame of any container ffmpeg can read, as a PNG, else None.
+
+    tesseract decodes through leptonica, which reads still images only: an
+    animated WebP makes it exit 1 before it looks at one pixel. ffmpeg streams
+    frame 0 of that file in under a second and ~40 MiB, where ImageMagick loads
+    the whole animation (1.8 GiB for a 573-frame WebP, and its -limit knobs turn
+    that into a hard "cache resources exhausted" failure). The extract workers
+    run inside a 2 GiB memory cgroup with no swap, so ffmpeg is the decoder to
+    reach for here.
+    """
+    out = workdir / f"tx{os.getpid()}.png"
+    try:
+        res = run(["ffmpeg", "-y", "-loglevel", "error", "-i", img,
+                   "-frames:v", "1", "-vf", "format=gray", str(out)], timeout=300)
+    except subprocess.TimeoutExpired:
+        return None
+    if res.returncode != 0 or not out.exists():
+        return None
+    return str(out)
+
+
+def _ocr_decoded(img: str, workdir: Path) -> str:
+    """OCR an image, retrying once through a first-frame transcode.
+
+    The retry runs only when tesseract refuses the file, so an image leptonica
+    already reads is never re-encoded and its OCR text cannot change. A file no
+    decoder can read keeps the original tesseract error.
+    """
+    try:
+        return _tesseract(img, workdir)
+    except RuntimeError as exc:
+        failed = exc
+    png = _first_frame_png(img, workdir)
+    if png is None:
+        raise failed
+    try:
+        return _tesseract(png, workdir)
+    finally:
+        Path(png).unlink(missing_ok=True)
+
+
 def _render_page(path: str, page: int, workdir: Path) -> tuple[str, list[Path]]:
     """Render one page for OCR. Falls back to extracting the embedded scan when
     pdftoppm cannot rasterize the page (corrupt XRef, odd producers)."""
@@ -255,7 +297,7 @@ def ocr_image(path: str, workdir: Path) -> str:
                                f"{(res.stderr or '')[:160]}")
         src = str(converted)
     try:
-        return _tesseract(src, workdir)
+        return _ocr_decoded(src, workdir)
     finally:
         if converted is not None:
             converted.unlink(missing_ok=True)
