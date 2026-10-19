@@ -1,5 +1,5 @@
 name: refusal-advice
-version: 0.1.1
+version: 0.1.2
 description: >-
   Names the gate-clean shape on an unattended approvals refusal. The cron/-q
   approvals gate renders every block from one template whose advice is only
@@ -8,6 +8,10 @@ description: >-
   the banned shape next turn. This hook appends the alternative that works headless
   (write the logic to a script FILE and run `python3 <path>`) and, when the detector
   matched raw text inside a quoted argument, tells the model to reword the payload.
+  It also covers the hardline floor, whose separate template carries no advice at
+  all and has no approval path: for the shutdown/reboot family it names the heredoc
+  body-line false positive and the file form (`git commit -F <path>`) that clears it,
+  and for the rest it says plainly that a retry cannot succeed.
   Message-only: it changes nothing about what the gate blocks, rewrites no command
   and runs no tool. Pure string work — safe on the caller thread with
   plugins.hook_callback_timeout: 0.

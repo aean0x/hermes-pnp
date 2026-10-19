@@ -23,6 +23,16 @@ def _refusal(description: str) -> str:
     )
 
 
+def _hardline(description: str) -> str:
+    """The hardline floor's own template (hermes-agent ``tools/approval_floors.py``)."""
+    return (
+        f"BLOCKED (hardline): {description}. This command is on the unconditional blocklist and"
+        " cannot be executed via the agent — not even with --yolo, /yolo, approvals.mode=off, or"
+        " cron approve mode. If you genuinely need to run it, run it yourself in a terminal"
+        " outside the agent."
+    )
+
+
 class FakeCtx:
     """Minimal stand-in for Hermes' PluginContext."""
 
@@ -67,6 +77,78 @@ class TransformTests(unittest.TestCase):
         ctx = FakeCtx()
         ra.register(ctx)
         self.assertIs(ctx.hooks["transform_tool_result"], ra.transform)
+
+
+class HardlineTemplateTests(unittest.TestCase):
+    """The hardline floor renders a different template and had no advice at all."""
+
+    def test_shutdown_family_names_the_heredoc_body_and_the_file_form(self) -> None:
+        out = ra.transform(tool_name="terminal", result=_hardline("system shutdown/reboot"))
+        self.assertIn("heredoc BODY line", out)
+        self.assertIn("git commit -F <path>", out)
+        self.assertNotIn("python3 <path>", out)
+        self.assertTrue(out.startswith(_hardline("system shutdown/reboot")))
+
+    def test_shutdown_family_match_is_case_insensitive(self) -> None:
+        out = ra.transform(result=_hardline("System Shutdown/Reboot"))
+        self.assertIn("git commit -F <path>", out)
+
+    def test_other_hardline_families_say_a_retry_cannot_succeed(self) -> None:
+        out = ra.transform(result=_hardline("rm -rf /"))
+        self.assertIn("no approval path", out)
+        self.assertIn("re-sending the same command cannot succeed", out)
+
+    def test_self_advising_hardline_families_are_left_alone(self) -> None:
+        for description in ("command parser limit", "malformed executable payload"):
+            with self.subTest(description=description):
+                self.assertIsNone(ra.transform(result=_hardline(description)))
+
+    def test_hardline_rewrite_is_idempotent(self) -> None:
+        once = ra.transform(result=_hardline("system shutdown/reboot"))
+        self.assertIsNone(ra.transform(result=once))
+
+    def test_hardline_advice_never_rewrites_the_command(self) -> None:
+        result = _hardline("system shutdown/reboot")
+        out = ra.transform(result=result)
+        self.assertTrue(out.startswith(result))
+        self.assertNotIn("BLOCKED (hardline):", out[len(result):])
+
+
+class EnvelopeTests(unittest.TestCase):
+    """The gates hand the model a JSON envelope; advice outside the braces breaks every parser."""
+
+    @staticmethod
+    def _envelope(message: str) -> str:
+        import json
+
+        return json.dumps({"output": "", "exit_code": -1, "error": message,
+                           "status": "blocked"}, ensure_ascii=False)
+
+    def test_hardline_advice_lands_inside_the_error_field(self) -> None:
+        import json
+
+        raw = self._envelope(_hardline("system shutdown/reboot"))
+        out = ra.transform(tool_name="terminal", result=raw)
+        payload = json.loads(out)
+        self.assertEqual(payload["status"], "blocked")
+        self.assertTrue(payload["error"].startswith("BLOCKED (hardline):"))
+        self.assertIn("git commit -F <path>", payload["error"])
+
+    def test_unattended_advice_lands_inside_the_error_field(self) -> None:
+        import json
+
+        raw = self._envelope(_refusal("script execution via heredoc"))
+        payload = json.loads(ra.transform(result=raw))
+        self.assertIn("script FILE", payload["error"])
+
+    def test_envelope_rewrite_is_idempotent(self) -> None:
+        raw = self._envelope(_hardline("system shutdown/reboot"))
+        once = ra.transform(result=raw)
+        self.assertIsNone(ra.transform(result=once))
+
+    def test_envelope_without_a_message_field_is_left_as_prose(self) -> None:
+        raw = '{"output": "", "exit_code": -1}'
+        self.assertIsNone(ra.transform(result=raw))
 
 
 if __name__ == "__main__":
