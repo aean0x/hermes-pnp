@@ -25,9 +25,15 @@ of the mistake. This plugin makes it name the alternative.
 | `script execution via heredoc`, `script execution via -e/-c flag`, `shell command via -c/-lc flag` | write the logic to a script FILE and run `python3 <path>` (skill `cron-output-guide`, section Headless tooling) |
 | `stop/restart system service` and other raw-string matches | the detector matches quoted text too; reword the payload (name the unit, say it needs a restart) |
 | anything else the detector flags | the script-file shape, or a plain tool (`read_file`, `search_files`, `jq`) for inspection |
+| **hardline** `system shutdown/reboot` | the heredoc BODY-line false positive (every raw newline is a command start; `_mask_quoted_newlines` masks only newlines inside quotes) and the file form `git commit -F <path>` that clears it |
+| **hardline**, any other family | the hardline list has no approval path, so re-sending the same command cannot succeed |
+| **hardline** `command parser limit`, `malformed executable payload` | left alone — the block result already appends its own save-the-script hint |
 
-A result without the dangerous-command prefix is returned untouched, and a refusal that
-already carries the advice is not rewritten twice.
+A result without either block prefix is returned untouched, and a refusal that already
+carries the advice is not rewritten twice. Advice on a JSON envelope
+(`{"output": "", "exit_code": -1, "error": …}`) is appended to the `error`/`message` field and
+the envelope re-serialized, so the result stays parseable; 0.1.2 fixed 0.1.1 appending after
+the closing brace.
 
 Message-only: it does not change what the gate blocks, does not rewrite a command, and
 runs no tool. No IO, no subprocess, no locks — required, because
