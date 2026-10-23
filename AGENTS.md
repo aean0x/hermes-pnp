@@ -9,6 +9,9 @@ MEMORY.md stay in the consumer. Browser CDP/browser-ui gate provisioning is a
 composer opinion (`services.hermesPnP.browser`); the engine stays in the
 consumer.
 
+Change procedures (commit identity, `nix flake check`, the PR lint gate,
+adding a plugin) are the omp skill `hermes-pnp-contrib` (`.omp/skills/`).
+
 ## Composer vs library
 
 - `services.hermesPnP.enable = false` (default): plugins +
@@ -19,13 +22,6 @@ consumer.
   path for gateway `terminal.cwd` and WebUI default; remapped only in
   the jail. Home Manager (`homeManagerModules.default`) is the personal
   path: login user, `~/.hermes`, no jails/WebUI/toolbox.
-
-## Git identity
-
-- Commit ONLY as GitHub user `aean0x` (`users.noreply.github.com`).
-  Set `user.name` + `user.email` global AND repo-local.
-- Check `git config user.name` before the first commit of a session.
-- After any history rewrite, re-pin downstream `flake.lock` inputs.
 
 ## Do
 
@@ -84,10 +80,11 @@ pkgs/agent-infra-browser-ui.nix  # vendored @agent-infra/browser-ui UMD
 checks/                   # eval + plugin/proxy tests
 examples/                 # consumer snippets (evalled by checks)
 plugins/catalog.nix       # plugin name → path
-skills/catalog.nix        # first-party skill name → path
+skills/catalog.nix        # first-party Hermes skill name → path
 scripts/                  # gbrain-setup / validate-gbrain (not Nix)
 plugins/                  # first-party plugin trees
-skills/                   # first-party skill trees
+skills/                   # first-party Hermes skill trees
+.omp/skills/              # omp procedures for this repo (not Hermes skills)
 ```
 
 Adding a plugin: drop `plugins/<name>/` and add one catalog line.
@@ -105,13 +102,6 @@ Model-router never writes reasoning. No T1/T2/T3, no `/auxiliary`.
 
 ## Checks
 
-`nix flake check` stays eval-cheap for the composer (dummy packages).
-Keep plugin pytest and mcp-proxy tests.
-
-PR merge also requires `.github/workflows/lint.yml` (job `lint`):
-
-- Python: ruff C901 (`ruff.toml`, max-complexity 20)
-- JS: oxlint `complexity` (`.oxlintrc.json`, max 20)
-- Nix: statix (`statix.toml`; inherit/repeated-keys disabled — NixOS noise, not CC)
-
-statix is not cyclomatic complexity. There is no McCabe for Nix; this is the Nix antipattern gate.
+`nix flake check` stays eval-cheap (dummy packages in `checks/eval.nix`
+and `checks/home-manager.nix`). It still runs the plugin and mcp-proxy
+suites. The PR lint gate and how to run it are skill `hermes-pnp-contrib`.
