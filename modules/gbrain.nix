@@ -48,6 +48,19 @@ in
       description = "Port gbrain serve listens on. 3131 is the stock gbrain --http default.";
     };
 
+    publicUrl = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "https://brain.example.ts.net:8443";
+      description = ''
+        OAuth issuer for `gbrain serve` (`--public-url`).
+        Null keeps `http://localhost:<port>`. Set this when a proxy
+        publishes the serve on another host or port. The issuer in
+        discovery and in tokens is this URL.
+      '';
+    };
+
+
     model = mkOption {
       type = types.nullOr types.str;
       default = null;

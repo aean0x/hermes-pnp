@@ -29,7 +29,7 @@ let
       exit 1
     fi
     cd "$HOME"
-    exec gbrain serve --http --port ${toString cfg.port} --bind ${cfg.bind}
+    exec gbrain serve --http --port ${toString cfg.port} --bind ${cfg.bind}${lib.optionalString (cfg.publicUrl != null) " --public-url ${lib.escapeShellArg cfg.publicUrl}"}
   '';
   tokenInject = ''
     install -d -m 0750 "${userHome}"

@@ -45,7 +45,7 @@ Nix does not ship PGLite, sources, or a memory registry.
 
 | Surface | Role |
 |---------|------|
-| systemd `gbrain-mcp-http` | Sole PGLite owner: `gbrain serve --http --bind 127.0.0.1 --port 3131` |
+| systemd `gbrain-mcp-http` | Sole PGLite owner: `gbrain serve --http --bind 127.0.0.1 --port 3131`. `gbrain.publicUrl` adds `--public-url` (the OAuth issuer). |
 | Hermes MCP `gbrain` | `url` + `headers.Authorization: Bearer ${GBRAIN_TOKEN}` (env-ref, expanded by Hermes) |
 | Auth token (not sops) | `gbrain auth create hermes` → `~/.gbrain/hermes-mcp.token`, `GBRAIN_TOKEN` in `~/.hermes/.env` |
 | plugin `gbrain-retrieval-reflex` | resolve IPC if sock present; else nudge `volunteer_context` |
