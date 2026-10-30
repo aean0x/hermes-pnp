@@ -124,6 +124,21 @@ CAPTURE_LIVE = {
         "type": {"type": "string"}},
         "required": ["content"]}}
 
+# (7) The 2026-10-05…10-30 emissions (18 refusals in errors.log up to 10-30, from
+# trello-reconcile, inbox-triage, x-likes-research and office-scout): the model NAMES the
+# batch tool and hands it the sub-tool payload instead of the `tools` array, so
+# `_wrap_composio_batch`'s all-nameless guard skipped it and the deferred-schema probe refused
+# the call — once before and once after `_hoist_top_level_name` named the entry.
+NAMED_SUB_CALL = {"tool_slug": "OUTLOOK_QUERY_EMAILS",
+                  "arguments": {"query": "isRead eq false", "top": 25,
+                                "user_id": "user@example.com"}}
+# Legacy single shape: no `calls` array at all, so `heal_bridge_entries` returned before healing.
+NAMED_SINGLE = {"name": "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+                "arguments": dict(NAMED_SUB_CALL)}
+# Batch shape: the hoisted name is on the entry instead of the top level.
+NAMED_ENTRY_BATCH = {"name": "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+                     "calls": [{"arguments": dict(NAMED_SUB_CALL)}]}
+
 
 def _schema_name(schema):
     """Tool name from either registry schema shape (flat MCP registration or wrapped)."""
@@ -525,6 +540,76 @@ class TestComposioKeyedEntry(_RegistryCase):
                            "arguments": {"tools": [], "sync_response_to_workbench": False}}]}
         self.assertEqual(tcc.heal_bridge_entries(args), 0)
         self.assertEqual(args["calls"][0]["arguments"], {"tools": [], "sync_response_to_workbench": False})
+
+
+class TestNamedComposioBatch(_RegistryCase):
+    """(7) the batch tool NAMED with one bare sub-call payload instead of a ``tools`` array.
+
+    ``_wrap_composio_batch`` wraps only an all-nameless batch, so naming the tool — or having
+    ``_hoist_top_level_name`` name the entry — skipped the heal and the call reached the
+    deferred-schema probe without the two required arguments.
+    """
+
+    def test_named_single_shape_is_wrapped(self):
+        self._registry(MULTI_EXECUTE)
+        args = json.loads(json.dumps(NAMED_SINGLE))
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        self.assertEqual(args["arguments"], {
+            "tools": [{"tool_slug": "OUTLOOK_QUERY_EMAILS",
+                       "arguments": NAMED_SUB_CALL["arguments"]}],
+            "sync_response_to_workbench": False})
+        # the mcp__ prefix fallback hands the probe exactly the top-level arguments
+        self.assertEqual(tcc._call_args(args), args["arguments"])
+
+    def test_named_batch_shape_is_wrapped(self):
+        self._registry(MULTI_EXECUTE)
+        args = json.loads(json.dumps(NAMED_ENTRY_BATCH))
+        self.assertTrue(tcc.heal_bridge_entries(args))
+        entry = args["calls"][0]
+        self.assertEqual(entry["name"], "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL")
+        self.assertEqual(entry["arguments"]["tools"], [{
+            "tool_slug": "OUTLOOK_QUERY_EMAILS",
+            "arguments": NAMED_SUB_CALL["arguments"]}])
+        self.assertIs(entry["arguments"]["sync_response_to_workbench"], False)
+        # the batch fallback reads the entry's arguments, not the empty top level
+        self.assertEqual(tcc._call_args(args), entry["arguments"])
+
+    def test_a_slug_without_the_sub_call_arguments_is_untouched(self):
+        """The slug names a tool whose call was never written: inventing one is not a heal."""
+        self._registry(MULTI_EXECUTE)
+        args = {"name": "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+                "arguments": {"tool_slug": "OUTLOOK_QUERY_EMAILS"}}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertEqual(args["arguments"], {"tool_slug": "OUTLOOK_QUERY_EMAILS"})
+
+    def test_a_payload_that_already_has_tools_is_untouched(self):
+        self._registry(MULTI_EXECUTE)
+        args = {"name": "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+                "arguments": {"tools": [{"tool_slug": "OUTLOOK_QUERY_EMAILS",
+                                         "arguments": {}}],
+                              "sync_response_to_workbench": True, "thought": "t"}}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertIs(args["arguments"]["sync_response_to_workbench"], True)
+
+    def test_wrap_is_refused_when_the_batch_tool_is_absent(self):
+        """No COMPOSIO_MULTI_EXECUTE_TOOL in this session: the heal must not invent it."""
+        self._registry(WORKBENCH_FLAT)
+        args = json.loads(json.dumps(NAMED_SINGLE))
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertEqual(args["arguments"], NAMED_SUB_CALL)
+
+    def test_another_tool_is_never_rewritten(self):
+        self._registry(MULTI_EXECUTE, PUT_PAGE_LIVE)
+        args = {"name": "mcp__gbrain__put_page",
+                "arguments": {"tool_slug": "X", "arguments": {"content": "b"}}}
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
+        self.assertEqual(args["arguments"], {"tool_slug": "X", "arguments": {"content": "b"}})
+
+    def test_the_heal_is_idempotent(self):
+        self._registry(MULTI_EXECUTE)
+        args = json.loads(json.dumps(NAMED_SINGLE))
+        self.assertEqual(tcc.heal_bridge_entries(args), 1)
+        self.assertEqual(tcc.heal_bridge_entries(args), 0)
 
 
 class TestFallbackArgs(unittest.TestCase):

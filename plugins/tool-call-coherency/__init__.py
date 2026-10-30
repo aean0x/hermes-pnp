@@ -23,11 +23,16 @@ Models frequently:
    (``{"calls": [{"arguments": {"arguments": {…}, "name": "mcp__composio__…"}}]}``). The
    resolver sees no name, and the argument keys fit a *Composio sub-tool* the registry
    never registers, so signature recall has nothing to match.
+7. Name the batch tool itself and hand it one bare Composio sub-call
+   (``{"name": "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", "arguments": {"tool_slug": …,
+   "arguments": {…}}}``, at the top level or on the entry) instead of the ``tools`` array the
+   schema requires.
 
 Upstream resolve_underlying_call hard-errors on (1) and (2). This plugin monkeypatches
 the resolver + session scope set so those become transparent redispatches, extends the
 argument repairer for (4), and restores a dropped, split, hoisted or Composio-keyed name
-for (5) and (6). No capability expansion beyond tools already in the session.
+for (5) and (6), plus the ``tools`` array a named batch call was written without (7). No
+capability expansion beyond tools already in the session.
 """
 from __future__ import annotations
 
@@ -449,6 +454,57 @@ def _wrap_composio_batch(args: Dict[str, Any], calls: List[Any]) -> int:
     return 1
 
 
+def _composio_wrapped_arguments(arguments: Any) -> Optional[Dict[str, Any]]:
+    """The ``tools`` payload for one bare Composio sub-call, else None.
+
+    The sub-call shape is ``{"tool_slug": "OUTLOOK_QUERY_EMAILS", "arguments": {…}}``: the
+    slug beside its own arguments names exactly one tool, which is the only thing
+    ``COMPOSIO_MULTI_EXECUTE_TOOL`` takes that way. ``tools`` present means the payload is
+    already the batch form; a slug without the sub-call's arguments names a tool whose call
+    the model never wrote, and inventing one is not a heal.
+    """
+    if not isinstance(arguments, dict) or "tools" in arguments:
+        return None
+    slug, sub_call = arguments.get("tool_slug"), arguments.get("arguments")
+    if not _nonempty_str(slug) or not isinstance(sub_call, dict) or not sub_call:
+        return None
+    return {"tools": [{"tool_slug": str(slug).strip(), "arguments": sub_call}],
+            "sync_response_to_workbench": False}
+
+
+def _wrap_named_composio_batch(args: Dict[str, Any], calls: List[Any]) -> int:
+    """Wrap a *named* batch call whose arguments are one bare Composio sub-call.
+
+    Real emission (inbox-triage, 2026-10-30 05:00:36Z; the same signature on 13 days since
+    2026-10-05): the model names ``mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL`` — at the top
+    level of the legacy single shape, or on ``calls[0]``, where ``_hoist_top_level_name`` has
+    just put it — and hands it the sub-tool payload instead of the ``tools`` array the schema
+    requires. ``_wrap_composio_batch`` refuses any batch that already carries a name, so
+    nothing healed and the deferred-schema probe answered "missing required argument(s):
+    tools, sync_response_to_workbench", costing a retry turn each time.
+
+    The top-level holder is visited too: the legacy single shape has no ``calls`` at all.
+    """
+    if _COMPOSIO_BATCH_TOOL not in _deferred_names():
+        return 0
+    healed = 0
+    for holder in [args, *calls]:
+        if not isinstance(holder, dict):
+            continue
+        name = holder.get("name") or holder.get("tool") or holder.get("tool_name")
+        if not isinstance(name, str) or name.strip() != _COMPOSIO_BATCH_TOOL:
+            continue
+        wrapped = _composio_wrapped_arguments(holder.get("arguments"))
+        if wrapped is None:
+            continue
+        holder["arguments"] = wrapped
+        healed += 1
+    if healed:
+        log.warning("tool-call-coherency: wrapped %d bare Composio sub-call(s) into %s",
+                    healed, _COMPOSIO_BATCH_TOOL)
+    return healed
+
+
 def _hoist_nested_name(calls: List[Any]) -> int:
     """Name an entry whose name *and* arguments were nested inside its own ``arguments``.
 
@@ -498,10 +554,13 @@ def heal_bridge_entries(args: Dict[str, Any]) -> int:
         calls = [calls]
         args["calls"] = calls
     if not isinstance(calls, list) or not calls:
-        return 0
+        # The legacy single shape states its one call at the top level, so the entry healers
+        # have nothing to visit — but a bare Composio sub-call under a named batch tool still
+        # needs the ``tools`` array it was written without.
+        return _wrap_named_composio_batch(args, [])
     return (_hoist_top_level_name(args, calls) + _merge_split_entry(calls)
             + _hoist_nested_name(calls) + _wrap_composio_batch(args, calls)
-            + _fill_missing_names(calls))
+            + _wrap_named_composio_batch(args, calls) + _fill_missing_names(calls))
 
 
 # ------------------------------------------------------------------------------ arg repair
